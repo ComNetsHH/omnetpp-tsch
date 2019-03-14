@@ -94,7 +94,7 @@ simple Ieee802154eMac extends MacProtocolBase like IMacProtocol
         // maximum backoff exponent (for exponential backoff method only)
         int macMaxBE = default(8);
 
-        string radioModule = default("^.radio");   // The path to the Radio module  //FIXME remove default value
+        string radioModule = default("^.^.radio");   // The path to the Radio module  //FIXME remove default value
 
         @class(Ieee802154eMac);
         @signal[linkBroken](type=inet::Packet);

@@ -226,6 +226,8 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
     inet::physicallayer::IRadio *radio;
     inet::physicallayer::IRadio::TransmissionState transmissionState;
 
+    TschHopping *schedule;
+
     /** @brief Maximum time between a packet and its ACK
      *
      * Usually this is slightly more then the tx-rx turnaround time
@@ -313,6 +315,16 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
     virtual void flushQueue();
 
     virtual void clearQueue();
+
+    /** @brief Asynchronously configure carrier frequency and mode of radio
+     *
+     * When a default value is given for one of the parameters,
+     * radio is left unchanged in regard to that parameter.
+     *
+     * @note does not generate signals on which this MAC relies at some points,
+     * so only use when you are sure about it
+     */
+    void configureRadio(double carrierFrequency = NAN, int mode = -1);
 
     // FSM functions
     void fsmError(t_mac_event event, omnetpp::cMessage *msg);

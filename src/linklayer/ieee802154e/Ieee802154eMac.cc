@@ -37,13 +37,14 @@
 #include "inet/linklayer/common/MacAddressTag_m.h"
 #include "inet/linklayer/ieee802154/Ieee802154MacHeader_m.h"
 #include "inet/networklayer/common/InterfaceEntry.h"
+#include "inet/common/Units.h"
+#include "inet/common/packet/Message.h"
 
 namespace tsch {
 
 using namespace inet::physicallayer;
 using namespace omnetpp;
 using namespace inet;
-using namespace tsch;
 
 Define_Module(Ieee802154eMac);
 
@@ -121,9 +122,10 @@ void Ieee802154eMac::initialize(int stage)
         }
         radio->setRadioMode(IRadio::RADIO_MODE_SLEEP);
 
+        schedule = dynamic_cast<TschHopping*>(getModuleByPath("^.channelHopping"));
+
         // get our slotframe
-        cModule *host = getContainingNode(this);
-        sf = dynamic_cast<TschSlotframe*>(host->getModuleByPath(".slotframe"));
+        sf = dynamic_cast<TschSlotframe*>(getModuleByPath("^.schedule"));
 
         // minimal schedule as per 6TiSCH some document TODO
         TschLink *tl = sf->createLink();
@@ -138,6 +140,8 @@ void Ieee802154eMac::initialize(int stage)
         sf->addLink(tl);
 
         sf->printSlotframe();
+
+
 
         asn.setMacTsTimeslotLength(macTsTimeslotLength);
         asn.setReference(simTime() + 0.1);
@@ -254,20 +258,24 @@ void Ieee802154eMac::updateStatusIdle(t_mac_event event, cMessage *msg)
             // start of new slot
             auto now = asn.getAsn(simTime());
             auto link = sf->getLinkFromASN(now);
+            auto chan = schedule->channel(now, link->getChannelOffset());
+            auto freq = schedule->frequency(chan);
 
             EV_DETAIL << link->str() << endl;
-            EV_DETAIL << "we are in ASN " << now << " queue size " << macQueue.size() << endl;
+            EV_DETAIL << "we are in ASN " << now << " queue size " << macQueue.size() << " channel " << chan << " frequency " << freq << endl;
 
             // TODO per neighbor queue necessary
             if (macQueue.size() > 0 && link->isTx()) {
                 updateMacState(CCA_3);
                 startTimer(TIMER_CCA);
-                radio->setRadioMode(IRadio::RADIO_MODE_RECEIVER);
+
+                configureRadio(freq, IRadio::RADIO_MODE_RECEIVER);
 
             } else if (link->isRx()) {
                 updateMacState(RECEIVEFRAME_6);
                 startTimer(TIMER_SLOTEND);
-                radio->setRadioMode(IRadio::RADIO_MODE_RECEIVER);
+
+                configureRadio(freq, IRadio::RADIO_MODE_RECEIVER);
             }
             break;
         }
@@ -308,6 +316,18 @@ void Ieee802154eMac::updateStatusIdle(t_mac_event event, cMessage *msg)
 //            sendUp(msg);
 //            break;
 
+}
+
+void Ieee802154eMac::configureRadio(double carrierFrequency /*= NAN*/, int mode /*= -1*/)
+{
+    auto configureCommand = new ConfigureRadioCommand();
+    auto request = new Message("changeChannel", RADIO_C_CONFIGURE);
+
+    configureCommand->setCarrierFrequency(Hz(carrierFrequency));
+    configureCommand->setRadioMode(mode);
+    request->setControlInfo(configureCommand);
+
+    sendDown(request);
 }
 
 void Ieee802154eMac::flushQueue()
