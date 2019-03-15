@@ -1,0 +1,13 @@
+stages:
+  - build
+
+build:
+  stage: build
+  image: ${CI_REGISTRY_IMAGE}/omnetpp-inet:5.4.1_4.1.0_noide
+  script:
+    - cd src
+    - opp_makemake -f --deep -O out -KINET_PROJ=/omnetpp-5.4.1/inet4 -DINET_IMPORT -I. -I$\(INET_PROJ\)/src -L$\(INET_PROJ\)/src -lINET$\(D\)
+    - make
+  artifacts:
+    paths:
+    - src/tsch
