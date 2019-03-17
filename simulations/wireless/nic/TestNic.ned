@@ -19,9 +19,9 @@
 package tsch.simulations.wireless.nic;
 
 import inet.networklayer.configurator.ipv4.Ipv4NetworkConfigurator;
-import tsch.node.inet.TschHost;
 import inet.physicallayer.contract.packetlevel.IRadioMedium;
 import inet.visualizer.contract.IIntegratedVisualizer;
+import inet.node.inet.WirelessHost;
 
 network TestNic
 {
@@ -41,7 +41,7 @@ network TestNic
             parameters:
                 @display("p=100,200;is=s");
         }
-        host[numHosts]: TschHost {
+        host[numHosts]: WirelessHost {
             parameters:
                 @display("r=,,#707070;p=250,200");
         }
