@@ -1,22 +1,26 @@
-//
-// Copyright (C) 2004-2006 Andras Varga
-// Copyright (C) 2000 Institut fuer Telematik, Universitaet Karlsruhe
-//
-// This program is free software; you can redistribute it and/or
-// modify it under the terms of the GNU Lesser General Public License
-// as published by the Free Software Foundation; either version 2
-// of the License, or (at your option) any later version.
-//
-// This program is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Lesser General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public License
-// along with this program; if not, see <http://www.gnu.org/licenses/>.
-//
-
-//  Cleanup and rewrite: Andras Varga, 2004
+/*
+ * Simulation model for IEEE 802.15.4 Time Slotted Channel Hopping (TSCH)
+ *
+ * Copyright (C) 2019  Institute of Communication Networks (ComNets),
+ *                     Hamburg University of Technology (TUHH)
+ *           (C) 2019  Leo Krueger
+ *           (C) 2004-2006 Andras Varga
+ *           (C) 2000  Institut fuer Telematik, Universitaet Karlsruhe
+ *           (C) 2000-2001 Jochen Reber, Vincent Oberle
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
 
 #include <algorithm>
 #include <sstream>
@@ -109,8 +113,6 @@ void TschSlotframe::printSlotframe() const
     EV << "\n";
 }
 
-
-
 void TschSlotframe::purge()
 {
     // purge unicast routes
@@ -132,6 +134,25 @@ TschLink *TschSlotframe::getLink(int k) const
     if (k < (int)links.size())
         return links[k];
     return nullptr;
+}
+
+std::vector<MacAddress> TschSlotframe::getMacDedicated(){
+    std::vector<MacAddress> tempMacDedicated;
+    for(int i = 0; i < (int)links.size(); i++){
+        if(!(links[i]->isShared())){
+            bool found = false;
+            for (int j = 0; j < (int)tempMacDedicated.size(); j++){
+                if(tempMacDedicated[j] == links[i]->getAddr()){
+                    found = true;
+                    break;
+                }
+            }
+            if(!found){
+                tempMacDedicated.push_back(links[i]->getAddr());
+            }
+        }
+    }
+    return tempMacDedicated;
 }
 
 // The 'routes' vector stores the routes in this order.
@@ -221,7 +242,8 @@ void TschSlotframe::linkChanged(TschLink *entry, int fieldCode)
 bool TschSlotframe::handleOperationStage(LifecycleOperation *operation, IDoneCallback *doneCallback)
 {
     Enter_Method_Silent();
-    //int stage = operation->getCurrentStage();
+    // TODO:
+//    int stage = operation->getCurrentStage();
 //    if (dynamic_cast<ModuleStartOperation *>(operation)) {
 //        if (static_cast<ModuleStartOperation::Stage>(stage) == ModuleStartOperation::STAGE_NETWORK_LAYER) {
 //            // read routing table file (and interface configuration)
@@ -281,7 +303,6 @@ std::vector<TschLink *>::iterator TschSlotframe::getNextLinkFromASNInternal(int6
     return links.begin();
 }
 
-
 /**
  * Returns the link scheduled for the ASN given
  * or null if nothing is scheduled.
@@ -313,16 +334,21 @@ int64_t TschSlotframe::getASNofNextLink(int64_t asn)
     auto l = getNextLink(asn);
 
     // we had a wrap around within the slotframe
-    if (l->getSlotOffset() < getOffsetFromASN(asn))
+    if (l->getSlotOffset() < getOffsetFromASN(asn)) {
         return asn + l->getSlotOffset() + (macSlotframeSize - getOffsetFromASN(asn));
+    }
 
     // exactly one slotframe later
-    else if (l->getSlotOffset() == getOffsetFromASN(asn))
+    else if (l->getSlotOffset() == getOffsetFromASN(asn)) {
         return asn + macSlotframeSize;
+    }
 
     // after current slotOffset but no wrap-around
-    else if (l->getSlotOffset() > getOffsetFromASN(asn))
+    else if (l->getSlotOffset() > getOffsetFromASN(asn)) {
         return asn + (l->getSlotOffset() - getOffsetFromASN(asn));
+    }
+
+    return -1; // should never happen
 }
 
 } // namespace inet

@@ -1,28 +1,34 @@
-/* -*- mode:c++ -*- ********************************************************
- * file:        Ieee802154eMac.h
+/*
+ * Simulation model for IEEE 802.15.4 Time Slotted Channel Hopping (TSCH)
  *
- * author:     Jerome Rousselot, Marcel Steine, Amre El-Hoiydi,
- *                Marc Loebbers, Yosia Hadisusanto
+ * Copyright   (C) 2019  Institute of Communication Networks (ComNets),
+ *                       Hamburg University of Technology (TUHH)
+ *                       Leo Krueger, Louis Yin
  *
- * copyright:    (C) 2007-2009 CSEM SA
- *              (C) 2009 T.U. Eindhoven
- *                (C) 2004 Telecommunication Networks Group (TKN) at
- *              Technische Universitaet Berlin, Germany.
+ * This work is based on Ieee802154Mac.h from INET 4.1:
  *
- *              This program is free software; you can redistribute it
- *              and/or modify it under the terms of the GNU General Public
- *              License as published by the Free Software Foundation; either
- *              version 2 of the License, or (at your option) any later
- *              version.
- *              For further information see file COPYING
- *              in the top level directory
+ * Author:     Jerome Rousselot, Marcel Steine, Amre El-Hoiydi,
+ *             Marc Loebbers, Yosia Hadisusanto, Andreas Koepke
  *
- * Funding: This work was partially financed by the European Commission under the
- * Framework 6 IST Project "Wirelessly Accessible Sensor Populations"
- * (WASP) under contract IST-034963.
- ***************************************************************************
- * part of:    Modifications to the MF-2 framework by CSEM
- **************************************************************************/
+ * Copyright:  (C) 2009 T.U. Eindhoven
+ *             (C) 2007-2009 CSEM SA
+ *             (C) 2004,2005,2006
+ *             Telecommunication Networks Group (TKN) at Technische
+ *             Universitaet Berlin, Germany.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
 
 #ifndef __802154e_TSCH_H
 #define __802154e_TSCH_H
@@ -34,6 +40,7 @@
 #include "TschSlotframe.h"
 #include "Ieee802154eASN.h"
 #include "TschHopping.h"
+#include "TschNeighbor.h"
 
 using namespace inet;
 
@@ -42,13 +49,8 @@ namespace tsch {
 /**
  * @brief TSCH Mac-Layer.
  *
- * Supports constant, linear and exponential backoffs as well as
- * MAC ACKs.
- *
- * @author Jerome Rousselot, Amre El-Hoiydi, Marc Loebbers, Yosia Hadisusanto, Andreas Koepke
- * @author Karl Wessel (port for MiXiM)
- *
- * \image html csmaFSM.png "CSMA Mac-Layer - finite state machine"
+ * \image html TSCH_CSMA.png "CSMA Mac-Layer"
+ * \image html TSCH_FSM.png "TSCH finite state machine"
  */
 class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
 {
@@ -80,19 +82,17 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
         , macMaxFrameRetries(0)
         , useMACAcks(false)
         , backoffMethod(EXPONENTIAL)
-        , macMinBE(0)
-        , macMaxBE(0)
         , txPower(0)
         , NB(0)
         , macQueue()
-        , queueLength(0)
         , txAttempts(0)
         , bitrate(0)
         , ackLength(0)
         , ackMessage(nullptr)
         , SeqNrParent()
         , SeqNrChild()
-    {}
+    {
+    }
 
     virtual ~Ieee802154eMac();
 
@@ -153,7 +153,7 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
     /****************** TYPES ************************************/
     /*************************************************************/
 
-    /** @brief Kinds for timer messages.*/
+    /** @brief Kinds of timer messages.*/
     enum t_mac_timer {
         TIMER_NULL = 0,
         TIMER_SLOT,
@@ -287,9 +287,6 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
        packet is still waiting for transmission..*/
     MacQueue macQueue;
 
-    /** @brief length of the queue*/
-    unsigned int queueLength;
-
     /** @brief count the number of tx attempts
      *
      * This holds the number of transmission attempts for the current frame.
@@ -303,7 +300,7 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
     int ackLength;
 
 
-
+    TschNeighbor *neighbor;
     TschSlotframe *sf;
     Ieee802154eASN asn;
 
@@ -337,12 +334,11 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
     void updateStatusReceiveFrame(t_mac_event event, omnetpp::cMessage *msg);
     void updateStatusSIFS(t_mac_event event, omnetpp::cMessage *msg);
     void updateStatusTransmitAck(t_mac_event event, omnetpp::cMessage *msg);
-//    void updateStatusNotIdle(omnetpp::cMessage *msg);
-    void manageQueue();
     void updateMacState(t_mac_states newMacState);
 
     void attachSignal(inet::Packet *mac, omnetpp::simtime_t_cref startTime);
     void manageMissingAck(t_mac_event event, omnetpp::cMessage *msg);
+    void manageFailedTX();
     void startTimer(t_mac_timer timer);
 
     omnetpp::simtime_t scheduleSlot();
