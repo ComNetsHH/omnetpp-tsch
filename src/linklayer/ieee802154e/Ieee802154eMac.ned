@@ -1,26 +1,32 @@
-//***************************************************************************
-//* file:        Ieee802154Mac.ned
-//*
-//* author:      Jerome Rousselot, Marc Loebbers
-//*
-//* copyright:   (C) 2007-2009 CSEM SA, Neuchatel, Switzerland.
-//*                  (C) 2004 Telecommunication Networks Group (TKN) at
+// 
+// Simulation model for IEEE 802.15.4 Time Slotted Channel Hopping (TSCH)
+//
+// Copyright (C) 2019  Institute of Communication Networks (ComNets), 
+//                     Hamburg University of Technology (TUHH)
+//                     Leo Krueger, Louis Yin
+//           
+// This work is based on Ieee802154Mac.ned from INET 4.1:
+//
+// author:	 Jerome Rousselot, Marc Loebbers
+//
+// Copyright (C) 2007-2009 CSEM SA, Neuchatel, Switzerland.
+//           (C) 2004 Telecommunication Networks Group (TKN) at
 //*              Technische Universitaet Berlin, Germany.
-//*
-//*              This program is free software; you can redistribute it
-//*              and/or modify it under the terms of the GNU General Public
-//*              License as published by the Free Software Foundation; either
-//*              version 2 of the License, or (at your option) any later
-//*              version.
-//*              For further information see file COPYING
-//*              in the top level directory
-//*
-//* Funding: This work was partially financed by the European Commission under the
-//* Framework 6 IST Project "Wirelessly Accessible Sensor Populations"
-//* (WASP) under contract IST-034963.
-//***************************************************************************
-//* part of:    Modifications to the MF-2 framework by CSEM
-//**************************************************************************/
+// 
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+// 
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+//
+
 
 package tsch.linklayer.ieee802154e;
 
@@ -36,27 +42,22 @@ import inet.linklayer.contract.IMacProtocol;
 simple Ieee802154eMac extends MacProtocolBase like IMacProtocol
 {
     parameters:
-        string address = default("auto"); // MAC address as hex string (12 hex digits), or
-                                          // "auto". "auto" values will be replaced by
-                                          // a generated MAC address in init stage 0.
-
+        // MAC address as hex string (12 hex digits), or
+        // "auto". "auto" values will be replaced by
+      	// a generated MAC address in init stage 0.
+        string address = default("auto");
         // length of MAC header
         int headerLength @unit(b) = default(72 b);
         int mtu @unit(B) = default(0B);
-        // size of the MAC queue (maximum number of packets in Tx buffer)
-        int queueLength = default(100);
         // bit rate
         double bitrate @unit(bps) = default(250000 bps);
-
         // Clear Channel Assessment detection time
         double ccaDetectionTime @unit(s) = default(0.000128 s); // 8 symbols
         // Time to setup radio to reception state
         double rxSetupTime @unit(s) = default(0 s); // TODO put reasonable value
         // Time to switch radio from Rx to Tx state
         double aTurnaroundTime @unit(s) = default(0.000192 s);    // 12 symbols
-        
         double channelSwitchingTime @unit(s) = default(0.000192 s); // 12 symbols TODO put reasonable value
-
         // Send/Expect MAC acks for unicast traffic?
         bool useMACAcks = default(true);
         // Maximum number of frame retransmission,
@@ -79,22 +80,15 @@ simple Ieee802154eMac extends MacProtocolBase like IMacProtocol
         // Should be bigger than the maximum time for switching between Tx and Rx at the receiver.
         // Only used when usage of MAC acks is enabled.
         double sifs @unit(s) = default(0.000192 s);
-
 		// "The total length of the timeslot including any unused time after
 		//  frame transmission and acknowledgment, in us"
 		double macTsTimeslotLength @unit(s) = default(0.01 s);
-		
 		bool useCCA = default(false);
-
         //Backoff method to use: constant, linear or exponential
         // "The device shall use an exponential backoff mechanism [..]"
         string backoffMethod = default("exponential");
-        // minimum backoff exponent (for exponential backoff method only)
-        int macMinBE = default(3);
-        // maximum backoff exponent (for exponential backoff method only)
-        int macMaxBE = default(8);
-
-        string radioModule = default("^.^.radio");   // The path to the Radio module  //FIXME remove default value
+        // The path to the Radio module  //FIXME remove default value
+        string radioModule = default("^.^.radio");
 
         @class(Ieee802154eMac);
         @signal[linkBroken](type=inet::Packet);
