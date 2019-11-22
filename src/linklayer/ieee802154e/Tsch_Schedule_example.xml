@@ -1,0 +1,26 @@
+<?xml version="1.0"?>
+<TSCHSchedule xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="TSCH_SCHEDULE.xsd">
+  <!-- Slotframe -->
+  <Slotframe handle="0" macSlotframeSize="101">
+    <Link slotOffset="0" channelOffset="0">
+		<Option tx="true" rx="true" shared="true" timekeeping="false" />
+		<Type normal="true" advertising="false" advertisingOnly="false" />
+		<Virtual id="0" />
+		<Neighbor path="host[0]" />
+	</Link>
+	    <Link slotOffset="50" channelOffset="5">
+		<Option tx="true" rx="true" shared="true" timekeeping="false" />
+		<Type normal="true" advertising="false" advertisingOnly="false" />
+		<Virtual id="0" />
+        <Neighbor address="FF:FF:FF:FF:FF:FF" />
+	</Link>
+  </Slotframe>
+  <Slotframe handle="0" macSlotframeSize="101">
+    <Link slotOffset="0" channelOffset="0">
+		<Option tx="true" rx="true" shared="true" timekeeping="false" />
+		<Type normal="true" advertising="false" advertisingOnly="false" />
+		<Virtual id="0" />
+		<Neighbor path="host[0]" />
+	</Link>
+  </Slotframe>
+</TSCHSchedule>

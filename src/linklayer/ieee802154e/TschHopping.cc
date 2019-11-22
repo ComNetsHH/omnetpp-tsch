@@ -24,15 +24,13 @@
 #include "TschHopping.h"
 #include "inet/common/InitStages.h"
 #include <omnetpp/cstringtokenizer.h>
+#include "inet/common/Units.h"
 
 namespace tsch {
 
-Define_Module(TschHopping);
+using namespace inet;
 
-#define CHANNEL_MIN 11
-#define CHANNEL_MAX 26
-#define FREQ_CHANNEL_MIN 2.405e9
-#define CHANNEL_SPACING 5.0e6
+Define_Module(TschHopping);
 
 TschHopping::TschHopping() {}
 
@@ -53,18 +51,18 @@ void TschHopping::initialize(int stage)
 
 int TschHopping::channel(int64_t asn, int channelOffset)
 {
-    assert(asn >= 0);
-    assert(channelOffset >= 0);
+    ASSERT(asn >= 0);
+    ASSERT(channelOffset >= 0);
 
     return pattern[((asn + channelOffset) % pattern.size())];
 }
 
-double TschHopping::frequency(int channel)
+units::values::Hz TschHopping::channelToCenterFrequency(int channel)
 {
-   assert(channel >= CHANNEL_MIN);
-   assert(channel <= CHANNEL_MAX);
+   ASSERT(channel >= getMinChannel());
+   ASSERT(channel <= getMaxChannel());
 
-   return FREQ_CHANNEL_MIN + ((channel - CHANNEL_MIN) * CHANNEL_SPACING);
+   return units::values::Hz(getMinCenterFrequency().get() + ((channel - getMinChannel()) * getChannelSpacing().get()));
 }
 
 } // namespace inet

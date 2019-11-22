@@ -57,7 +57,7 @@ class TschLink : public omnetpp::cObject
     TschLink& operator=(const TschLink& obj);
 
   protected:
-    void changed(int fieldCode);
+    virtual void changed(int fieldCode);
 
   public:
     TschLink() : sf(nullptr), option_tx(true), option_rx(true), option_shared(true),
@@ -67,107 +67,108 @@ class TschLink : public omnetpp::cObject
     virtual ~TschLink();
     virtual std::string str() const override;
     virtual std::string detailedInfo() const OMNETPP5_CODE(override);
+    virtual std::string slug() const;
 
-    bool operator==(const TschLink& link) const { return equals(link); }
-    bool operator!=(const TschLink& link) const { return !equals(link); }
-    bool equals(const TschLink& link) const;
+    virtual bool operator==(const TschLink& link) const { return equals(link); }
+    virtual bool operator!=(const TschLink& link) const { return !equals(link); }
+    virtual bool equals(const TschLink& link) const;
 
     /** To be called by the slotframe when this link is added or removed from it */
-    void setSlotframe(TschSlotframe *sf) { this->sf = sf; }
-    TschSlotframe *getSlotframe() const { return sf; }
+    virtual void setSlotframe(TschSlotframe *sf) { this->sf = sf; }
+    virtual TschSlotframe *getSlotframe() const { return sf; }
 
-    bool isValid() const { return true; }
+    virtual bool isValid() const { return true; }
 
     // field codes for changed()
     enum { F_OPTIONTX, F_OPTIONRX, F_OPTIONSHARED, F_OPTIONTIME, F_TYPENORMAL, F_TYPEADV, F_TYPEADVONLY, F_CHANOFF, F_SLOTOFF, F_ADDR };
 
-    const inet::MacAddress& getAddr() const {
+    virtual const inet::MacAddress& getAddr() const {
         return addr;
     }
 
-    void setAddr(const inet::MacAddress& addr) {
+    virtual void setAddr(const inet::MacAddress& addr) {
         this->addr = addr;
         changed(F_ADDR);
     }
 
-    int getChannelOffset() const {
+    virtual int getChannelOffset() const {
         return channelOffset;
     }
 
-    void setChannelOffset(int channelOffset) {
+    virtual void setChannelOffset(int channelOffset) {
         this->channelOffset = channelOffset;
         changed(F_CHANOFF);
     }
 
-    bool isRx() const {
+    virtual bool isRx() const {
         return option_rx;
     }
 
-    void setRx(bool optionRx) {
+    virtual void setRx(bool optionRx) {
         option_rx = optionRx;
         changed(F_OPTIONRX);
     }
 
-    bool isShared() const {
+    virtual bool isShared() const {
         return option_shared;
     }
 
-    void setShared(bool optionShared) {
+    virtual void setShared(bool optionShared) {
         option_shared = optionShared;
         changed(F_OPTIONSHARED);
     }
 
-    bool isTimekeeping() const {
+    virtual bool isTimekeeping() const {
         return option_timekeeping;
     }
 
-    void setTimekeeping(bool optionTimekeeping) {
+    virtual void setTimekeeping(bool optionTimekeeping) {
         option_timekeeping = optionTimekeeping;
         changed(F_OPTIONTIME);
     }
 
-    bool isTx() const {
+    virtual bool isTx() const {
         return option_tx;
     }
 
-    void setTx(bool optionTx) {
+    virtual void setTx(bool optionTx) {
         option_tx = optionTx;
         changed(F_OPTIONTX);
     }
 
-    int getSlotOffset() const {
+    virtual int getSlotOffset() const {
         return slotOffset;
     }
 
-    void setSlotOffset(int slotOffset) {
+    virtual void setSlotOffset(int slotOffset) {
         this->slotOffset = slotOffset;
         changed(F_SLOTOFF);
     }
 
-    bool isAdv() const {
+    virtual bool isAdv() const {
         return type_advertising;
     }
 
-    void setAdv(bool typeAdvertising) {
+    virtual void setAdv(bool typeAdvertising) {
         type_advertising = typeAdvertising;
         changed(F_TYPEADV);
     }
 
-    bool isAdvOnly() const {
+    virtual bool isAdvOnly() const {
         return type_advertisingOnly;
 
     }
 
-    void setAdvOnly(bool typeAdvertisingOnly) {
+    virtual void setAdvOnly(bool typeAdvertisingOnly) {
         type_advertisingOnly = typeAdvertisingOnly;
         changed(F_TYPEADVONLY);
     }
 
-    bool isNormal() const {
+    virtual bool isNormal() const {
         return type_normal;
     }
 
-    void setNormal(bool typeNormal) {
+    virtual void setNormal(bool typeNormal) {
         type_normal = typeNormal;
         changed(F_TYPENORMAL);
     }

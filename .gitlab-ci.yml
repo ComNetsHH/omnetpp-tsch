@@ -7,7 +7,7 @@ build-541-410:
   script:
     - cd src
     - opp_makemake -f --deep -O out -KINET_PROJ=/omnetpp-5.4.1/inet4 -DINET_IMPORT -I. -I$\(INET_PROJ\)/src -L$\(INET_PROJ\)/src -lINET$\(D\)
-    - make
+    - make -j$(nproc)
   artifacts:
     paths:
     - src/tsch

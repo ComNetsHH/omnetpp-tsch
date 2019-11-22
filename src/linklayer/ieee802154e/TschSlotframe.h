@@ -30,12 +30,16 @@
 #include <omnetpp.h>
 #include "inet/common/lifecycle/ILifecycle.h"
 #include "TschLink.h"
+#include "TschVirtualLink.h"
+
+
 
 using namespace omnetpp;
 using namespace inet;
 
 namespace tsch {
 
+class TschVirtualLink;
 /**
  *
  */
@@ -49,11 +53,16 @@ class TschSlotframe : public cSimpleModule, protected cListener, public ILifecyc
   private:
     // Subclasses should use internalAddLink() and internalRemoveLink() methods
     // to modify the vectors storing links, but they can not access them directly.
-    LinkVector links;    // TODO sorting?
+    LinkVector links;
+
+    const char* fp;
 
   protected:
     // creates a new empty route
     virtual TschLink *createNewLink();
+
+    // creates a new empty route for virtual links
+    virtual TschVirtualLink *createNewVirtualLink();
 
     // displays summary above the icon
     virtual void refreshDisplay() const override;
@@ -65,12 +74,20 @@ class TschSlotframe : public cSimpleModule, protected cListener, public ILifecyc
       public:
         LinkLessThan(const TschSlotframe& c) : c(c) {}
         bool operator () (const TschLink *a, const TschLink *b) { return c.linkLessThan(a, b); }
+        //bool operator () (const TschVirtualLink *a, const TschVirtualLink *b) { return c.linkLessThan(a, b); }
     };
     bool linkLessThan(const TschLink *a, const TschLink *b) const;
 
+    //bool linkLessThan(const TschVirtualLink *a, const TschVirtualLink *b) const;
+
     // helper functions:
     void internalAddLink(TschLink *entry);
+
+    //void internalAddLink(TschVirtualLink *entry);
+
     TschLink *internalRemoveLink(TschLink *entry);
+
+    //TschVirtualLink *internalRemoveLink(TschVirtualLink *entry);
 
   public:
     TschSlotframe() {}
@@ -125,12 +142,17 @@ class TschSlotframe : public cSimpleModule, protected cListener, public ILifecyc
      *
      */
     virtual void addLink(TschLink *entry);
+    /**
+     *
+     */
+    virtual void addLink(TschVirtualLink *entry);
 
     /**
      * Removes the given route from the routing table, and returns it.
-     * nullptr is returned of the route was not in the routing table.
+     * nullptr is returned if the route was not in the routing table.
      */
     virtual TschLink *removeLink(TschLink *entry);
+
 
     /**
      * Removes the given route from the routing table, and delete it.
@@ -151,13 +173,14 @@ class TschSlotframe : public cSimpleModule, protected cListener, public ILifecyc
      * notifications.
      */
     virtual void linkChanged(TschLink *entry, int fieldCode);
-
     /**
      * ILifecycle method
      */
     virtual bool handleOperationStage(LifecycleOperation *operation, IDoneCallback *doneCallback) override;
 
     virtual TschLink *createLink() { return new TschLink(); }
+
+    virtual TschVirtualLink *createVirtualLink();
 
     int getMacSlotframeHandle() const {
         return macSlotframeHandle;
@@ -191,8 +214,21 @@ class TschSlotframe : public cSimpleModule, protected cListener, public ILifecyc
      * Useful to suspend execution of MAC until the next scheduled link.
      */
     int64_t getASNofNextLink(int64_t asn);
+    /**
+     * Removes the route with the given Slot and Channeloffset from the routing table.
+     * True is returned if the route was removed
+     * Falls if the route was not found
+     */
+    bool removeLinkFromOffset(int slotOffset, int channelOffset);
 
+    /**
+     * Checks if there is a link scheduled for the given Macaddress
+     * True if found
+     * False if not found
+     */
+    bool hasLink(inet::MacAddress macAddress);
 
+    void xmlSchedule();
 
   private:
 };

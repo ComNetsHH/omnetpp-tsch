@@ -1,0 +1,425 @@
+#include "TschLinkInfo.h"
+
+Define_Module(TschLinkInfo);
+
+TschLinkInfo::TschLinkInfo() {
+}
+
+TschLinkInfo::~TschLinkInfo() {
+    // TODO: delete structs in linkInfo
+    for (auto& entry: linkInfo) {
+        cancelAndDelete(entry.second.tom);
+    }
+}
+
+void TschLinkInfo::initialize(int stage) {
+    if (stage == 0) {
+        sublayerControlOut = findGate("sublayerControlOut");
+    }
+}
+
+bool TschLinkInfo::linkInfoExists(uint64_t nodeId) {
+    Enter_Method_Silent();
+
+    auto it = linkInfo.find(nodeId);
+    if (it == linkInfo.end()) {
+        return false;
+    }
+    return true;
+}
+
+std::vector<uint64_t> TschLinkInfo::getLinks() {
+    std::vector<uint64_t> nodeIds;
+
+    for(auto i = linkInfo.begin(); i != linkInfo.end(); ++i) {
+        nodeIds.push_back(i->first);
+    }
+
+    return nodeIds;
+}
+
+
+int TschLinkInfo::addLink(uint64_t nodeId, bool inTransaction,
+                          simtime_t transactionTimeout, uint8_t lastKnownSeqNum) {
+    Enter_Method_Silent();
+
+    if (linkInfoExists(nodeId)) {
+        /* don't add more than one entry for nodeId */
+        return -EEXIST;
+    }
+
+    linkInfo[nodeId] = {
+        .nodeId = nodeId,
+        .inTransaction = inTransaction,
+        .tom = new tschLinkInfoTimeoutMsg(),
+        .lastKnownSeqNum = lastKnownSeqNum
+    };
+
+    linkInfo[nodeId].tom->setNodeId(nodeId);
+
+    if (inTransaction) {
+        startTimeoutTimer(nodeId, transactionTimeout);
+    }
+
+    return 0;
+}
+
+void TschLinkInfo::resetLink(uint64_t nodeId, tsch6pMsg_t lastKnownType) {
+    abortTransaction(nodeId);
+    clearCells(nodeId);
+    resetSeqNum(nodeId);
+    setLastKnownType(nodeId, lastKnownType);
+    setLastLinkOption(nodeId, MAC_LINKOPTIONS_NONE);
+}
+
+bool TschLinkInfo::inTransaction(uint64_t nodeId) {
+    Enter_Method_Silent();
+
+    if (linkInfoExists(nodeId)) {
+        return linkInfo[nodeId].inTransaction;
+    }
+    return false;
+}
+
+int TschLinkInfo::setInTransaction(uint64_t nodeId, simtime_t transactionTimeout) {
+    Enter_Method_Silent();
+
+    if (!linkInfoExists(nodeId)) {
+        return -EINVAL;
+    }
+
+    linkInfo[nodeId].inTransaction = true;
+    startTimeoutTimer(nodeId, transactionTimeout);
+
+    return 0;
+}
+
+int TschLinkInfo::abortTransaction(uint64_t nodeId) {
+    Enter_Method_Silent();
+
+    if (!linkInfoExists(nodeId)) {
+        return -EINVAL;
+    }
+
+    if (linkInfo[nodeId].inTransaction) {
+        if (linkInfo[nodeId].tom){
+            linkInfo[nodeId].tom->setSeqNum(linkInfo[nodeId].lastKnownSeqNum);
+            cancelEvent(linkInfo[nodeId].tom);
+        }
+        linkInfo[nodeId].inTransaction = false;
+        linkInfo[nodeId].relocationCells.clear();
+        linkInfo[nodeId].lastLinkOption = MAC_LINKOPTIONS_NONE;
+    }
+
+    return 0;
+}
+
+int TschLinkInfo::addCell(uint64_t nodeId, cellLocation_t cell,
+                            uint8_t linkOption) {
+    Enter_Method_Silent();
+
+    if (!linkInfoExists(nodeId)) {
+        return -EINVAL;
+    }
+
+    std::tuple<cellLocation_t, uint8_t> cellTuple = std::make_tuple(cell, linkOption);
+    linkInfo[nodeId].scheduledCells.push_back(cellTuple);
+
+    return 0;
+}
+
+int TschLinkInfo::addCells(uint64_t nodeId, const std::vector<cellLocation_t> &cellList,
+                            uint8_t linkOption) {
+    Enter_Method_Silent();
+
+    if (!linkInfoExists(nodeId)) {
+        return -EINVAL;
+    }
+
+    auto it = cellList.begin();
+    for(; it != cellList.end(); ++it) {
+        addCell(nodeId, *it, linkOption);
+    }
+
+    return 0;
+}
+
+cellVector TschLinkInfo::getCells(uint64_t nodeId) {
+    Enter_Method_Silent();
+
+    if (!linkInfoExists(nodeId)) {
+        return {};
+    }
+
+    cellVector cv (linkInfo[nodeId].scheduledCells);
+    return cv;
+}
+
+int TschLinkInfo::getNumCells(uint64_t nodeId) {
+    Enter_Method_Silent();
+
+    if (!linkInfoExists(nodeId)) {
+        return 0;
+    }
+
+    return linkInfo[nodeId].scheduledCells.size();
+}
+
+void TschLinkInfo::clearCells(uint64_t nodeId) {
+    Enter_Method_Silent();
+
+    if (linkInfoExists(nodeId)) {
+        linkInfo[nodeId].scheduledCells.clear();
+    }
+}
+
+void TschLinkInfo::deleteCells(uint64_t nodeId, const std::vector<cellLocation_t> &cellList,
+                                uint8_t linkOption) {
+    Enter_Method_Silent();
+
+    if (linkInfoExists(nodeId)) {
+        cellVector scheduledCells = linkInfo[nodeId].scheduledCells;
+        auto it = cellList.begin();
+        for(; (it != cellList.end()); ++it) {
+            auto currCell = std::make_tuple(*it, linkOption);
+            scheduledCells.erase(std::find(scheduledCells.begin(),
+                                           scheduledCells.end(), currCell));
+        }
+    }
+}
+
+bool TschLinkInfo::timeOffsetScheduled(offset_t timeOffset) {
+    Enter_Method_Silent();
+    bool scheduled = false;
+    cellVector scheduledCells;
+    cellVector::iterator it;
+
+    /* loop through all links */
+    for (int i = 0; (i < (int)linkInfo.size()) && !scheduled; i++) {
+        if (linkInfoExists(i)) {
+            scheduledCells = linkInfo[i].scheduledCells;
+            it = std::find_if(scheduledCells.begin(), scheduledCells.end(),
+                              [timeOffset](const std::tuple<cellLocation_t, uint8_t> & t) -> bool {
+                                cellLocation_t cell = std::get<0>(t);
+                                return cell.timeOffset == timeOffset; });
+            scheduled = !(it ==scheduledCells.end());
+        }
+    }
+
+    return scheduled;
+}
+
+bool TschLinkInfo::cellsInSchedule(uint64_t nodeId,
+                                   std::vector<cellLocation_t> &cellList,
+                                   uint8_t linkOption) {
+    Enter_Method_Silent();
+
+    bool inSchedule = false;
+
+    if (linkInfoExists(nodeId)) {
+        inSchedule = true;
+        cellVector scheduledCells = linkInfo[nodeId].scheduledCells;
+        std::vector<cellLocation_t>::iterator it;
+        for(it = cellList.begin();
+            (it != cellList.end()) && (inSchedule == true); ++it) {
+            auto currCell = std::make_tuple(*it, linkOption);
+            inSchedule = std::find(scheduledCells.begin(), scheduledCells.end(),
+                                   currCell) != scheduledCells.end();
+        }
+    }
+
+    return inSchedule;
+}
+
+int TschLinkInfo::setRelocationCells(uint64_t nodeId,
+                                     std::vector<cellLocation_t> &cellList,
+                                     uint8_t linkOption) {
+    Enter_Method_Silent();
+
+    if (!linkInfoExists(nodeId)) {
+        return -EINVAL;
+    }
+    if ((linkInfo[nodeId].relocationCells.size() != 0) ||
+        (linkInfo[nodeId].inTransaction == true)) {
+        return -EINVAL;
+    }
+
+    for (auto cell: cellList) {
+        auto cellTuple = std::make_tuple(cell, linkOption);
+        linkInfo[nodeId].relocationCells.push_back(cellTuple);
+    }
+
+    return 0;
+}
+
+std::vector<cellLocation_t> TschLinkInfo::getRelocationCells(uint64_t nodeId) {
+    Enter_Method_Silent();
+
+    std::vector<cellLocation_t> result = {};
+    if (linkInfoExists(nodeId)) {
+        for (std::tuple<cellLocation_t, uint8_t> cell:
+                                            linkInfo[nodeId].relocationCells ) {
+            result.push_back(std::get<0>(cell));
+        }
+    }
+
+    return result;
+}
+
+int TschLinkInfo::relocateCells(uint64_t nodeId, std::vector<cellLocation_t> &newCells,
+                                uint8_t linkOption) {
+    Enter_Method_Silent();
+
+    if (!linkInfoExists(nodeId)) {
+        return -EINVAL;
+    }
+    if ((linkInfo[nodeId].inTransaction == false) ||
+            (linkInfo[nodeId].inTransaction == true &&
+            linkInfo[nodeId].lastKnownCommand != CMD_RELOCATE) ) {
+        return -EINVAL;
+    }
+
+    cellVector scheduledCells  = linkInfo[nodeId].scheduledCells;
+    cellVector relocationCells = linkInfo[nodeId].relocationCells;
+    /* remove the first n cells that were nominated for relocation */
+    for(int i = 0; i < (int)newCells.size(); ++i) {
+        scheduledCells.erase(std::find(scheduledCells.begin(),
+                             scheduledCells.end(), relocationCells[i]));
+    }
+    /* add the new cells to our schedule */
+    addCells(nodeId, newCells, linkOption);
+    /* reset the record of cells nominated for relocation */
+    linkInfo[nodeId].relocationCells.clear();
+
+    return 0;
+}
+
+uint8_t TschLinkInfo::getLastKnownSeqNum(uint64_t nodeId) {
+    Enter_Method_Silent();
+
+    if (linkInfoExists(nodeId)) {
+        return linkInfo[nodeId].lastKnownSeqNum;
+    }
+    return 0;
+}
+
+uint8_t TschLinkInfo::getSeqNum(uint64_t nodeId) {
+    Enter_Method_Silent();
+
+    if (linkInfoExists(nodeId)) {
+        return linkInfo[nodeId].lastKnownSeqNum;
+    }
+
+    return 0;
+}
+
+void TschLinkInfo::incrementSeqNum(uint64_t nodeId) {
+    Enter_Method_Silent();
+
+    if (linkInfoExists(nodeId)) {
+        if (linkInfo[nodeId].lastKnownSeqNum == 0xFF) {
+            linkInfo[nodeId].lastKnownSeqNum = 1;
+        } else {
+            linkInfo[nodeId].lastKnownSeqNum++;
+        }
+    }
+}
+
+void TschLinkInfo::resetSeqNum(uint64_t nodeId) {
+    Enter_Method_Silent();
+
+    if (linkInfoExists(nodeId)) {
+        linkInfo[nodeId].lastKnownSeqNum = 0;
+    }
+}
+
+int TschLinkInfo::setLastKnownType(uint64_t nodeId, tsch6pMsg_t type) {
+    Enter_Method_Silent();
+
+    if (!linkInfoExists(nodeId)) {
+        return -EINVAL;
+    }
+
+    linkInfo[nodeId].lastKnownType = type;
+    return 0;
+}
+
+tsch6pMsg_t TschLinkInfo::getLastKnownType(uint64_t nodeId) {
+    Enter_Method_Silent();
+
+    if (linkInfoExists(nodeId)) {
+        return linkInfo[nodeId].lastKnownType;
+    }
+    return MSG_CONFIRMATION;
+}
+
+int TschLinkInfo::setLastKnownCommand(uint64_t nodeId, tsch6pCmd_t cmd) {
+    Enter_Method_Silent();
+
+    if (!linkInfoExists(nodeId)) {
+        return -EINVAL;
+    }
+
+    linkInfo[nodeId].lastKnownCommand = cmd;
+    return 0;
+}
+
+tsch6pCmd_t TschLinkInfo::getLastKnownCommand(uint64_t nodeId) {
+    Enter_Method_Silent();
+
+    if (linkInfoExists(nodeId)) {
+        return linkInfo[nodeId].lastKnownCommand;
+    }
+    return CMD_CLEAR;
+}
+
+int TschLinkInfo::setLastLinkOption(uint64_t nodeId, uint8_t linkOption) {
+    Enter_Method_Silent();
+
+    if (!linkInfoExists(nodeId)) {
+        return -EINVAL;
+    }
+
+    linkInfo[nodeId].lastLinkOption = linkOption;
+    return 0;
+}
+
+uint8_t TschLinkInfo::getLastLinkOption(uint64_t nodeId) {
+    Enter_Method_Silent();
+    if (!linkInfoExists(nodeId)) {
+        return MAC_LINKOPTIONS_NONE;
+    }
+
+    return linkInfo[nodeId].lastLinkOption;
+}
+
+void TschLinkInfo::startTimeoutTimer(uint64_t nodeId, simtime_t timeout) {
+    if (linkInfoExists(nodeId)) {
+        linkInfo[nodeId].tom->setSeqNum(linkInfo[nodeId].lastKnownSeqNum);
+        scheduleAt(timeout, linkInfo[nodeId].tom);
+    }
+}
+
+void TschLinkInfo::handleMessage(cMessage *msg) {
+    tschLinkInfoTimeoutMsg* tom = dynamic_cast<tschLinkInfoTimeoutMsg*> (msg);
+
+    if (tom && msg->isSelfMessage()) {
+        /* time hath runneth out, abort transaction */
+        const char* w = ("transaction with " + std::to_string(tom->getNodeId()) + " timed out").c_str();
+        //opp_warning(w);
+        EV_WARN << w << endl;
+        /* forward msg to sublayer so it can react properly */
+        send(tom->dup(), sublayerControlOut);
+
+        abortTransaction(tom->getNodeId());
+    }
+    else {
+        delete msg;
+    }
+}
+
+bool TschLinkInfo::matchingTimeOffset(std::tuple<cellLocation_t, uint8_t> const& obj,
+                                      offset_t timeOffset) {
+    cellLocation_t cell = std::get<0>(obj);
+    return cell.timeOffset == timeOffset;
+}

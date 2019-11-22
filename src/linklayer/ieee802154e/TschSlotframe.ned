@@ -30,6 +30,7 @@ simple TschSlotframe like ISlotframe
     parameters:
         int macSlotframeSize = default(101); // recommended by IETF 6TiSCH TODO add rfc number
         int macSlotframeHandle = default(0);
+        string fileName = default("Tsch_Schedule_example.xml")
         @display("i=block/table");
         @signal[linkAdded](type=tsch::TschLink);
         @signal[linkDeleted](type=tsch::TschLink);

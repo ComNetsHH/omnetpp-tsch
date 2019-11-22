@@ -41,6 +41,7 @@
 #include "Ieee802154eASN.h"
 #include "TschHopping.h"
 #include "TschNeighbor.h"
+#include "inet/common/Units.h"
 
 using namespace inet;
 
@@ -84,7 +85,6 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
         , backoffMethod(EXPONENTIAL)
         , txPower(0)
         , NB(0)
-        , macQueue()
         , txAttempts(0)
         , bitrate(0)
         , ackLength(0)
@@ -94,6 +94,13 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
     {
     }
 
+    /** @brief Gate ids */
+    //@{
+    int sixTopSublayerInGateId;
+    int sixTopSublayerOutGateId;
+    //int sixTopSublayerControlInGateId;
+    int sixTopSublayerControlOutGateId;
+    //@}
     virtual ~Ieee802154eMac();
 
     /** @brief Initialization of the module and some variables*/
@@ -101,6 +108,8 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
 
     /** @brief Delete all dynamically allocated objects of the module*/
     virtual void finish() override;
+
+    virtual bool isUpperMessage(cMessage *message) override;
 
     /** @brief Handle messages from lower layer */
     virtual void handleLowerPacket(inet::Packet *packet) override;
@@ -114,14 +123,16 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
     /** @brief Handle control messages from lower layer */
     virtual void receiveSignal(cComponent *source, inet::simsignal_t signalID, long value, cObject *details) override;
 
+    virtual inet::physicallayer::IRadio* getRadio();
+
+    void sendUp(cMessage *message) override;
+
     // OperationalBase:
     virtual void handleStartOperation(inet::LifecycleOperation *operation) override {}    //TODO implementation
     virtual void handleStopOperation(inet::LifecycleOperation *operation) override {}    //TODO implementation
     virtual void handleCrashOperation(inet::LifecycleOperation *operation) override {}    //TODO implementation
 
   protected:
-    typedef std::list<inet::Packet *> MacQueue;
-
     /** @name Different tracked statistics.*/
     /*@{*/
     long nbTxFrames;
@@ -218,6 +229,15 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
         EXPONENTIAL,
     };
 
+    enum signal_names {
+        NBTXFRAMES = 0,
+        NBMISSEDACKS,
+        NBRECVDACKS,
+        NBRXFRAMES,
+        NBTXACKS,
+        NBDUPLICATES
+    };
+
     /** @brief keep track of MAC state */
     t_mac_states macState;
     t_mac_status status;
@@ -226,7 +246,7 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
     inet::physicallayer::IRadio *radio;
     inet::physicallayer::IRadio::TransmissionState transmissionState;
 
-    TschHopping *schedule;
+    TschHopping *hopping;
 
     /** @brief Maximum time between a packet and its ACK
      *
@@ -283,10 +303,6 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
     /** @brief number of backoff performed until now for current frame */
     int NB;
 
-    /** @brief A queue to store packets from upper layer in case another
-       packet is still waiting for transmission..*/
-    MacQueue macQueue;
-
     /** @brief count the number of tx attempts
      *
      * This holds the number of transmission attempts for the current frame.
@@ -299,10 +315,17 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
     /** @brief The bit length of the ACK packet.*/
     int ackLength;
 
+    std::vector<simsignal_t> channelSignals;
+
+    std::vector<std::string> registeredSignals;
 
     TschNeighbor *neighbor;
-    TschSlotframe *sf;
+    TschSlotframe *schedule;
     Ieee802154eASN asn;
+
+    int64_t currentAsn;
+    TschLink *currentLink;
+    int currentChannel;
 
   protected:
     /** @brief Generate new interface address*/
@@ -311,7 +334,7 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
 
     virtual void flushQueue();
 
-    virtual void clearQueue();
+    virtual void emitSignal(signal_names signalName);
 
     /** @brief Asynchronously configure carrier frequency and mode of radio
      *
@@ -321,7 +344,7 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
      * @note does not generate signals on which this MAC relies at some points,
      * so only use when you are sure about it
      */
-    void configureRadio(double carrierFrequency = NAN, int mode = -1);
+    void configureRadio(Hz carrierFrequency = Hz(NAN), int mode = -1);
 
     // FSM functions
     void fsmError(t_mac_event event, omnetpp::cMessage *msg);
