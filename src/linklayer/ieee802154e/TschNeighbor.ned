@@ -27,10 +27,11 @@ package tsch.linklayer.ieee802154e;
 simple TschNeighbor
 {
     parameters:
-        bool hasPriorityQueue = default(false);
         //First Neighbor= 1,
         //Longest Queue = 2,
         string method = default("First");
+        bool enableSelectDedicated= default(false);
+        bool enablePriorityQueue= default(true);
         int queueLength = default(20);
         int macMinBE = default(3);
         int macMaxBE = default(8); 

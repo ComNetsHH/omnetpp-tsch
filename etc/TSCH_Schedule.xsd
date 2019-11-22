@@ -1,0 +1,63 @@
+<xs:schema attributeFormDefault="unqualified" elementFormDefault="qualified" xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="TSCHSchedule" type="TSCHScheduleType"/>
+  <xs:complexType name="OptionType">
+    <xs:simpleContent>
+      <xs:extension base="xs:string">
+        <xs:attribute type="xs:boolean" name="tx" use="optional"/>
+        <xs:attribute type="xs:boolean" name="rx" use="optional"/>
+        <xs:attribute type="xs:boolean" name="shared" use="optional"/>
+        <xs:attribute type="xs:boolean" name="timekeeping" use="optional"/>
+      </xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
+  <xs:complexType name="TypeType">
+    <xs:simpleContent>
+      <xs:extension base="xs:string">
+        <xs:attribute type="xs:boolean" name="normal" use="optional"/>
+        <xs:attribute type="xs:boolean" name="advertising" use="optional"/>
+        <xs:attribute type="xs:boolean" name="advertisingOnly" use="optional"/>
+      </xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
+  <xs:complexType name="VirtualType">
+    <xs:simpleContent>
+      <xs:extension base="xs:string">
+        <xs:attribute type="xs:integer" name="id" use="optional"/>
+      </xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
+  <xs:complexType name="NeighborType">
+    <xs:simpleContent>
+      <xs:extension base="xs:string">
+        <xs:attribute type="xs:string" name="path" use="optional"/>
+        <xs:attribute type="xs:string" name="address" use="optional"/>
+      </xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
+  <xs:complexType name="LinkType">
+    <xs:sequence>
+      <xs:element type="OptionType" name="Option" minOccurs="0" maxOccurs="1"/>
+      <xs:element type="TypeType" name="Type" minOccurs="0" maxOccurs="1"/>
+      <xs:element type="VirtualType" name="Virtual" minOccurs="0" maxOccurs="1"/>
+      <xs:element type="NeighborType" name="Neighbor" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+    <xs:attribute type="xs:integer" name="slotOffset" use="required"/>
+    <xs:attribute type="xs:integer" name="channelOffset" use="required"/>
+  </xs:complexType>
+  <xs:complexType name="SlotframeType">
+    <xs:sequence>
+      <xs:element type="LinkType" name="Link" maxOccurs="unbounded" minOccurs="1"/>
+    </xs:sequence>
+    <xs:attribute type="xs:integer" name="handle" use="required"/>
+    <xs:attribute type="xs:integer" name="macSlotframeSize" default="101"/>
+  </xs:complexType>
+  <xs:complexType name="TSCHScheduleType">
+    <xs:sequence>
+      <xs:element type="SlotframeType" name="Slotframe" maxOccurs="unbounded" minOccurs="1">
+        <xs:annotation>
+          <xs:documentation>Slotframe</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+</xs:schema>

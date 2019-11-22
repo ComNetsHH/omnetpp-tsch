@@ -88,6 +88,11 @@ public:
      */
     int getMacMaxBE();
     /**
+     * A public member function to get the private randomNumber variable.
+     * @return randomNumber variable
+     */
+    int getRandomNumber();
+    /**
      * A public member function generating a random number using the function intuniform() from omnetpp, setting and returning the randomNumber to it.
      * The generated random number depends on BE and NB
      * @return The generated random number
@@ -126,6 +131,13 @@ public:
      * @return state of the TschCSMA algorithm
      */
     bool getTschCSMAStatus();
+
+    std::string str();
+    /**
+     * A public member function to decrement the current backoff state by 1
+     *
+     */
+    void decrementRandomNumber();
 private:
     /**
      * private variable

@@ -59,10 +59,9 @@ int TschCSMA::generateRandomNumber(){
 }
 
 bool TschCSMA::checkBackoff(){
-    if(this->randomNumber == 0){
+    if(this->randomNumber == 0 || !this->hasStarted){
         return true;
     }else{
-        this->randomNumber = this->randomNumber - 1;
         return false;
     }
 }
@@ -139,8 +138,32 @@ void TschCSMA::setMacMaxBE(int maxBE) {
 int TschCSMA::getMacMaxBE() {
     return this->macMaxBE;
 }
+int TschCSMA::getRandomNumber() {
+    return this->randomNumber;
+}
 
 bool TschCSMA::getTschCSMAStatus(){
     return this->hasStarted;
+}
+
+std::string TschCSMA::str() {
+    std::stringstream out;
+    out << "[ TschCSMA ]";
+    if (hasStarted)
+        out << " started ";
+    out << " NB " << NB;
+    out << " BE " << BE;
+    out << " RND " << randomNumber;
+    out << " minBE " << macMinBE;
+    out << " maxBE " << macMaxBE;
+
+    return out.str();
+}
+
+void TschCSMA::decrementRandomNumber(){
+    if(this->getTschCSMAStatus()) {
+        EV_DETAIL << "[ TschCSMA ] Reducing backoff window" << endl;
+        this->randomNumber = this->randomNumber - 1;
+    }
 }
 }

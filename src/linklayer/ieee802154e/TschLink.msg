@@ -23,11 +23,11 @@
 cplusplus {{
 #include "TschLink.h"
 #include "inet/linklayer/common/MacAddress.h"
-typedef inet::MacAddress MacAddress;
 }}
 
+class inet::MacAddress { @existingClass; }
+
 namespace tsch;
-class noncobject MacAddress;
 
 class TschLink extends cNamedObject
 {
@@ -45,5 +45,5 @@ class TschLink extends cNamedObject
     int channelOffset;
     int slotOffset;
     
-    MacAddress addr @byValue;
+    inet::MacAddress addr @byValue;
 }

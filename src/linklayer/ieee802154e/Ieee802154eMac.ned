@@ -98,5 +98,20 @@ simple Ieee802154eMac extends MacProtocolBase like IMacProtocol
         @statistic[packetDropQueueOverlow](title="packet drop: queue overflow"; source=packetDropReasonIsQueueOverflow(packetDropped); record=count,sum(packetBytes),vector(packetBytes); interpolationmode=none);
         @statistic[packetDropRetryLimitReached](title="packet drop: retry limit reached"; source=packetDropReasonIsRetryLimitReached(packetDropped); record=count,sum(packetBytes),vector(packetBytes); interpolationmode=none);
         @statistic[packetDropBackoffLimitReached](title="packet drop: backoff limit reached"; source=packetDropReasonIsCongestion(packetDropped); record=count,sum(packetBytes),vector(packetBytes); interpolationmode=none);
+        
+        @signal[nbTxFrames-*](type=long);
+        @signal[nbMissedAcks-*](type=long);
+        @signal[nbRecvdAcks-*](type=long);
+        @signal[nbRxFrames-*](type=long);
+        @signal[nbTxAcks-*](type=long);
+        @signal[nbDuplicates-*](type=long);
+        
+        @statisticTemplate[nbStats](record=count,vector?; interpolationmode=none);
+        
+        gates:
+            input sixTopSublayerInGate;
+            output sixTopSublayerOutGate;
+            //input sixTopSublayerControlInGate;
+            output sixTopSublayerControlOutGate;
 }
 

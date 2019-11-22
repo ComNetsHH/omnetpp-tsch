@@ -71,6 +71,12 @@ std::string TschLink::detailedInfo() const
     return std::string();
 }
 
+std::string TschLink::slug() const {
+    std::stringstream out;
+    out << sf->getMacSlotframeHandle() << "." << getSlotOffset() << "." << getChannelOffset();
+    return out.str();
+}
+
 bool TschLink::equals(const TschLink& link) const
 {
     return sf == link.sf && slotOffset == link.slotOffset; // TODO which fields to compare?

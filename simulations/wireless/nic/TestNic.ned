@@ -34,10 +34,6 @@ network TestNic
         int numHosts;
         @display("bgb=450,450");
     submodules:
-        visualizer: <default("IntegratedCanvasVisualizer")> like IIntegratedVisualizer if hasVisualizer() {
-            parameters:
-                @display("p=100,300;is=s");
-        }
         configurator: Ipv4NetworkConfigurator {
             parameters:
                 @display("p=100,100;is=s");

@@ -33,10 +33,13 @@
 #include "inet/networklayer/contract/IInterfaceTable.h"
 #include "inet/networklayer/ipv4/Ipv4InterfaceData.h"
 #include "TschLink.h"
+#include "TschVirtualLink.h"
 #include "TschSlotframe.h"
+#include "TschParser.h"
 #include "inet/networklayer/ipv4/RoutingTableParser.h"
 #include "../../common/TschSimsignals.h"
 #include "inet/common/Simsignals.h"
+
 
 // TODO from http://rootdirectory.ddns.net/dokuwiki/doku.php?id=software:sstr
 #define SSTR( x ) static_cast< std::ostringstream & >( \
@@ -69,6 +72,8 @@ void TschSlotframe::initialize(int stage)
         macSlotframeHandle = par("macSlotframeHandle");
 
         cComponent::registerSignal("linkChangedSignal");
+        //"TSCH_Schedule_example.xml"
+        this->fp = par("fileName").stringValue();
 
         WATCH_PTRVECTOR(links);
     }
@@ -98,19 +103,49 @@ void TschSlotframe::receiveSignal(cComponent *source, simsignal_t signalID, cObj
 void TschSlotframe::printSlotframe() const
 {
     EV << "-- Slotframe " << macSlotframeHandle << ", size " << macSlotframeSize << " --" << endl;
-    EV << stringf("%-16s %-16s %-16s %-16s %-16s\n",
-            "slotOffset", "channelOffset", "type", "options", "addr");
+    EV << stringf("%-16s %-16s %-16s %-16s %-16s %-16s \n",
+            "slotOffset", "channelOffset", "type", "options", "addr", "virtualLinkID");
 
     for (int i = 0; i < getNumLinks(); i++) {
-        TschLink *link = getLink(i);
-        EV << stringf("%-16s %-16s %-16s %-16s %-16s \n",
+        auto *link = getLink(i);
+        int virtualLinkID;
+        if (dynamic_cast<TschVirtualLink*>(link) != nullptr) {
+            virtualLinkID = dynamic_cast<TschVirtualLink*>(link)->getVirtualLink();
+        } else {
+            virtualLinkID = 0;
+        }
+        EV << stringf("%-16s %-16s %-16s %-16s %-16s %-16s \n",
                 SSTR(link->getSlotOffset()).c_str(),
                 SSTR(link->getChannelOffset()).c_str(),
                 (std::string(link->isNormal()?"NORM ":"") + std::string(link->isAdv()?"ADV ":"")).c_str(),
                 (std::string(link->isRx()?"RX ":"") + std::string(link->isTx()?"TX ":"") + std::string(link->isShared()?"SHARE":"")).c_str(),
-                link->getAddr().str().c_str());
+                link->getAddr().str().c_str(), SSTR(virtualLinkID).c_str());
     }
     EV << "\n";
+
+    std::cout << "-- Slotframe " << macSlotframeHandle << ", size "
+            << macSlotframeSize << " --" << endl;
+    std::cout
+            << stringf("%-16s %-16s %-16s %-16s %-16s %-16s \n", "slotOffset",
+                    "channelOffset", "type", "options", "addr",
+                    "virtualLinkID");
+
+    for (int i = 0; i < getNumLinks(); i++) {
+        auto *link = getLink(i);
+        int virtualLinkID;
+        if(dynamic_cast<TschVirtualLink*>(link) != nullptr){
+            virtualLinkID = dynamic_cast<TschVirtualLink*>(link)->getVirtualLink();
+        }else{
+            virtualLinkID = 0;
+        }
+        std::cout << stringf("%-16s %-16s %-16s %-16s %-16s %-16s \n",
+        SSTR(link->getSlotOffset()).c_str(),
+        SSTR(link->getChannelOffset()).c_str(),
+        (std::string(link->isNormal()?"NORM ":"") + std::string(link->isAdv()?"ADV ":"")).c_str(),
+        (std::string(link->isRx()?"RX ":"") + std::string(link->isTx()?"TX ":"") + std::string(link->isShared()?"SHARE":"")).c_str(),
+        link->getAddr().str().c_str(), SSTR(virtualLinkID).c_str());
+    }
+    std::cout << "\n";
 }
 
 void TschSlotframe::purge()
@@ -138,17 +173,25 @@ TschLink *TschSlotframe::getLink(int k) const
 
 std::vector<MacAddress> TschSlotframe::getMacDedicated(){
     std::vector<MacAddress> tempMacDedicated;
+    std::vector<MacAddress> checkedSharedNeighbors;
     for(int i = 0; i < (int)links.size(); i++){
-        if(!(links[i]->isShared())){
-            bool found = false;
-            for (int j = 0; j < (int)tempMacDedicated.size(); j++){
-                if(tempMacDedicated[j] == links[i]->getAddr()){
-                    found = true;
-                    break;
-                }
-            }
-            if(!found){
+        if(!(links[i]->isShared()) && links[i]->isTx()) {
+            auto result = std::find(tempMacDedicated.begin(),tempMacDedicated.end() , links[i]->getAddr());
+            if(result == tempMacDedicated.end()){
                 tempMacDedicated.push_back(links[i]->getAddr());
+            }
+        }else if(links[i]->isShared() && links[i]->isTx()){
+            auto result = std::find(checkedSharedNeighbors.begin(),checkedSharedNeighbors.end() , links[i]->getAddr());
+            if(result == checkedSharedNeighbors.end()){
+                checkedSharedNeighbors.push_back(links[i]->getAddr());
+            }
+        }
+    }
+    for(int i = 0; i < (int)checkedSharedNeighbors.size(); i++){
+        for(int j = 0; j <(int)tempMacDedicated.size(); j++){
+            if(checkedSharedNeighbors[i] == tempMacDedicated[j]){
+                tempMacDedicated.erase(tempMacDedicated.begin()+j);
+                //std::remove(tempMacDedicated.begin(), tempMacDedicated.end(), checkedSharedNeighbors[i]);
             }
         }
     }
@@ -180,14 +223,8 @@ void TschSlotframe::internalAddLink(TschLink *entry)
     entry->setSlotframe(this);
 }
 
-void TschSlotframe::addLink(TschLink *entry)
-{
-    Enter_Method("addLink(...)");
-    // This method should be called before calling entry->str()
-    internalAddLink(entry);
-    EV_INFO << "add link " << entry->str() << "\n";
-    emit(linkAddedSignal, entry);
-}
+
+
 
 TschLink *TschSlotframe::internalRemoveLink(TschLink *entry)
 {
@@ -197,6 +234,24 @@ TschLink *TschSlotframe::internalRemoveLink(TschLink *entry)
         return entry;
     }
     return nullptr;
+}
+
+void TschSlotframe::addLink(TschLink *entry)
+{
+    Enter_Method("addLink(...)");
+    // This method should be called before calling entry->str()
+    internalAddLink(entry);
+    EV_INFO << "add link " << entry->str() << "\n";
+    emit(linkAddedSignal, entry);
+}
+
+void TschSlotframe::addLink(TschVirtualLink *entry)
+{
+    Enter_Method("addLink(...)");
+    // This method should be called before calling entry->str()
+    internalAddLink(entry);
+    EV_INFO << "add link " << entry->str() << "\n";
+    emit(linkAddedSignal, entry);
 }
 
 TschLink *TschSlotframe::removeLink(TschLink *entry)
@@ -269,6 +324,11 @@ bool TschSlotframe::handleOperationStage(LifecycleOperation *operation, IDoneCal
 TschLink *TschSlotframe::createNewLink()
 {
     return new TschLink();
+}
+
+TschVirtualLink *TschSlotframe::createNewVirtualLink(){
+
+    return new TschVirtualLink();
 }
 
 /**
@@ -349,6 +409,88 @@ int64_t TschSlotframe::getASNofNextLink(int64_t asn)
     }
 
     return -1; // should never happen
+}
+
+bool TschSlotframe::removeLinkFromOffset(int slotOffset, int channelOffset) {
+    for (auto it = links.begin(); it != links.end(); ++it) {
+        if (((*it)->getSlotOffset() == slotOffset)
+                && ((*it)->getChannelOffset() == channelOffset)) {
+            links.erase(it);
+            return true;
+        }
+    }
+    return false;
+}
+bool TschSlotframe::hasLink(inet::MacAddress macAddress){
+    bool found = false;
+    for(int i = 0; i < (int)links.size(); i++){
+        if(macAddress == links[i]->getAddr() && links[i]->isTx()){
+            found = true;
+            break;
+        }
+    }
+    return found;
+}
+
+TschVirtualLink *TschSlotframe::createVirtualLink(){
+    return new TschVirtualLink();
+}
+
+void TschSlotframe::xmlSchedule(){
+    inet::TschParser tp;
+    //TODO: Can this not be just a void function?
+    tp.readTschParmFromXmlFile(this->fp);
+
+    for (int num_Slotframe=0; num_Slotframe < tp.get_Tsch_num_Slotframes(); num_Slotframe++){
+        this->setMacSlotframeSize(tp.Slotframe[num_Slotframe].macSlotframeSize);
+        this->setMacSlotframeHandle(tp.Slotframe[num_Slotframe].handle);
+
+//        auto sf = new TschSlotframe();
+//               sf->setMacSlotframeSize(tp.Slotframe[num_Slotframe].macSlotframeSize);
+//               sf->setHandle(tp.Slotframe[num_Slotframe].handle);
+
+        for (int n=0; n < tp.Slotframe[num_Slotframe].numLinks; n++){
+            inet::MacAddress macAddr;
+            if((tp.Slotframe[num_Slotframe].links[n].Virtual_id != -2) && (tp.Slotframe[num_Slotframe].links[n].Virtual_id != 0 )){
+                auto l = this->createVirtualLink();
+                l->setSlotOffset(tp.Slotframe[num_Slotframe].links[n].SlotOffset);
+                l->setChannelOffset(tp.Slotframe[num_Slotframe].links[n].channelOffset);
+                l->setTx(tp.Slotframe[num_Slotframe].links[n].Option_tx);
+                l->setRx(tp.Slotframe[num_Slotframe].links[n].Option_rx);
+                l->setShared(tp.Slotframe[num_Slotframe].links[n].Option_shared);
+                l->setTimekeeping(tp.Slotframe[num_Slotframe].links[n].Option_timekeeping);
+                l->setNormal(tp.Slotframe[num_Slotframe].links[n].Type_normal);
+                l->setAdv(tp.Slotframe[num_Slotframe].links[n].Type_advertising);
+                l->setAdvOnly(tp.Slotframe[num_Slotframe].links[n].Type_advertisingOnly);
+                l->setVirtualLink(tp.Slotframe[num_Slotframe].links[n].Virtual_id);
+                //l->???(tp.Slotframe[num_Slotframe].links[n].Neighbor_path); // setter not implemented
+                //std::cout << tp.Slotframe[num_Slotframe].links[n].Neighbor_address << endl;
+                macAddr.setAddress(tp.Slotframe[num_Slotframe].links[n].Neighbor_address.c_str());
+                l->setAddr(macAddr);
+                // Add link to actual Slotframe
+                this->addLink(l);
+            }else if((tp.Slotframe[num_Slotframe].links[n].Virtual_id == -2) || (tp.Slotframe[num_Slotframe].links[n].Virtual_id == 0 )){
+                auto l = this->createLink();
+                l->setSlotOffset(tp.Slotframe[num_Slotframe].links[n].SlotOffset);
+                l->setChannelOffset(tp.Slotframe[num_Slotframe].links[n].channelOffset);
+                l->setTx(tp.Slotframe[num_Slotframe].links[n].Option_tx);
+                l->setRx(tp.Slotframe[num_Slotframe].links[n].Option_rx);
+                l->setShared(tp.Slotframe[num_Slotframe].links[n].Option_shared);
+                l->setTimekeeping(tp.Slotframe[num_Slotframe].links[n].Option_timekeeping);
+                l->setNormal(tp.Slotframe[num_Slotframe].links[n].Type_normal);
+                l->setAdv(tp.Slotframe[num_Slotframe].links[n].Type_advertising);
+                l->setAdvOnly(tp.Slotframe[num_Slotframe].links[n].Type_advertisingOnly);
+                //l->???(tp.Slotframe[num_Slotframe].links[n].Neighbor_path); // setter not implemented
+                // TODO: In some random way Neighbor_address is incomplete. Still searching for reason
+                //std::cout <<"This Type is:  " <<  typeid(tp.Slotframe[num_Slotframe].links[n].Neighbor_address).name() << endl;
+                //std::cout << tp.Slotframe[num_Slotframe].links[n].Neighbor_address << endl;
+                macAddr.setAddress(tp.Slotframe[num_Slotframe].links[n].Neighbor_address.c_str());
+                l->setAddr(macAddr);
+                // Add link to actual Slotframe
+                this->addLink(l);
+            }
+        }
+    }
 }
 
 } // namespace inet

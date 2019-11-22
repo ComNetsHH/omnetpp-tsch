@@ -25,11 +25,14 @@
 #define LINKLAYER_IEEE802154E_TSCHHOPPING_H_
 
 #include <omnetpp/csimplemodule.h>
-#include <cassert>
+#include "../contract/IChannelPlan.h"
+#include "inet/common/Units.h"
 
 namespace tsch {
 
-class TschHopping: public omnetpp::cSimpleModule
+using namespace inet;
+
+class TschHopping: public omnetpp::cSimpleModule, public IChannelPlan
 {
     protected:
         typedef std::vector<int> PatternVector;
@@ -42,7 +45,6 @@ class TschHopping: public omnetpp::cSimpleModule
         void initialize(int stage);
 
         int channel(int64_t asn, int channelOffset);
-        double frequency(int channel);
 
         const PatternVector& getPattern() const {
             return pattern;
@@ -51,6 +53,13 @@ class TschHopping: public omnetpp::cSimpleModule
         void setPattern(const PatternVector& pattern) {
             this->pattern = pattern;
         }
+
+        virtual inline int getMinChannel() { return 11; }
+        virtual inline int getMaxChannel() { return 26; }
+        virtual units::values::Hz getMinCenterFrequency() { return units::values::Hz(2.405e9); }
+        virtual units::values::Hz getMaxCenterFrequency() { return units::values::Hz(2.405e9); }
+        virtual units::values::Hz getChannelSpacing() { return units::values::Hz(5.0e6); }
+        virtual units::values::Hz channelToCenterFrequency(int channel);
 };
 
 } // namespace tsch
