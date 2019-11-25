@@ -342,8 +342,6 @@ void TschNeighbor::setSelectedQueue(MacAddress macAddr, int linkID) {
         auto priorityQueue = this->macToQueueMap.find(this->currentNeighborKey)->second->find(-1);
         if(priorityQueue != this->macToQueueMap.find(this->currentNeighborKey)->second->end()){
             prioritySize = (int)(priorityQueue->second->size());
-//            std::cout <<"Current prioritySize: " << prioritySize << endl;
-//            std::cout <<"Due to Default Queue " << prioritySize << endl;
         }
         if(this->macToQueueMap.find(this->currentNeighborKey)->second->count(-1) && (prioritySize > 0)){
             this->currentVirtualLinkIDKey = -1;
@@ -352,9 +350,7 @@ void TschNeighbor::setSelectedQueue(MacAddress macAddr, int linkID) {
         }
     }else{
         this->currentVirtualLinkIDKey = linkID;
-//        std::cout <<"Due to linkID Queue" << endl;
     }
-    std::cout << "[TschNeighbor] Selected Virtual Link ID is: " << this->currentVirtualLinkIDKey << endl;
     EV_DETAIL << "[TschNeighbor] Selected Virtual Link ID is: " << this->currentVirtualLinkIDKey << endl;
 }
 void TschNeighbor::setMethod(std::string type){
@@ -422,13 +418,13 @@ std::map<int, std::list<inet::Packet *>*>* TschNeighbor::createVirtualQueue(){
 
 void TschNeighbor::printQueue(){
     for(auto outer = this->macToQueueMap.begin(); outer != this->macToQueueMap.end(); ++outer){
-        std::cout << "The MacAddress: " << outer->first << " queue:" << endl;
+        EV_DETAIL << "The MacAddress: " << outer->first << " queue:" << endl;
         for(auto inner = outer->second->begin(); inner != outer->second->end(); ++inner){
-            std::cout << "virtualLinkID  " << inner->first << " has " << inner->second->size() << " packets" << endl;
+            EV_DETAIL << "virtualLinkID  " << inner->first << " has " << inner->second->size() << " packets" << endl;
         }
     }
-    std::cout << ".........................." << endl;
-    std::cout << ".........................." << endl;
+    EV_DETAIL << ".........................." << endl;
+    EV_DETAIL << ".........................." << endl;
 }
 void TschNeighbor::clearQueue(){
     for (auto itrOuter = this->macToQueueMap.begin();

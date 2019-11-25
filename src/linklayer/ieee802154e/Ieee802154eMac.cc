@@ -358,7 +358,7 @@ void Ieee802154eMac::updateStatusIdle(t_mac_event event, cMessage *msg) {
         EV_DETAIL << "We are in ASN " << currentAsn << " queue size "
                          << neighbor->checkVirtualQueueSizeAt(currentLink->getAddr(), currentVirtualLinkID)
                          << " channel " << currentChannel << " frequency " << freq << endl;
-        std::cout << "This Node is: " << interfaceEntry->getMacAddress() << endl;
+        EV_DETAIL << "This Node is: " << interfaceEntry->getMacAddress() << endl;
         neighbor->printQueue();
         if (currentLink->isTx()) {
             if (neighbor->checkVirtualQueueSizeAt(currentLink->getAddr(),currentVirtualLinkID) > 0) {
