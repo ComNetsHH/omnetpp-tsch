@@ -25,14 +25,10 @@
 #define __TSCH_TSCHVIRTUALLINK_H
 
 #include "TschLink.h"
-#include "TschSlotframe.h"
 
 namespace tsch {
 
-class TschSlotframe;
-class TschLink;
-
-class TschVirtualLink: public tsch::TschLink {
+class TschVirtualLink: public TschLink {
 private:
     int virtualLinkId;
     bool option_rtx;
@@ -41,9 +37,6 @@ private:
     // copying not supported: following are private and also left undefined
     TschVirtualLink(const TschVirtualLink& obj);
     TschVirtualLink& operator=(const TschVirtualLink& obj);
-
-  protected:
-    void changed(int fieldCode) override;
 
   public:
     TschVirtualLink() : TschLink(), virtualLinkId(0),option_rtx(false) {}

@@ -22,6 +22,7 @@
  */
 
 #include "TschVirtualLink.h"
+#include "TschLink.h"
 
 namespace tsch {
 
@@ -64,12 +65,6 @@ std::string TschVirtualLink::detailedInfo() const
 bool TschVirtualLink::equals(const TschVirtualLink& link) const
 {
     return this->getSlotframe() == link.getSlotframe() && getSlotOffset() == link.getSlotOffset(); // TODO which fields to compare?
-}
-
-void TschVirtualLink::changed(int fieldCode)
-{
-    if (this->getSlotframe())
-        this->getSlotframe()->linkChanged(this, fieldCode);
 }
 
 int TschVirtualLink::getVirtualLink() const {

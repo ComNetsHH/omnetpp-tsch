@@ -39,7 +39,6 @@ using namespace inet;
 
 namespace tsch {
 
-class TschVirtualLink;
 /**
  *
  */
@@ -58,11 +57,6 @@ class TschSlotframe : public cSimpleModule, protected cListener, public ILifecyc
     const char* fp;
 
   protected:
-    // creates a new empty route
-    virtual TschLink *createNewLink();
-
-    // creates a new empty route for virtual links
-    virtual TschVirtualLink *createNewVirtualLink();
 
     // displays summary above the icon
     virtual void refreshDisplay() const override;
@@ -180,7 +174,7 @@ class TschSlotframe : public cSimpleModule, protected cListener, public ILifecyc
 
     virtual TschLink *createLink() { return new TschLink(); }
 
-    virtual TschVirtualLink *createVirtualLink();
+    virtual TschVirtualLink *createVirtualLink() { return new TschVirtualLink(); }
 
     int getMacSlotframeHandle() const {
         return macSlotframeHandle;

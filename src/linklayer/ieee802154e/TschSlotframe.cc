@@ -321,16 +321,6 @@ bool TschSlotframe::handleOperationStage(LifecycleOperation *operation, IDoneCal
     return true;
 }
 
-TschLink *TschSlotframe::createNewLink()
-{
-    return new TschLink();
-}
-
-TschVirtualLink *TschSlotframe::createNewVirtualLink(){
-
-    return new TschVirtualLink();
-}
-
 /**
  * Returns iterator to the link scheduled for the ASN given
  * or end() if nothing is scheduled.
@@ -430,10 +420,6 @@ bool TschSlotframe::hasLink(inet::MacAddress macAddress){
         }
     }
     return found;
-}
-
-TschVirtualLink *TschSlotframe::createVirtualLink(){
-    return new TschVirtualLink();
 }
 
 void TschSlotframe::xmlSchedule(){
