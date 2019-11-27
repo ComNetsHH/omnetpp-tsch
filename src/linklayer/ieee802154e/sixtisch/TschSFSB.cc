@@ -167,7 +167,7 @@ int TschSFSB::createCellList(uint64_t destId, std::vector<cellLocation_t> &cellL
                 /* timeOffset has not been proposed in any other transaction and
                    isn't part of a scheduled cell. Pick random ChannelOffset
                    and move on. */
-                unsigned int channelOffset = intrand(pNumChannels) + 1;
+                unsigned int channelOffset = intrand(pNumChannels);
                 cellList.push_back({timeOffset, channelOffset});
 
                 // TODO: give those entries a timeout?
