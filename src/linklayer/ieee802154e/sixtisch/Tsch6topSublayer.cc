@@ -712,6 +712,12 @@ void Tsch6topSublayer::receiveSignal(cComponent *source, simsignal_t signalID, c
         return;
     }
 
+    auto sixphdr = pkt->popAtFront<tsch::sixtisch::SixpHeader>();
+
+    if (((tsch6pMsg_t) sixphdr->getType()) == MSG_REQUEST) {
+        return;
+    }
+
     tsch6topCtrlMsg* result = NULL;
 
     if ((piggybackableData.find(destId) != piggybackableData.end()) &&
