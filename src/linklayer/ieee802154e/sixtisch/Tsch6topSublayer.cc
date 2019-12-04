@@ -1,3 +1,34 @@
+/*
+ * Simulation model for IEEE 802.15.4 Time Slotted Channel Hopping (TSCH).
+ * Implementation of the 6top sublayer as a MiXiM BaseApplLayer.
+ *
+ * Note that the 6top sublayer isn't *actually* located on layer 7, but this is
+ * the only interface that lets you not have a gate to any upper layer. And since
+ * the 6top sublayer serves as kind of a mini application layer to the MAC layer,
+ * (at least for now, in case it communicates with the routing protocol for
+ * optimization purposes this probably has to change) this is what it is now.
+ *
+ * For more details on the sublayer see
+ * https://tools.ietf.org/html/draft-ietf-6tisch-architecture
+ *
+ * Copyright (C) 2019  Institute of Communication Networks (ComNets),
+ *                     Hamburg University of Technology (TUHH)
+ *           (C) 2017  Lotte Steenbrink
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 #include "Tsch6topSublayer.h"
 
 //#include "NetworkTopologyMockManager.h"

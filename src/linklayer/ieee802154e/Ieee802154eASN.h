@@ -19,7 +19,6 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-
 #ifndef LINKLAYER_IEEE802154E_IEEE802154EASN_H_
 #define LINKLAYER_IEEE802154E_IEEE802154EASN_H_
 

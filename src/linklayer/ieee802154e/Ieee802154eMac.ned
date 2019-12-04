@@ -27,7 +27,6 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 //
 
-
 package tsch.linklayer.ieee802154e;
 
 import inet.linklayer.base.MacProtocolBase;
