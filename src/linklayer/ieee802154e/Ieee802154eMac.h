@@ -108,6 +108,7 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
 
     /** @brief Delete all dynamically allocated objects of the module*/
     virtual void finish() override;
+    void finish(cComponent *component, simsignal_t signalID) override { cIListener::finish(component, signalID); };
 
     virtual bool isUpperMessage(cMessage *message) override;
 
@@ -235,7 +236,8 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
         NBRECVDACKS,
         NBRXFRAMES,
         NBTXACKS,
-        NBDUPLICATES
+        NBDUPLICATES,
+        NBSLOT
     };
 
     /** @brief keep track of MAC state */
@@ -315,6 +317,8 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
     /** @brief The bit length of the ACK packet.*/
     int ackLength;
 
+    cProperty *statisticTemplate;
+
     std::vector<simsignal_t> channelSignals;
 
     std::vector<std::string> registeredSignals;
@@ -372,10 +376,10 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
 
     //sequence number for sending, map for the general case with more senders
     //also in initialisation phase multiple potential parents
-    std::map<inet::MacAddress, unsigned long> SeqNrParent;    //parent -> sequence number
+    std::map<inet::MacAddress, std::map<int, unsigned long>> SeqNrParent;    //parent -> sequence number
 
     //sequence numbers for receiving
-    std::map<inet::MacAddress, unsigned long> SeqNrChild;    //child -> sequence number
+    std::map<inet::MacAddress, std::map<int, unsigned long>> SeqNrChild;    //child -> sequence number
 
   private:
     /** @brief Copy constructor is not allowed.

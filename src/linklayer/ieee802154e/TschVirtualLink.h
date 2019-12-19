@@ -47,6 +47,7 @@ private:
     bool operator==(const TschVirtualLink& link) const{ return equals(link); }
     bool operator!=(const TschVirtualLink& link) const{ return !equals(link); }
     bool equals(const TschVirtualLink& link) const;
+    bool equals(const TschLink& link) const override { return TschLink::equals(link); }
 
     bool isValid() const override { return true; }
 

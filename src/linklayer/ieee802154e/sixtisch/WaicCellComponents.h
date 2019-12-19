@@ -55,7 +55,9 @@ enum macLinkOption_t {
     MAC_LINKOPTIONS_PRIORITY = 0x10, /** The link is a priority channel access,
                                            as defined in section 6.2.5.2 of the
                                            IEEE802.15.4e standard*/
-    MAC_LINKOPTIONS_NONE = 0x23
+    MAC_LINKOPTIONS_SRCAUTO = 0x20,
+    MAC_LINKOPTIONS_NONE = 0x23,
+
 };
 
 /**
@@ -80,6 +82,10 @@ inline bool getCellOptions_isRX(uint8_t cellOptions) {
  */
 inline bool getCellOptions_isSHARED(uint8_t cellOptions) {
     return cellOptions & MAC_LINKOPTIONS_SHARED;
+}
+
+inline bool getCellOptions_isAUTO(uint8_t cellOptions) {
+    return cellOptions & MAC_LINKOPTIONS_SRCAUTO;
 }
 
 typedef enum {

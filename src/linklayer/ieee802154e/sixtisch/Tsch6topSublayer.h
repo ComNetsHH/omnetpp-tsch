@@ -194,13 +194,6 @@ private:
     const int addDelRelocReqMsgHdrSz = 32;
 
     /**
-     * Hack hack hackity hack: set WaicMacPktTxIndicationCtrlMsg.appPktSequenceNumber
-     * to this value so we can recognize tx indications that belong to our pkts
-     * in @ref handleTxIndicationMsg */
-    // TODO: set this for ALL msgs we want confirmed once we've figured out if it works in general!!
-    const int appPktSeqNumMarker = -23;
-
-    /**
      * The minimum amount of time to wait before piggybacking a blacklist
      * update again after a failure (in ms)
      */

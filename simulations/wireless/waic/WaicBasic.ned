@@ -46,6 +46,7 @@ network WaicBasic
         }
         waicHost[numWaicHosts]: WirelessHost {
             parameters:
+                @6tisch;
                 @display("r=,,#707070;p=250,200");
         }
         wlanHost[numWlanHosts]: WirelessHost {

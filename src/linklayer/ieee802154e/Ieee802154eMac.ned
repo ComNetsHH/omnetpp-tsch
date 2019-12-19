@@ -104,8 +104,11 @@ simple Ieee802154eMac extends MacProtocolBase like IMacProtocol
         @signal[nbRxFrames-*](type=long);
         @signal[nbTxAcks-*](type=long);
         @signal[nbDuplicates-*](type=long);
+        @signal[nbSlot-*](type=long);
         
         @statisticTemplate[nbStats](record=count,vector?; interpolationmode=none);
+        
+        int numSignals = default(0);
         
         gates:
             input sixTopSublayerInGate;

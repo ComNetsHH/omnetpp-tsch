@@ -222,6 +222,8 @@ class TschSlotframe : public cSimpleModule, protected cListener, public ILifecyc
      */
     bool hasLink(inet::MacAddress macAddress);
 
+    std::vector<TschLink*> allTxLinks(inet::MacAddress macAddress);
+
     void xmlSchedule();
 
   private:

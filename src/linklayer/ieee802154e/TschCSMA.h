@@ -42,7 +42,7 @@ public:
      * @param minBE an integer which represents the minimum backoff exponent
      * @param maxBE an integer which represents the maximum backoff exponent
      */
-    TschCSMA(int, int);
+    TschCSMA(int, int, cRNG *);
     /**
      * Default contructor.
      */
@@ -132,6 +132,8 @@ public:
      */
     bool getTschCSMAStatus();
 
+    void setRng(cRNG* rng);
+
     std::string str();
     /**
      * A public member function to decrement the current backoff state by 1
@@ -167,6 +169,11 @@ private:
      * Shows if the TschCSMA algorithm has already started
      */
     bool hasStarted;
+
+    /**
+     * random number generator to use
+     */
+    cRNG *rng;
 };
 }
 #endif /* LINKLAYER_IEEE802154E_TSCHCSMA_H_ */

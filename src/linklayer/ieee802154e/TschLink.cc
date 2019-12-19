@@ -60,6 +60,10 @@ std::string TschLink::str() const
         out << "SHARED ";
     if (option_timekeeping)
         out << "TIME ";
+    if (src_auto)
+        out << "AUTO ";
+    if (src_xml)
+        out << "XML ";
     out << addr.str();
 
     return out.str();

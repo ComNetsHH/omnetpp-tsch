@@ -22,6 +22,7 @@
 #include "TschNeighbor.h"
 #include "inet/common/INETUtils.h"
 #include <iostream>
+#include <algorithm>
 
 namespace tsch{
 
@@ -77,7 +78,7 @@ bool TschNeighbor::add2Queue(Packet *packet,MacAddress macAddr, int virtualLinkI
         }
     }
     if(added){
-        backoffTable.insert(std::make_pair(macAddr, new TschCSMA(par("macMinBE"),par("macMaxBE"))));
+        backoffTable.insert(std::make_pair(macAddr, new TschCSMA(par("macMinBE"), par("macMaxBE"), this->getRNG(0))));
     }
     return added;
 }
@@ -201,138 +202,105 @@ void TschNeighbor::setDedicated(bool value){
     this->dedicated = value;
 }
 
-bool TschNeighbor::checkAndselectQueue(std::vector<inet::MacAddress> tempMacDedicated,TschSlotframe* sf){
-    bool found = false;
-    switch (this->method) {
-    // Iterate over all neighbors and select the first that matches(shared link, not in backoff, packetqueue is not empty)
-    case 1: {
-        inet::MacAddress potentialNeighbor;
-        for (auto itr = this->backoffTable.begin(); itr != this->backoffTable.end(); ++itr) {
-            bool match = false;
-            for (int j = 0; j < (int) tempMacDedicated.size(); j++) {
-                if (itr->first == tempMacDedicated[j] && this->enableSelectDedicated) {
-                    // A potential dedicated Neighbor is already selected in case no shared neighbor is found
-                    if (potentialNeighbor.isUnspecified()) {
-                        auto virtualQueue = this->macToQueueMap.find(itr->first)->second;
-                        int normalSize = 0;
-                        int prioritySize = 0;
-                        auto normalQueue = virtualQueue->find(0);
-                        if (normalQueue != virtualQueue->end()) {
-                            normalSize = normalQueue->second->size();
-                        }
-                        auto priorityQueue = virtualQueue->find(-1);
-                        if (priorityQueue != virtualQueue->end()) {
-                            prioritySize = priorityQueue->second->size();
-                        }
-                        if ((itr->second->getRandomNumber() == 0) && ((prioritySize + normalSize) > 0)) {
-                            potentialNeighbor = itr->first;
-                        }
-                    }
-                    match = true;
-                    break;
-                }
-            }
-            // Shared neighbor is found
-            if (!match) {
-                auto virtualQueue = this->macToQueueMap.find(itr->first)->second;
-                int normalSize = 0;
-                int prioritySize = 0;
+bool TschNeighbor::checkAndselectQueue(std::vector<inet::MacAddress> tempMacDedicated, TschSlotframe* sf) {
 
-                auto normalQueue = virtualQueue->find(0);
-                if (normalQueue != virtualQueue->end()) {
-                    normalSize = normalQueue->second->size();
+    auto it = macToQueueMap.end();
+
+    // we check the queues in order (e.g. first priority, then normal)
+    // if there is a neighbor with packets in the priority queue
+    // and it fulfills all requirements, we give priority for that
+    // otherwise we look into the next queue defined in the queues array
+    static auto queues = std::array<int, 2>({{ -1, 0 }});
+
+    for(const auto& queue : queues) {
+
+        // pick the first neighbor that matches
+        if (this->method == 1) {
+
+            // here is where the magic happens: the lambda function combines multiple other helper functions
+            it = std::find_if(macToQueueMap.begin(), macToQueueMap.end(), [queue, sf, this](decltype(macToQueueMap)::value_type entry) -> bool {
+                        return _isSuitable(entry.first, sf) && _hasPacketsInQueue(entry, queue);
+            });
+
+        // pick the neighbor with the fullest queue
+        } else if (this->method == 2) {
+
+            // here is where the magic happens: the lambda function combines multiple other helper functions
+            it =  std::max_element(macToQueueMap.begin(), macToQueueMap.end(), [queue, sf, this](decltype(macToQueueMap)::value_type a, decltype(macToQueueMap)::value_type b) -> bool {
+                // if b is not suitable, it cannot be larger than a
+                if (!_isSuitable(b.first, sf)) {
+                    return false;
                 }
-                auto priorityQueue = virtualQueue->find(-1);
-                if (priorityQueue != virtualQueue->end()) {
-                    prioritySize = priorityQueue->second->size();
+                // if a is not suitable, it is smaller than b
+                if (!_isSuitable(a.first, sf)) {
+                    return true;
                 }
 
-                if ((itr->second->getRandomNumber() == 0) && ((prioritySize + normalSize) > 0)) {
-                    // 0 is the virtualLinkID for default
-                    this->setSelectedQueue(itr->first,0);
-                    found = true;
-                    break;
-                }
-            }
-        }
-        // No shared Neighbor is found, therefore a dedicated neighbor with packets is selected
-        if ((!found) && (!potentialNeighbor.isUnspecified()) && this->enableSelectDedicated){
-            this->setSelectedQueue(potentialNeighbor,0);
-            found = true;
-        }
-        break;
-    }
-    case 2: {
-        inet::MacAddress temp_position;
-        int temp_longest = 0;
-        //potential Neighbor in case no shared slot is found
-        inet::MacAddress temp_potentialPosition;
-        int temp_potentialLongest = 0;
-        for (auto itr = this->backoffTable.begin(); itr != this->backoffTable.end(); ++itr) {
-            bool match = false;
-            for (int j = 0; j < (int) tempMacDedicated.size(); j++) {
-                if (itr->first == tempMacDedicated[j]) {
-                    // Prevent unnecessary checks
-                    if (itr->first > temp_potentialPosition && this->enableSelectDedicated) {
-                        if (itr->second->getRandomNumber() == 0) {
-                            auto virtualQueue = this->macToQueueMap.find(itr->first)->second;
-                            int tempVirtualQueueSizeDefault = 0;
-                            int tempVirtualQueueSizePriority = 0;
-                            auto tempNormalQueue = virtualQueue->find(0);
-                            if(tempNormalQueue != virtualQueue->end()){
-                                tempVirtualQueueSizeDefault = tempNormalQueue->second->size();
-                            }
-                            auto tempPriorityQueue = virtualQueue->find(-1);
-                            if(tempPriorityQueue != virtualQueue->end()){
-                                tempVirtualQueueSizePriority = tempPriorityQueue->second->size();
-                            }
-                            if ((tempVirtualQueueSizeDefault + tempVirtualQueueSizePriority) > temp_potentialLongest ) {
-                            temp_potentialLongest = tempVirtualQueueSizeDefault +tempVirtualQueueSizePriority;
-                            temp_potentialPosition = itr->first;
-                            }
-                        }
-                    }
-                    match = true;
-                    break;
-                }
-            }
-            if (!match) {
-                if (itr->second->getRandomNumber() == 0) {
-                    auto virtualQueue = this->macToQueueMap.find(itr->first)->second;
-                    int tempVirtualQueueSizeDefault = 0;
-                    int tempVirtualQueueSizePriority = 0;
-                    auto tempNormalQueue = virtualQueue->find(0);
-                    if(tempNormalQueue != virtualQueue->end()){
-                        tempVirtualQueueSizeDefault = tempNormalQueue->second->size();
-                    }
-                    auto tempPriorityQueue = virtualQueue->find(-1);
-                    if(tempPriorityQueue != virtualQueue->end()){
-                        tempVirtualQueueSizePriority = tempPriorityQueue->second->size();
-                    }
-                    if ((tempVirtualQueueSizeDefault + tempVirtualQueueSizePriority) > temp_longest) {
-                        temp_longest =tempVirtualQueueSizeDefault + tempVirtualQueueSizePriority;
-                        temp_position = itr->first;
-                        found = true;
-                    }
+                return _hasFullerQueue(a, b, queue);
+            });
 
-                }
+            // we found one, but it actually does not have packets or isn't suitable
+            if (it != macToQueueMap.end() && !_hasPacketsInQueue(*it, queue)) {
+                it = macToQueueMap.end();
             }
+
+        } else {
+            EV_ERROR << "TschNeighbor: Invalid selection method..." << endl;
+            return false;
         }
-        if(found){
-            this->setSelectedQueue(temp_position,0);
-        }else{
-            if (!temp_potentialPosition.isUnspecified()&& this->enableSelectDedicated) {
-                this->setSelectedQueue(temp_potentialPosition,0);
-                found = true;
-            }
+
+        // we found one, use it and return
+        if (it != macToQueueMap.end()) {
+            this->setSelectedQueue(it->first, 0);
+            return true;
         }
-        break;
     }
-    default: {
-        break;
+
+    return false;
+}
+
+bool TschNeighbor::_isSuitable(inet::MacAddress mac, TschSlotframe* sf) {
+    // only consider neighbors that are not in backoff & that do not (!) have tx-links
+    return _isSuitableRelaxed(mac) && !sf->hasLink(mac);
+}
+
+bool TschNeighbor::_isSuitableRelaxed(inet::MacAddress mac) {
+    // only consider non-broadcast neighbors
+    if (mac != MacAddress::BROADCAST_ADDRESS
+        // that are not in backoff
+        && !(
+              this->backoffTable.count(mac) > 0
+              // be careful if the implementation of checkBackoff() changes...
+              // would be nice to have sth like isInBackoff() instead
+              && !this->backoffTable.at(mac)->checkBackoff()
+            )
+       ) {
+        return true;
     }
+    return false;
+}
+
+bool TschNeighbor::_hasPacketsInQueue(decltype(macToQueueMap)::value_type entry, int queue) {
+      // queue exists & is not empty --> possible neighbor
+      // count(..) on maps can only every return 1, as keys are unique. so count(..) is efficient here
+      if (entry.second->count(queue) > 0 && entry.second->at(queue)->size() > 0) {
+          return true;
+      }
+      return false;
+}
+
+bool TschNeighbor::_hasFullerQueue(decltype(macToQueueMap)::value_type a, decltype(macToQueueMap)::value_type b, int queue) {
+    // if b does not have a matching queue, it cannot be larger than a
+    if (b.second->count(queue) == 0) {
+        return false;
     }
-    return found;
+    // if a does not have a matching queue, it is smaller than b
+    if (a.second->count(queue) == 0) {
+        return true;
+    }
+
+    // compare actual queue sizes
+    return a.second->at(queue)->size() < b.second->at(queue)->size();
 }
 
 void TschNeighbor::setSelectedQueue(MacAddress macAddr, int linkID) {
@@ -351,7 +319,7 @@ void TschNeighbor::setSelectedQueue(MacAddress macAddr, int linkID) {
     }else{
         this->currentVirtualLinkIDKey = linkID;
     }
-    EV_DETAIL << "[TschNeighbor] Selected Virtual Link ID is: " << this->currentVirtualLinkIDKey << endl;
+    EV_DETAIL << "[TschNeighbor] Selected neighbor " << macAddr.str() << " and Virtual Link ID " << this->currentVirtualLinkIDKey << endl;
 }
 void TschNeighbor::setMethod(std::string type){
     if(type == "First"){
@@ -417,13 +385,13 @@ std::map<int, std::list<inet::Packet *>*>* TschNeighbor::createVirtualQueue(){
 }
 
 void TschNeighbor::printQueue(){
+    EV_DETAIL << ".........................." << endl;
     for(auto outer = this->macToQueueMap.begin(); outer != this->macToQueueMap.end(); ++outer){
         EV_DETAIL << "The MacAddress: " << outer->first << " queue:" << endl;
         for(auto inner = outer->second->begin(); inner != outer->second->end(); ++inner){
             EV_DETAIL << "virtualLinkID  " << inner->first << " has " << inner->second->size() << " packets" << endl;
         }
     }
-    EV_DETAIL << ".........................." << endl;
     EV_DETAIL << ".........................." << endl;
 }
 void TschNeighbor::clearQueue(){
