@@ -268,6 +268,23 @@ class TschNeighbor : public cSimpleModule, protected cListener
         virtual int numInitStages() const override { return NUM_INIT_STAGES; }
         virtual void initialize(int stage) override;
         virtual void handleMessage(cMessage *) override;
+
+        /**
+         * returns if mac is a suitable neighbor (not broadcast & not in backoff & no tx links scheduled)
+         */
+        bool _isSuitable(inet::MacAddress mac, TschSlotframe* sf);
+        /**
+         * returns if mac is a suitable neighbor (not broadcast & not in backoff)
+         */
+        bool _isSuitableRelaxed(inet::MacAddress mac);
+        /**
+         * returns if entry has packets in queue
+         */
+        bool _hasPacketsInQueue(decltype(macToQueueMap)::value_type entry, int queue);
+        /**
+         * returns if b has a fuller queue than a
+         */
+        bool _hasFullerQueue(decltype(macToQueueMap)::value_type a, decltype(macToQueueMap)::value_type b, int queue);
 };
 }
 #endif /* LINKLAYER_IEEE802154E_TSCHNEIGHBOR_H_ */

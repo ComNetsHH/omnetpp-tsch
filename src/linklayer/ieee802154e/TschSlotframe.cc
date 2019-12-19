@@ -171,31 +171,20 @@ TschLink *TschSlotframe::getLink(int k) const
     return nullptr;
 }
 
-std::vector<MacAddress> TschSlotframe::getMacDedicated(){
-    std::vector<MacAddress> tempMacDedicated;
-    std::vector<MacAddress> checkedSharedNeighbors;
-    for(int i = 0; i < (int)links.size(); i++){
-        if(!(links[i]->isShared()) && links[i]->isTx()) {
-            auto result = std::find(tempMacDedicated.begin(),tempMacDedicated.end() , links[i]->getAddr());
-            if(result == tempMacDedicated.end()){
-                tempMacDedicated.push_back(links[i]->getAddr());
-            }
-        }else if(links[i]->isShared() && links[i]->isTx()){
-            auto result = std::find(checkedSharedNeighbors.begin(),checkedSharedNeighbors.end() , links[i]->getAddr());
-            if(result == checkedSharedNeighbors.end()){
-                checkedSharedNeighbors.push_back(links[i]->getAddr());
+std::vector<MacAddress> TschSlotframe::getMacDedicated() {
+    std::vector<MacAddress> dedicatedNbr;
+
+    auto f = [ &dedicatedNbr ](TschLink* link) -> void {
+        if (link->isTx() && link->getAddr() != MacAddress::BROADCAST_ADDRESS) {
+            if (std::find(dedicatedNbr.begin(), dedicatedNbr.end(), link->getAddr()) == dedicatedNbr.end()) {
+                dedicatedNbr.push_back(link->getAddr());
             }
         }
-    }
-    for(int i = 0; i < (int)checkedSharedNeighbors.size(); i++){
-        for(int j = 0; j <(int)tempMacDedicated.size(); j++){
-            if(checkedSharedNeighbors[i] == tempMacDedicated[j]){
-                tempMacDedicated.erase(tempMacDedicated.begin()+j);
-                //std::remove(tempMacDedicated.begin(), tempMacDedicated.end(), checkedSharedNeighbors[i]);
-            }
-        }
-    }
-    return tempMacDedicated;
+    };
+
+    std::for_each(links.begin(), links.end(), f);
+
+    return dedicatedNbr;
 }
 
 // The 'routes' vector stores the routes in this order.
@@ -411,15 +400,26 @@ bool TschSlotframe::removeLinkFromOffset(int slotOffset, int channelOffset) {
     }
     return false;
 }
-bool TschSlotframe::hasLink(inet::MacAddress macAddress){
-    bool found = false;
-    for(int i = 0; i < (int)links.size(); i++){
-        if(macAddress == links[i]->getAddr() && links[i]->isTx()){
-            found = true;
-            break;
+
+bool TschSlotframe::hasLink(inet::MacAddress macAddress) {
+
+    auto f = [ &macAddress ](TschLink* link) -> bool {
+        return link->isTx() && link->getAddr() == macAddress;
+    };
+
+    return std::find_if(links.begin(), links.end(), f) != links.end();
+}
+
+std::vector<TschLink*> TschSlotframe::allTxLinks(inet::MacAddress macAddress) {
+    std::vector<TschLink*> nbrLinks;
+
+    for(auto const& link: links) {
+        if(link->getAddr() == macAddress && link->isTx() && link->isXml() == false && link->isAuto() == false) {
+            nbrLinks.insert(nbrLinks.end(), link);
         }
     }
-    return found;
+
+    return nbrLinks;
 }
 
 void TschSlotframe::xmlSchedule(){
@@ -449,6 +449,7 @@ void TschSlotframe::xmlSchedule(){
                 l->setAdv(tp.Slotframe[num_Slotframe].links[n].Type_advertising);
                 l->setAdvOnly(tp.Slotframe[num_Slotframe].links[n].Type_advertisingOnly);
                 l->setVirtualLink(tp.Slotframe[num_Slotframe].links[n].Virtual_id);
+                l->setXml(true);
                 //l->???(tp.Slotframe[num_Slotframe].links[n].Neighbor_path); // setter not implemented
                 //std::cout << tp.Slotframe[num_Slotframe].links[n].Neighbor_address << endl;
                 macAddr.setAddress(tp.Slotframe[num_Slotframe].links[n].Neighbor_address.c_str());
@@ -466,6 +467,7 @@ void TschSlotframe::xmlSchedule(){
                 l->setNormal(tp.Slotframe[num_Slotframe].links[n].Type_normal);
                 l->setAdv(tp.Slotframe[num_Slotframe].links[n].Type_advertising);
                 l->setAdvOnly(tp.Slotframe[num_Slotframe].links[n].Type_advertisingOnly);
+                l->setXml(true);
                 //l->???(tp.Slotframe[num_Slotframe].links[n].Neighbor_path); // setter not implemented
                 // TODO: In some random way Neighbor_address is incomplete. Still searching for reason
                 //std::cout <<"This Type is:  " <<  typeid(tp.Slotframe[num_Slotframe].links[n].Neighbor_address).name() << endl;

@@ -30,15 +30,17 @@ TschCSMA::TschCSMA(){
     this->BE = 0;
     this->randomNumber = 0;
     this->hasStarted = false;
+    rng = nullptr;
 }
 
-TschCSMA::TschCSMA(int minBE, int maxBE){
+TschCSMA::TschCSMA(int minBE, int maxBE, cRNG* rng){
     this->NB = 0;
     this->BE = 0;
     this->randomNumber = 0;
     this->macMinBE = minBE;
     this->macMaxBE = maxBE;
     this->hasStarted = false;
+    this->rng = rng;
 }
 
 TschCSMA::~TschCSMA() {
@@ -53,8 +55,8 @@ void TschCSMA::startTschCSMA(){
 }
 
 int TschCSMA::generateRandomNumber(){
-
-    this->randomNumber =intuniform(getEnvir()->getRNG(0), 0, ((int)std::pow(2.0, this->BE)-1));
+    // 1<<n is the same as 2^n
+    this->randomNumber = intuniform(rng, 0, (1<<this->BE)-1);
     return this->randomNumber;
 }
 
@@ -144,6 +146,10 @@ int TschCSMA::getRandomNumber() {
 
 bool TschCSMA::getTschCSMAStatus(){
     return this->hasStarted;
+}
+
+void TschCSMA::setRng(cRNG* rng) {
+    this->rng = rng;
 }
 
 std::string TschCSMA::str() {

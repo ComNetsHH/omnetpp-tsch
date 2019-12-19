@@ -117,7 +117,7 @@ void Tsch6topSublayer::initialize(int stage) {
             return;
         }
         pNodeId = mac->interfaceEntry->getMacAddress().getInt();
-        EV_DETAIL << " for node " << pNodeId << endl;
+        EV_DETAIL << " for node " << mac->interfaceEntry->getMacAddress().str() << endl;
         std::list<uint64_t> neighbors = getNeighborsInRange(pNodeId, mac);
 
         std::list<uint64_t>::iterator it;
@@ -398,13 +398,15 @@ Packet* Tsch6topSublayer::handleRequestMsg(Packet* pkt, inet::IntrusivePtr<const
     uint64_t sender = addresses->getSrcAddress().getInt();
     tsch6pCmd_t commandType = (tsch6pCmd_t) hdr->getCode();
 
-    EV_DETAIL << "Node " << pNodeId << " received MSG_REQUEST from "
-            "Node " << sender << ": " << endl;
+    EV_DETAIL << "Node " << MacAddress(pNodeId).str() << " received MSG_REQUEST from "
+            "Node " << MacAddress(sender).str() << " with seq num " << +seqNum << endl;
     if (commandType == CMD_CLEAR) {
         /* we don't need to perform any of the (seqNum) checks. A CLEAR is
            always valid. */
         EV_DETAIL << "CLEAR" << endl;
-        pTschLinkInfo->resetLink(sender, MSG_REQUEST);
+        std::vector<cellLocation_t> empty;
+        pTschLinkInfo->setLastKnownCommand(sender, commandType);
+        pTschSF->handleResponse(sender, RC_SUCCESS, 0, &empty);
 
         /* "The Response Code to a 6P CLEAR command SHOULD be RC_SUCCESS unless
            the operation cannot be executed.  When the CLEAR operation cannot be
@@ -425,7 +427,9 @@ Packet* Tsch6topSublayer::handleRequestMsg(Packet* pkt, inet::IntrusivePtr<const
     /* TODO untangle the mess of checks following this, this was a quick fix */
     bool isDuplicate = ((seqNum != 0) &&
                         (seqNum == pTschLinkInfo->getLastKnownSeqNum(sender)) &&
-                        (MSG_REQUEST == pTschLinkInfo->getLastKnownType(sender)));
+                        (commandType == pTschLinkInfo->getLastKnownCommand(sender)) &&
+                        (MSG_REQUEST == pTschLinkInfo->getLastKnownType(sender)) &&
+                        (pTschLinkInfo->getLastLinkOption(sender)) == data->getCellOptions());
 
     if (pTschLinkInfo->inTransaction(sender) &&
         (commandType != CMD_SIGNAL) &&
@@ -433,7 +437,7 @@ Packet* Tsch6topSublayer::handleRequestMsg(Packet* pkt, inet::IntrusivePtr<const
         /* as per the 6P standard, concurrent transactions are not allowed.
          * (but make sure you don't abort an ongoing transaction because you received
          * the initial request twice) */
-        EV_WARN <<"received new MSG_REQUEST during active transaction: ignoring request, sending RC_RESET" << endl;
+        EV_WARN <<"received new MSG_REQUEST during active transaction: ignoring request, sending RC_RESET with seqNum " << +seqNum << endl;
         return createErrorResponse(sender, seqNum, RC_RESET, data->getTimeout());
     }
 
@@ -463,6 +467,10 @@ Packet* Tsch6topSublayer::handleRequestMsg(Packet* pkt, inet::IntrusivePtr<const
         // TODO. still handle piggybacked blacklist update?
         EV_ERROR <<"Multiple CellOptions set!" << endl;
     } else {
+        if(pTschLinkInfo->inTransaction(sender)) {
+            EV_WARN <<"received new MSG_REQUEST during active transaction: ignoring request, sending RC_RESET (noticed late)" << endl;
+            return createErrorResponse(sender, seqNum, RC_RESET, data->getTimeout());
+        }
         pTschLinkInfo->setLastKnownCommand(sender, commandType);
 
         simtime_t timeout = data->getTimeout();
@@ -526,18 +534,36 @@ Packet* Tsch6topSublayer::handleRequestMsg(Packet* pkt, inet::IntrusivePtr<const
                                                     data->getTimeout());
             }
         } else if (commandType == CMD_DELETE) {
-            EV_DETAIL << "DELETE [unimplemented]" << endl;
+            EV_DETAIL << "DELETE" << endl;
             std::vector<cellLocation_t> cellList = data->getCellList();
 
             /* all cells currently scheduled on this link */
             cellVector sharedCells = pTschLinkInfo->getCells(sender);
             //TODO: Delete this part?
-            /**bool isCellListValid = true;
+            bool isCellListValid = true;
             std::tuple<cellLocation_t, uint8_t> currCell;
-
             if (cellList.size() < numCells) {
                 isCellListValid = false;
-            }**/
+            }
+            if(!isCellListValid){
+                EV_ERROR << "Cell list size is smaller than number of cells requested" << endl;
+                /** Send the error response due to error in cell list */
+                response = createErrorResponse(sender, seqNum, RC_CELLLIST, data->getTimeout());
+            }
+            else{
+                std::vector<cellLocation_t> emptyCellList; // in response to delete request, send empty cell list
+                response = createSuccessResponse(sender, seqNum, cellList, data->getTimeout());
+                EV_DETAIL << "Node " << pNodeId << " received delete request from " << sender << endl;
+                for(int k=0; k < cellList.size(); k++){
+                    EV_DETAIL << "Time offset => " << cellList[k].timeOffset << " chan Offset => " << cellList[k].channelOffset << endl;
+                }
+                /* store potential change to our hopping sequence (will be activated
+                   if LL ACK arrives within this timeslot) */
+                pendingPatternUpdates[sender] = setCtrlMsg_PatternUpdate(
+                                                    pendingPatternUpdates[sender],
+                                                    sender, MAC_LINKOPTIONS_RX, {},
+                                                    cellList, data->getTimeout());
+            }
 
             /* TODO: IMPLEMENT ME */
         } else if (commandType == CMD_RELOCATE) {
@@ -601,8 +627,8 @@ Packet* Tsch6topSublayer::handleResponseMsg(Packet* pkt, inet::IntrusivePtr<cons
     uint64_t sender = addresses->getSrcAddress().getInt();
     tsch6pReturn_t returnCode = (tsch6pReturn_t) hdr->getCode();
 
-    EV_DETAIL << "Node " << pNodeId << " received MSG_RESPONSE from "
-            "Node " << sender << ": " << endl;
+    EV_DETAIL << "Node " << MacAddress(pNodeId).str() << " received MSG_RESPONSE from "
+            "Node " << MacAddress(sender).str() << " with seq num " << +seqNum << endl;
     if (data->getTimeout() < simTime()) {
         /* received msg whose timeout already expired; ignore it. */
         /* QUICK FIX (we probably shouldn't start the timeout timer before
@@ -617,14 +643,24 @@ Packet* Tsch6topSublayer::handleResponseMsg(Packet* pkt, inet::IntrusivePtr<cons
     } else if (pTschLinkInfo->getLastKnownType(sender) == MSG_RESPONSE) {
         EV_WARN << "received unexpected MSG_RESPONSE: this node just "
                     " sent a MSG_RESPONSE itself" << endl;
-    } else if ((returnCode == RC_RESET) ||
-               (pTschLinkInfo->getLastKnownCommand(sender) == CMD_CLEAR)) {
-        EV_DETAIL << "RC_RESET/ successful CMD_CLEAR" << endl;
+    } else if (returnCode == RC_RESET) {
+        EV_DETAIL << "RC_RESET" << endl;
+        pTschLinkInfo->revertLink(sender, MSG_RESPONSE);
+        pTschSF->handleResponse(sender, RC_RESET, 0, NULL);
+
+        /* cancel any pending pattern update that we might have created */
+        pendingPatternUpdates[sender]->setDestId(-1);
+
+        return response;
+    } else if (pTschLinkInfo->getLastKnownCommand(sender) == CMD_CLEAR) {
+        EV_DETAIL << "successful CMD_CLEAR" << endl;
         /* We interrupted an ongoing transaction or got a response to our CLEAR
           => don't need to perform any other checks
           (TODO: Do we still need to check seqNum though? Unclear in the draft!) */
-        pTschLinkInfo->resetLink(sender, MSG_RESPONSE);
-        pTschSF->handleResponse(sender, RC_RESET, 0, NULL);
+        std::vector<cellLocation_t> empty;
+        pTschSF->handleResponse(sender, RC_RESET, 0, &empty);
+
+
 
         /* cancel any pending pattern update that we might have created */
         pendingPatternUpdates[sender]->setDestId(-1);
@@ -695,7 +731,11 @@ Packet* Tsch6topSublayer::handleResponseMsg(Packet* pkt, inet::IntrusivePtr<cons
 
             // TODO: Change to directly update TschSlotframe instead of using msg
             tsch6topCtrlMsg *msg = new tsch6topCtrlMsg();
-            setCtrlMsg_PatternUpdate(msg, sender, cellOption, cellList, deleteCells,data->getTimeout());
+            if (command == CMD_DELETE) {
+                setCtrlMsg_PatternUpdate(msg, sender, cellOption, {}, cellList,data->getTimeout());
+            } else {
+                setCtrlMsg_PatternUpdate(msg, sender, cellOption, cellList, deleteCells,data->getTimeout());
+            }
             //sendControlDown(msg);
             updateSchedule(msg);
 
@@ -851,7 +891,7 @@ Packet* Tsch6topSublayer::createAddRequest(uint64_t destId, uint8_t seqNum,
     sixpData->setNumCells(numCells);
     sixpData->setCellList(cellList);
     sixpData->setTimeout(timeout);
-    sixpData->setChunkLength(b(addDelRelocReqMsgHdrSz + cellListSz));
+    sixpData->setChunkLength(b(addDelRelocReqMsgHdrSz + cellListSz + (sizeof(simtime_t)*8)));
 
     auto pkt = new Packet("6top ADD Req");
     piggybackOnMessage(pkt, destId);
@@ -890,7 +930,7 @@ Packet* Tsch6topSublayer::createDeleteRequest(uint64_t destId, uint8_t seqNum,
     sixpData->setNumCells(numCells);
     sixpData->setCellList(cellList);
     sixpData->setTimeout(timeout);
-    sixpData->setChunkLength(b(addDelRelocReqMsgHdrSz + cellListSz));
+    sixpData->setChunkLength(b(addDelRelocReqMsgHdrSz + cellListSz + (sizeof(simtime_t)*8)));
 
     auto pkt = new Packet("6top DEL Req");
     piggybackOnMessage(pkt, destId);
@@ -933,7 +973,7 @@ Packet* Tsch6topSublayer::createRelocationRequest(uint64_t destId, uint8_t seqNu
     sixpData->setCellList(candiateCellList);
     sixpData->setRelocationCellList(relocationCellList);
     sixpData->setTimeout(timeout);
-    sixpData->setChunkLength(b(addDelRelocReqMsgHdrSz + cellListSz));
+    sixpData->setChunkLength(b(addDelRelocReqMsgHdrSz + cellListSz + (sizeof(simtime_t)*8)));
 
     auto pkt = new Packet("6top RELOCATE Req");
     piggybackOnMessage(pkt, destId);
@@ -989,7 +1029,7 @@ Packet* Tsch6topSublayer::createSignalRequest(uint64_t destId, uint8_t seqNum,
 
     const auto& sixpData = makeShared<tsch::sixtisch::SixpData>();
     sixpData->setTimeout(simTime() + TxQueueTTL);
-    sixpData->setChunkLength(B(payloadSz));
+    sixpData->setChunkLength(B(payloadSz + sizeof(simtime_t)));
 
     auto pkt = new Packet("6top SIGNAL Req");
 
@@ -1026,7 +1066,7 @@ Packet* Tsch6topSublayer::createSuccessResponse(uint64_t destId, uint8_t seqNum,
     const auto& sixpData = makeShared<tsch::sixtisch::SixpData>();
     sixpData->setCellList(cellList);
     sixpData->setTimeout(timeout);
-    sixpData->setChunkLength(b(cellListSz));
+    sixpData->setChunkLength(b(cellListSz + sizeof(simtime_t)*8));
 
     auto pkt = new Packet("6top SUCCESS Resp");
     piggybackOnMessage(pkt, destId);
@@ -1061,7 +1101,7 @@ Packet* Tsch6topSublayer::createErrorResponse(uint64_t destId, uint8_t seqNum,
 
     const auto& sixpData = makeShared<tsch::sixtisch::SixpData>();
     sixpData->setTimeout(timeout);
-    sixpData->setChunkLength(B(1));
+    sixpData->setChunkLength(B(sizeof(simtime_t)));
 
     auto pkt = new Packet("6top ERROR Resp");
     pkt->insertAtBack(sixpData);
@@ -1089,7 +1129,7 @@ Packet* Tsch6topSublayer::createSeqNumErrorResponse(uint64_t destId,
 
     const auto& sixpData = makeShared<tsch::sixtisch::SixpData>();
     sixpData->setTimeout(timeout);
-    sixpData->setChunkLength(B(1));
+    sixpData->setChunkLength(B(sizeof(simtime_t)));
 
     auto pkt = new Packet("6top SEQ ERROR Resp");
     pkt->insertAtBack(sixpData);
@@ -1122,7 +1162,7 @@ Packet* Tsch6topSublayer::createClearResponse(uint64_t destId, uint8_t seqNum,
 
     const auto& sixpData = makeShared<tsch::sixtisch::SixpData>();
     sixpData->setTimeout(timeout);
-    sixpData->setChunkLength(B(1));
+    sixpData->setChunkLength(B(sizeof(simtime_t)));
 
     auto pkt = new Packet("6top CLEAR Resp");
     pkt->insertAtBack(sixpData);
@@ -1165,6 +1205,7 @@ void Tsch6topSublayer::updateSchedule(tsch6topCtrlMsg* msg){
         tl->setShared(getCellOptions_isSHARED(cellOption));
         tl->setRx(getCellOptions_isRX(cellOption));
         tl->setTx(getCellOptions_isTX(cellOption));
+        tl->setAuto(getCellOptions_isAUTO(cellOption));
         tl->setChannelOffset(cell.channelOffset);
         tl->setSlotOffset(cell.timeOffset);
         schedule->addLink(tl);
@@ -1176,6 +1217,8 @@ void Tsch6topSublayer::updateSchedule(tsch6topCtrlMsg* msg){
             EV_DETAIL << "The link with SlotOffset: " << cell.timeOffset
                              << " and ChannelOffset: " << cell.channelOffset
                              << " does not exist" << endl;
+        } else {
+            EV_DETAIL << "link with slotOffset " << cell.timeOffset << " and channelOffset " << cell.channelOffset << " removed" << endl;
         }
     }
     delete msg;
@@ -1241,10 +1284,11 @@ uint8_t Tsch6topSublayer::prepLinkForRequest(uint64_t destId, simtime_t absolute
 
     if(!pTschLinkInfo->linkInfoExists(destId)) {
         /* We don't have a link to destId yet, register one and start @ SeqNum 0 */
+        EV_INFO << "We don't have a link to " << MacAddress(destId).str() << " yet, register one and start @ SeqNum 0" << endl;
         pTschLinkInfo->addLink(destId, true, absoluteTimeout, seqNum);
     } else {
         seqNum = pTschLinkInfo->getSeqNum(destId);
-
+        EV_INFO << "We already have a link to " << MacAddress(destId).str() << " with seqNum " << +seqNum << endl;
         /* Link already exists, update its info */
         pTschLinkInfo->setInTransaction(destId, absoluteTimeout);
         pTschLinkInfo->setLastKnownType(destId, MSG_REQUEST);
@@ -1292,45 +1336,49 @@ void Tsch6topSublayer::deletePiggybackableData(uint64_t destId, void* payloadPtr
 
 std::list<uint64_t> Tsch6topSublayer::getNeighborsInRange(uint64_t nodeId, Ieee802154eMac* mac){
     std::list<uint64_t> resultingList;
-    std::map<uint64_t, Coord> nodeIdToPositionMap;
     auto medium = dynamic_cast<const physicallayer::RadioMedium*>(mac->getRadio()->getMedium());
     auto limitcache = dynamic_cast<const physicallayer::MediumLimitCache*>(medium->getMediumLimitCache());
     auto range = limitcache->getMaxCommunicationRange(mac->getRadio()).get();
+    auto myCoords = mac->getRadio()->getAntenna()->getMobility()->getCurrentPosition();
 
-    if (!nodeIdToPositionMap.size()) {
-        cModule * network = (*cSimulation::getActiveSimulation()).getSystemModule();
-        int numHosts = network->par("numWaicHosts").intValue();
-        for(int i = 1; i<= numHosts; i++){
-            // workaround: offset host id by network, configurator, and radioMedium.
-            // works if waicHosts are first submodules in the network after configurator and radioMedium
-            auto host = (*cSimulation::getActiveSimulation()).getModule(3 + i);
-            auto mobilityModule =
-                    dynamic_cast<IMobility *>(host->getSubmodule(
-                            "mobility"));
-            auto interfaceModule = dynamic_cast<InterfaceTable *>(host->getSubmodule("interfaceTable", 0));
-            uint64_t macAddr = interfaceModule->getInterface(1)->getMacAddress().getInt();
-            EV_DETAIL << "neighbor " << host->getFullName() << " has mac " << macAddr << endl;
+    // we extract the topology here and filter for nodes that have the property @6tisch set.
+    // The property has to be set within the top-level ned-file (contains your network) e.g. like this:
+    //
+    // host[numHosts]: WirelessHost {
+    //     parameters:
+    //         @6tisch;
+    // }
+    //
+    cTopology topo;
+    topo.extractByProperty("6tisch");
 
-            nodeIdToPositionMap[macAddr] = mobilityModule->getCurrentPosition();
+    for (int i = 0; i < topo.getNumNodes(); i++) {
+        auto host = topo.getNode(i)->getModule();
+        auto mobilityModule = dynamic_cast<IMobility *>(host->getSubmodule("mobility"));
+        auto interfaceModule = dynamic_cast<InterfaceTable *>(host->getSubmodule("interfaceTable"));
+        auto coords = mobilityModule->getCurrentPosition();
+        inet::MacAddress addr;
+
+        // look for a WirelessInterface and get it's address
+        // TODO currently takes first WirelessInterface, does not filter for interface type
+        if (interfaceModule->getNumInterfaces() > 0) {
+            for (int y = 0; y < interfaceModule->getNumInterfaces(); y++) {
+                if (strcmp(interfaceModule->getInterface(y)->getNedTypeName(), "inet.linklayer.common.WirelessInterface") == 0) {
+                    addr = interfaceModule->getInterface(y)->getMacAddress();
+                    break;
+                }
+            }
         }
-    }
 
-    auto it = nodeIdToPositionMap.find(nodeId);
-    if (it != nodeIdToPositionMap.end()) {
-        const auto &nodeCoord = it->second;
+        // we found no mac address to use or we found ourself
+        if (addr.isUnspecified() || addr.getInt() == nodeId) {
+            continue;
+        }
 
-        for (auto otherNodeIt : nodeIdToPositionMap) {
-            auto otherNodeId = otherNodeIt.first;
-            const auto &otherNodeCoord = otherNodeIt.second;
-
-            if (otherNodeId == nodeId) {
-                continue;
-            }
-
-            if (nodeCoord.distance(otherNodeCoord) <= range) {
-                resultingList.push_back(otherNodeId);
-                EV_DETAIL << "node " << otherNodeId << " is a neighbor of " << nodeId << endl;
-            }
+        // verify distance to ourself
+        if (myCoords.distance(coords) <= range) {
+            resultingList.push_back(addr.getInt());
+            EV_DETAIL << "node " << addr.str() << " (" << coords.str() << ") is a neighbor of " << MacAddress(nodeId).str() << " (" << myCoords.str() << ")" << endl;
         }
     }
 

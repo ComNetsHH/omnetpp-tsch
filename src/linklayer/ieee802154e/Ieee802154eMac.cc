@@ -115,6 +115,9 @@ void Ieee802154eMac::initialize(int stage) {
         slotendTimer = new cMessage("timer-slotend");
         macState = IDLE_1;
         txAttempts = 0;
+
+        statisticTemplate = getProperties()->get("statisticTemplate", "nbStats");
+
     } else if (stage == INITSTAGE_LINK_LAYER) {
         EV_DETAIL << "We are in INISTAGELINK LAYER" << endl;
         cModule *radioModule = getModuleFromPar<cModule>(par("radioModule"),
@@ -193,7 +196,6 @@ Ieee802154eMac::~Ieee802154eMac() {
 void Ieee802154eMac::emitSignal(signal_names signalName)
 {
     std::string name;
-    auto statisticTemplate = getProperties()->get("statisticTemplate", "nbStats");
 
     switch (signalName) {
         case NBTXFRAMES:
@@ -213,6 +215,9 @@ void Ieee802154eMac::emitSignal(signal_names signalName)
             break;
         case NBDUPLICATES:
             name += "nbDuplicates";
+            break;
+        case NBSLOT:
+            name += "nbSlot";
             break;
         default:
             EV << "EmitSignal Error ! Unknown signal id:" << signalName << endl;
@@ -236,11 +241,10 @@ void Ieee802154eMac::emitSignal(signal_names signalName)
         if (std::find(registeredSignals.begin(), registeredSignals.end(), signalName) == registeredSignals.end()) {
             getEnvir()->addResultRecorders(this, registerSignal(signalName.c_str()), signalName.c_str(), statisticTemplate);
             registeredSignals.push_back(signalName);
-            EV_DETAIL << "registered statistic " << signalName << endl;
+            par("numSignals").setIntValue(par("numSignals").intValue() + 1); // TODO somewhat hackish, let's see
         }
 
-        EV_DETAIL << "emit signal " << signalName << endl;
-        emit(registerSignal(signalName.c_str()), 1L);
+        emit(registerSignal(signalName.c_str()), (int) currentAsn);
     }
 
 }
@@ -294,17 +298,26 @@ void Ieee802154eMac::handleUpperPacket(Packet *packet) {
     delete packet->removeControlInfo();
     macPkt->setSrcAddr(interfaceEntry->getMacAddress());
     if (useMACAcks) {
-        if (SeqNrParent.find(dest) == SeqNrParent.end()) {
+
+        if (SeqNrParent.count(dest) == 0) {
             //no record of current parent -> add next sequence number to map
-            SeqNrParent[dest] = 1;
+            SeqNrParent[dest][linkId] = 1;
             macPkt->setSequenceId(0);
             EV_DETAIL << "Adding a new parent to the map of Sequence numbers:"
-                             << dest << endl;
+                             << dest << " with linkId " << linkId << endl;
         } else {
-            macPkt->setSequenceId(SeqNrParent[dest]);
-            EV_DETAIL << "Packet send with sequence number = "
-                             << SeqNrParent[dest] << endl;
-            SeqNrParent[dest]++;
+            if (SeqNrParent[dest].count(linkId) == 0) {
+                //no record of current linkId -> add next sequence number to map
+                SeqNrParent[dest][linkId] = 1;
+                macPkt->setSequenceId(0);
+                EV_DETAIL << "Adding a new link to the map of Sequence numbers:"
+                               << linkId << endl;
+            } else {
+                macPkt->setSequenceId(SeqNrParent[dest][linkId]);
+                EV_DETAIL << "Packet sent with sequence number = "
+                                 << SeqNrParent[dest][linkId] << endl;
+                SeqNrParent[dest][linkId]++;
+            }
         }
     }
 
@@ -354,14 +367,19 @@ void Ieee802154eMac::updateStatusIdle(t_mac_event event, cMessage *msg) {
 
         EV_DETAIL << currentLink->str() << endl;
 
+        // unconditionally emit a signal at slot start when we already have link infos
+        emitSignal(NBSLOT);
+
         neighbor->reset();
+        auto queueSize = neighbor->checkVirtualQueueSizeAt(currentLink->getAddr(), currentVirtualLinkID);
         EV_DETAIL << "We are in ASN " << currentAsn << " queue size "
-                         << neighbor->checkVirtualQueueSizeAt(currentLink->getAddr(), currentVirtualLinkID)
+                         << queueSize
                          << " channel " << currentChannel << " frequency " << freq << endl;
         EV_DETAIL << "This Node is: " << interfaceEntry->getMacAddress() << endl;
         neighbor->printQueue();
+
         if (currentLink->isTx()) {
-            if (neighbor->checkVirtualQueueSizeAt(currentLink->getAddr(),currentVirtualLinkID) > 0) {
+            if (queueSize > 0) {
                 neighbor->setSelectedQueue(currentLink->getAddr(),currentVirtualLinkID);
                 // Dedicated link
                 if (!currentLink->isShared()) {
@@ -880,6 +898,7 @@ void Ieee802154eMac::handleLowerPacket(Packet *packet) {
             executeMac(EV_FRAME_RECEIVED, packet);
         } else {
             long SeqNr = csmaHeader->getSequenceId();
+            auto linkId = csmaHeader->getVirtualLinkID();
 
             if (strcmp(packet->getName(), "TSCH-Ack") != 0) {
                 // This is a data message addressed to us
@@ -905,28 +924,37 @@ void Ieee802154eMac::handleLowerPacket(Packet *packet) {
                 ackMessage->addTag<PacketProtocolTag>()->setProtocol(
                         &Protocol::ieee802154);
                 //Check for duplicates by checking expected seqNr of sender
-                if (SeqNrChild.find(src) == SeqNrChild.end()) {
+                if (SeqNrChild.count(src) == 0) {
                     //no record of current child -> add expected next number to map
-                    SeqNrChild[src] = SeqNr + 1;
+                    SeqNrChild[src][linkId] = SeqNr + 1;
                     EV_DETAIL
                                      << "Adding a new child to the map of Sequence numbers:"
-                                     << src << endl;
+                                     << src << " with linkId " << linkId << endl;
                     executeMac(EV_FRAME_RECEIVED, packet);
                 } else {
-                    ExpectedNr = SeqNrChild[src];
-                    EV_DETAIL << "Expected Sequence number is " << ExpectedNr
-                                     << " and number of packet is " << SeqNr
-                                     << endl;
-                    if (SeqNr < ExpectedNr) {
-                        //Duplicate Packet, count and do not send to upper layer
-                        nbDuplicates++;
-
-                        emitSignal(NBDUPLICATES);
-
-                        executeMac(EV_DUPLICATE_RECEIVED, packet);
-                    } else {
-                        SeqNrChild[src] = SeqNr + 1;
+                    if (SeqNrChild[src].count(linkId) == 0) {
+                        //no record of current linkId -> add expected next number to map
+                        SeqNrChild[src][linkId] = SeqNr + 1;
+                        EV_DETAIL
+                                         << "Adding a new linkId to the map of Sequence numbers:"
+                                         << linkId << endl;
                         executeMac(EV_FRAME_RECEIVED, packet);
+                    } else {
+                        ExpectedNr = SeqNrChild[src][linkId];
+                        EV_DETAIL << "Expected Sequence number is " << ExpectedNr
+                                         << " and number of packet is " << SeqNr
+                                         << " with linkid " << linkId << endl;
+                        if (SeqNr < ExpectedNr) {
+                            //Duplicate Packet, count and do not send to upper layer
+                            nbDuplicates++;
+
+                            emitSignal(NBDUPLICATES);
+
+                            executeMac(EV_DUPLICATE_RECEIVED, packet);
+                        } else {
+                            SeqNrChild[src][linkId] = SeqNr + 1;
+                            executeMac(EV_FRAME_RECEIVED, packet);
+                        }
                     }
                 }
             }

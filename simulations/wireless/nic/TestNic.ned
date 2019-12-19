@@ -44,6 +44,7 @@ network TestNic
         }
         host[numHosts]: WirelessHost {
             parameters:
+                @6tisch;
                 @display("r=,,#707070;p=250,200");
         }
 }

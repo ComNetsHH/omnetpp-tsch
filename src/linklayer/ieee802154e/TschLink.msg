@@ -42,6 +42,9 @@ class TschLink extends cNamedObject
     bool typeAdvertising @getter(isAdv) @setter(setAdv);      // TODO unused
     bool typeAdvertisingOnly @getter(isAdvOnly) @setter(setAdvOnly);  // TODO unused
     
+    bool srcAuto @getter(isAuto) @setter(setAuto);
+    bool srcXml @getter(isXml) @setter(setXml);
+    
     int channelOffset;
     int slotOffset;
     

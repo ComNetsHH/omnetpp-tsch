@@ -46,6 +46,9 @@ class TschLink : public omnetpp::cObject
     bool type_advertising;      // TODO unused
     bool type_advertisingOnly;  // TODO unused
 
+    bool src_auto;
+    bool src_xml;
+
     int channelOffset;
     int slotOffset;
 
@@ -62,7 +65,7 @@ class TschLink : public omnetpp::cObject
   public:
     TschLink() : sf(nullptr), option_tx(true), option_rx(true), option_shared(true),
         option_timekeeping(false), type_normal(true), type_advertising(false),
-        type_advertisingOnly(false), channelOffset(0), slotOffset(0),
+        type_advertisingOnly(false), src_auto(false), src_xml(false), channelOffset(0), slotOffset(0),
         addr(inet::MacAddress::BROADCAST_ADDRESS) {}
     virtual ~TschLink();
     virtual std::string str() const override;
@@ -80,7 +83,7 @@ class TschLink : public omnetpp::cObject
     virtual bool isValid() const { return true; }
 
     // field codes for changed()
-    enum { F_OPTIONTX, F_OPTIONRX, F_OPTIONSHARED, F_OPTIONTIME, F_TYPENORMAL, F_TYPEADV, F_TYPEADVONLY, F_CHANOFF, F_SLOTOFF, F_ADDR };
+    enum { F_OPTIONTX, F_OPTIONRX, F_OPTIONSHARED, F_OPTIONTIME, F_TYPENORMAL, F_TYPEADV, F_TYPEADVONLY, F_SRCAUTO, F_SRCXML, F_CHANOFF, F_SLOTOFF, F_ADDR };
 
     virtual const inet::MacAddress& getAddr() const {
         return addr;
@@ -171,6 +174,24 @@ class TschLink : public omnetpp::cObject
     virtual void setNormal(bool typeNormal) {
         type_normal = typeNormal;
         changed(F_TYPENORMAL);
+    }
+
+    virtual void setAuto(bool srcAuto) {
+        src_auto = srcAuto;
+        changed(F_SRCAUTO);
+    }
+
+    virtual bool isAuto() {
+        return src_auto;
+    }
+
+    virtual void setXml(bool srcXml) {
+        src_xml = srcXml;
+        changed(F_SRCXML);
+    }
+
+    virtual bool isXml() {
+        return src_xml;
     }
 };
 

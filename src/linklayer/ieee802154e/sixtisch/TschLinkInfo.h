@@ -96,6 +96,14 @@ public:
     void resetLink(uint64_t nodeId, tsch6pMsg_t lastKnownType);
 
     /**
+     * @brief Abort active transaction with @p nodeId (if any),
+     *        set sequence number to previous value and set lastLnownType
+     *        to @p lastKnownType.
+     *        If no link to @p nodeId exists, this method does nothing.
+     */
+    void revertLink(uint64_t nodeId, tsch6pMsg_t lastKnownType);
+
+    /**
      * @return    true if @p nodeId is currently involved in an unfinished transaction
      *            false otherwise
      */
@@ -144,9 +152,19 @@ public:
     cellVector getCells(uint64_t nodeId);
 
     /**
+     * @return the associated cell options or 0xFF
+     */
+    uint8_t getCellOptions(uint64_t nodeId, cellLocation_t candidate);
+
+    /**
      * @return the number of cells scheduled between this ode and @p nodeId
      */
     int getNumCells(uint64_t nodeId);
+
+    /**
+     * @return the neighbor belonging to the cell or 0
+     */
+    uint64_t getNodeOfCell(cellLocation_t candidate);
 
     /**
      * @brief Delete all cells that are scheduled on the link with @p nodeId.
