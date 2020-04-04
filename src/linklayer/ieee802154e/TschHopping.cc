@@ -25,6 +25,7 @@
 #include "inet/common/InitStages.h"
 #include <omnetpp/cstringtokenizer.h>
 #include "inet/common/Units.h"
+#include <iostream>
 
 namespace tsch {
 
@@ -43,7 +44,7 @@ void TschHopping::initialize(int stage)
     if (stage == inet::INITSTAGE_LOCAL) {
         const char *patternstr = par("pattern").stringValue();
         pattern = omnetpp::cStringTokenizer(patternstr).asIntVector();
-
+        centerFrequency = units::values::Hz(par("centerFrequency"));
         // at least one channel in hopping sequence
         assert(pattern.size() >= 1);
     }
@@ -57,11 +58,18 @@ int TschHopping::channel(int64_t asn, int channelOffset)
     return pattern[((asn + channelOffset) % pattern.size())];
 }
 
+units::values::Hz TschHopping::getMinCenterFrequency(){
+    return this->centerFrequency;
+}
+
+units::values::Hz TschHopping::getMaxCenterFrequency(){
+    return this->centerFrequency;
+}
+
 units::values::Hz TschHopping::channelToCenterFrequency(int channel)
 {
    ASSERT(channel >= getMinChannel());
    ASSERT(channel <= getMaxChannel());
-
    return units::values::Hz(getMinCenterFrequency().get() + ((channel - getMinChannel()) * getChannelSpacing().get()));
 }
 

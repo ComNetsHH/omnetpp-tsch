@@ -48,7 +48,7 @@ void TschBlacklistManager::initialize(int stage) {
         Ieee802154eMac* mac = dynamic_cast<Ieee802154eMac *>(module->getSubmodule(
                     "Ieee802154eMac", 0));
         //pNodeId = mac->getMACAddress().getInt();
-        pNodeId = mac->interfaceEntry->getMacAddress().getInt();
+        pNodeId = mac->getInterfaceEntry()->getMacAddress().getInt();
         pNumChannels = module->getSubmodule("sublayer")->par("nbRadioChannels");
 
         CHANNEL_SWAP_OFFSET = 0;

@@ -11,6 +11,8 @@ build-541-410:
   artifacts:
     paths:
     - src/tsch
+  only:
+    - omnetpp-tsch-v0.1
 
 build-551-411:
   stage: build
@@ -22,6 +24,34 @@ build-551-411:
   artifacts:
     paths:
     - src/tsch
+  only:
+    - omnetpp-tsch-v0.1
+
+build-551-420:
+  stage: build
+  image: omnetpp/inet:o5.5.1-4.2.0
+  script:
+    - cd src
+    - opp_makemake -f --deep -O out -KINET_PROJ=/root/inet4 -DINET_IMPORT -I. -I$\(INET_PROJ\)/src -L$\(INET_PROJ\)/src -lINET$\(D\)
+    - make
+  artifacts:
+    paths:
+    - src/tsch
+  except:
+    - omnetpp-tsch-v0.1
+
+build-560-420:
+  stage: build
+  image: omnetpp/inet:o5.6-4.2.0
+  script:
+    - cd src
+    - opp_makemake -f --deep -O out -KINET_PROJ=/root/inet4 -DINET_IMPORT -I. -I$\(INET_PROJ\)/src -L$\(INET_PROJ\)/src -lINET$\(D\)
+    - make
+  artifacts:
+    paths:
+    - src/tsch
+  except:
+    - omnetpp-tsch-v0.1
 
 build-60pre4-411:
   stage: build
@@ -34,6 +64,8 @@ build-60pre4-411:
   artifacts:
     paths:
     - src/tsch
+  only:
+    - omnetpp-tsch-v0.1
 
 build-551-master:
   stage: build
@@ -46,3 +78,5 @@ build-551-master:
   artifacts:
     paths:
     - src/tsch
+  only:
+    - omnetpp-tsch-v0.1
