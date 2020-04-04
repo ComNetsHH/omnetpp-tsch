@@ -20,7 +20,6 @@
 
 #include "TschUdpBasicApp.h"
 #include "../../common/VirtualLinkTag_m.h"
-#include <iostream>
 #include "inet/applications/base/ApplicationPacket_m.h"
 #include "inet/applications/udpapp/UdpBasicApp.h"
 #include "inet/common/ModuleAccess.h"
@@ -50,23 +49,9 @@ TschUdpBasicApp::~TschUdpBasicApp() {
 }
 
 void TschUdpBasicApp::initialize(int stage){
-    ApplicationBase::initialize(stage);
+    UdpBasicApp::initialize(stage);
     if (stage == INITSTAGE_LOCAL) {
-            numSent = 0;
-            numReceived = 0;
-            WATCH(numSent);
-            WATCH(numReceived);
-
-            localPort = par("localPort");
-            destPort = par("destPort");
-            startTime = par("startTime");
-            stopTime = par("stopTime");
-            packetName = par("packetName");
-            dontFragment = par("dontFragment");
             virtualLinkID = par("VirtualLinkID");
-            if (stopTime >= SIMTIME_ZERO && stopTime < startTime)
-                throw cRuntimeError("Invalid startTime/stopTime parameters");
-            selfMsg = new cMessage("sendTimer");
     }
 }
 

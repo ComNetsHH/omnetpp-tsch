@@ -23,8 +23,9 @@
 
 #include "TschPingApp.h"
 #include "../../common/VirtualLinkTag_m.h"
-#include <iostream>
+
 #include "inet/applications/pingapp/PingApp.h"
+#include "inet/applications/pingapp/PingApp_m.h"
 #include "inet/common/ModuleAccess.h"
 #include "inet/common/Protocol.h"
 #include "inet/common/ProtocolGroup.h"
@@ -83,54 +84,9 @@ TschPingApp::~TschPingApp() {
 
 
 void TschPingApp::initialize(int stage) {
-    ApplicationBase::initialize(stage);
+    PingApp::initialize(stage);
     if (stage == INITSTAGE_LOCAL) {
-        // read params
-        // (defer reading srcAddr/destAddr to when ping starts, maybe
-        // addresses will be assigned later by some protocol)
-        packetSize = par("packetSize");
-        sendIntervalPar = &par("sendInterval");
-        sleepDurationPar = &par("sleepDuration");
-        hopLimit = par("hopLimit");
-        count = par("count");
         virtualLinkID = par("VirtualLinkID");
-        //        if (count <= 0 && count != -1)
-        //            throw cRuntimeError("Invalid count=%d parameter (should use -1 or a larger than zero value)", count);
-        startTime = par("startTime");
-        stopTime = par("stopTime");
-        if (stopTime >= SIMTIME_ZERO && stopTime < startTime)
-            throw cRuntimeError("Invalid startTime/stopTime parameters");
-        printPing = par("printPing");
-        continuous = par("continuous");
-
-        const char *crcModeString = par("crcMode");
-        if (!strcmp(crcModeString, "declared"))
-            crcMode = CRC_DECLARED_CORRECT;
-        else if (!strcmp(crcModeString, "computed"))
-            crcMode = CRC_COMPUTED;
-        else
-            throw cRuntimeError("unknown CRC mode: '%s'", crcModeString);
-
-        // state
-        pid = -1;
-        lastStart = -1;
-        sendSeqNo = expectedReplySeqNo = 0;
-        for (int i = 0; i < PING_HISTORY_SIZE; i++) {
-            sendTimeHistory[i] = SIMTIME_MAX;
-            pongReceived[i] = false;
-        }
-        WATCH(sendSeqNo);
-        WATCH(expectedReplySeqNo);
-
-        // statistics
-        rttStat.setName("pingRTT");
-        sentCount = lossCount = outOfOrderArrivalCount = numPongs = 0;
-        WATCH(lossCount);
-        WATCH(outOfOrderArrivalCount);
-        WATCH(numPongs);
-
-        // references
-        timer = new cMessage("sendPing", PING_FIRST_ADDR);
     }
 }
 
@@ -154,7 +110,7 @@ void TschPingApp::sendPingRequest()
             outPacket->insertAtBack(payload);
             Icmp::insertCrc(crcMode, request, outPacket);
             outPacket->insertAtFront(request);
-            outPacket->addTagIfAbsent<PacketProtocolTag>()->setProtocol(&Protocol::icmpv4);
+            outPacket->addTag<PacketProtocolTag>()->setProtocol(&Protocol::icmpv4);
             break;
 #else
             throw cRuntimeError("INET compiled without Ipv4");
@@ -168,7 +124,7 @@ void TschPingApp::sendPingRequest()
             outPacket->insertAtBack(payload);
             Icmpv6::insertCrc(crcMode, request, outPacket);
             outPacket->insertAtFront(request);
-            outPacket->addTagIfAbsent<PacketProtocolTag>()->setProtocol(&Protocol::icmpv6);
+            outPacket->addTag<PacketProtocolTag>()->setProtocol(&Protocol::icmpv6);
             break;
 #else
             throw cRuntimeError("INET compiled without Ipv6");
@@ -185,7 +141,7 @@ void TschPingApp::sendPingRequest()
             outPacket->insertAtBack(payload);
             // insertCrc(crcMode, request, outPacket);
             outPacket->insertAtFront(request);
-            outPacket->addTagIfAbsent<PacketProtocolTag>()->setProtocol(&Protocol::echo);
+            outPacket->addTag<PacketProtocolTag>()->setProtocol(&Protocol::echo);
             break;
 #else
             throw cRuntimeError("INET compiled without Next Hop Forwarding");
@@ -195,7 +151,7 @@ void TschPingApp::sendPingRequest()
             throw cRuntimeError("Unaccepted destination address type: %d (address: %s)", (int)destAddr.getType(), destAddr.str().c_str());
     }
 
-    auto addressReq = outPacket->addTagIfAbsent<L3AddressReq>();
+    auto addressReq = outPacket->addTag<L3AddressReq>();
     addressReq->setSrcAddress(srcAddr);
     addressReq->setDestAddress(destAddr);
     /// ************* //////////
@@ -203,7 +159,7 @@ void TschPingApp::sendPingRequest()
     auto tag = outPacket->addTagIfAbsent<VirtualLinkTagReq>();
     tag->setVirtualLinkID(virtualLinkID);
     if (hopLimit != -1)
-        outPacket->addTagIfAbsent<HopLimitReq>()->setHopLimit(hopLimit);
+        outPacket->addTag<HopLimitReq>()->setHopLimit(hopLimit);
     EV_INFO << "Sending ping request #" << sendSeqNo << " to lower layer.\n";
     currentSocket->send(outPacket);
 

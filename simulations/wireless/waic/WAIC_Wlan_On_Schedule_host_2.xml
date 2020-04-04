@@ -5,17 +5,17 @@
     <Link slotOffset="5" channelOffset="3">
 		<Option tx="true" rx="false" shared="false"/>
 		<Type normal="true" advertising="false" advertisingOnly="false" />
-		<Neighbor address="0A:AA:00:00:00:03" />
+		<Neighbor address="0A:AA:00:00:00:01" />
 	</Link>
 	<Link slotOffset="20" channelOffset="5">
 		<Option tx="true" rx="false" shared="true"/>
 		<Type normal="true" advertising="false" advertisingOnly="false" />
-		<Neighbor address="0A:AA:00:00:00:03" />
+		<Neighbor address="0A:AA:00:00:00:01" />
 	</Link>
 	<Link slotOffset="13" channelOffset="10">
 		<Option tx="true" rx="false" shared="true"/>
 		<Type normal="true" advertising="false" advertisingOnly="false" />
-		<Neighbor address="0A:AA:00:00:00:03" />
+		<Neighbor address="0A:AA:00:00:00:01" />
 	</Link>
   </Slotframe>
 </TSCHSchedule>

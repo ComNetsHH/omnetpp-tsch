@@ -65,7 +65,7 @@ void Ieee802154eMac::initialize(int stage) {
         //sixTopSublayerControlInGateId = findGate("sixTopSublayerControlInGate");
         sixTopSublayerControlOutGateId = findGate("sixTopSublayerControlOutGate");
         useMACAcks = par("useMACAcks");
-        sifs = par("sifs");
+        macTsTxAckDelay = par("macTsTxAckDelay");
         macTsTimeslotLength = par("macTsTimeslotLength");
         headerLength = par("headerLength");
         transmissionAttemptInterruptedByRx = false;
@@ -79,11 +79,14 @@ void Ieee802154eMac::initialize(int stage) {
         nbBackoffs = 0;
         backoffValues = 0;
         macMaxFrameRetries = par("macMaxFrameRetries");
-        macAckWaitDuration = par("macAckWaitDuration");
+        //macAckWaitDuration = par("macAckWaitDuration");
+        macTsRxAckDelay = par("macTsRxAckDelay");
+        macTsAckWait = par("macTsAckWait");
+        macTsMaxAck = par("macTsMaxAck");
         ccaDetectionTime = par("ccaDetectionTime");
         useCCA = par("useCCA");
         rxSetupTime = par("rxSetupTime");
-        aTurnaroundTime = par("aTurnaroundTime");
+        macTsRxTx = par("macTsRxTx");
         channelSwitchingTime = par("channelSwitchingTime");
         bitrate = par("bitrate");
         ackLength = par("ackLength");
@@ -127,16 +130,16 @@ void Ieee802154eMac::initialize(int stage) {
         radio = check_and_cast<IRadio *>(radioModule);
 
         //check parameters for consistency
-        //aTurnaroundTime should match (be equal or bigger) the RX to TX
+        //macTsRxTx should match (be equal or bigger) the RX to TX
         //switching time of the radio
         if (radioModule->hasPar("timeRXToTX")) {
             simtime_t rxToTx = radioModule->par("timeRXToTX");
-            if (rxToTx > aTurnaroundTime) {
+            if (rxToTx > macTsRxTx) {
                 throw cRuntimeError(
-                        "Parameter \"aTurnaroundTime\" (%f) does not match"
+                        "Parameter \"macTsRxTx\" (%f) does not match"
                                 " the radios RX to TX switching time (%f)! It"
                                 " should be equal or bigger",
-                        SIMTIME_DBL(aTurnaroundTime), SIMTIME_DBL(rxToTx));
+                        SIMTIME_DBL(macTsRxTx), SIMTIME_DBL(rxToTx));
             }
         }
         radio->setRadioMode(IRadio::RADIO_MODE_SLEEP);
@@ -443,12 +446,12 @@ void Ieee802154eMac::updateStatusIdle(t_mac_event event, cMessage *msg) {
     }
 }
 
-void Ieee802154eMac::configureRadio(Hz carrierFrequency /*= NAN*/,
+void Ieee802154eMac::configureRadio(Hz centerFrequency /*= NAN*/,
         int mode /*= -1*/) {
     auto configureCommand = new ConfigureRadioCommand();
     auto request = new Message("changeChannel", RADIO_C_CONFIGURE);
 
-    configureCommand->setCarrierFrequency(carrierFrequency);
+    configureCommand->setCenterFrequency(centerFrequency);
     configureCommand->setRadioMode(mode);
     request->setControlInfo(configureCommand);
 
@@ -468,8 +471,10 @@ void Ieee802154eMac::updateStatusCCA(t_mac_event event, cMessage *msg) {
     switch (event) {
     case EV_TIMER_CCA: {
         EV_DETAIL << "(25) FSM State CCA_3, EV_TIMER_CCA" << endl;
-        bool isIdle = radio->getReceptionState()
-                == IRadio::RECEPTION_STATE_IDLE;
+        bool isIdle = true;
+        if(useCCA){
+            isIdle = radio->getReceptionState() == IRadio::RECEPTION_STATE_IDLE;
+        }
         if (isIdle) {
             EV_DETAIL
                              << "(3) FSM State CCA_3, EV_TIMER_CCA, [Channel Idle]: -> TRANSMITFRAME_4."
@@ -477,9 +482,10 @@ void Ieee802154eMac::updateStatusCCA(t_mac_event event, cMessage *msg) {
             updateMacState(TRANSMITFRAME_4);
             radio->setRadioMode(IRadio::RADIO_MODE_TRANSMITTER);
             Packet *mac =  check_and_cast<Packet *>(neighbor->getCurrentNeighborQueueFirstPacket()->dup());
-            attachSignal(mac, simTime() + aTurnaroundTime);
+            attachSignal(mac, simTime() + macTsRxTx);
             // give time for the radio to be in Tx state before transmitting
-            sendDelayed(mac, aTurnaroundTime, lowerLayerOutGateId);
+            // TODO: Strangely the total amount for transmission time is 192us longer then the theoretical one, needs to be fixed !
+            sendDelayed(mac, macTsRxTx, lowerLayerOutGateId);
             nbTxFrames++;
 
             emitSignal(NBTXFRAMES);
@@ -711,7 +717,7 @@ void Ieee802154eMac::updateStatusSIFS(t_mac_event event, cMessage *msg) {
         emitSignal(NBTXACKS);
 
         EV << "Number of transmitted Acks: " << nbTxAcks << endl;
-        //        sendDelayed(ackMessage, aTurnaroundTime, lowerLayerOut);
+        //        sendDelayed(ackMessage, macTsRxTx, lowerLayerOut);
         ackMessage = nullptr;
         break;
 
@@ -816,13 +822,16 @@ void Ieee802154eMac::startTimer(t_mac_timer timer) {
         scheduleAt(simTime() + rxSetupTime + ccaDetectionTime, ccaTimer);
     } else if (timer == TIMER_SIFS) {
         assert(useMACAcks);
-        EV_DETAIL << "(startTimer) sifsTimer value=" << sifs << endl;
-        scheduleAt(simTime() + sifs, sifsTimer);
+        EV_DETAIL << "(startTimer) sifsTimer value=" << macTsTxAckDelay << endl;
+        scheduleAt(simTime() + macTsTxAckDelay, sifsTimer);
     } else if (timer == TIMER_RX_ACK) {
         assert(useMACAcks);
-        EV_DETAIL << "(startTimer) rxAckTimer value=" << macAckWaitDuration
+//        EV_DETAIL << "(startTimer) rxAckTimer value=" << macAckWaitDuration
+//                                 << endl;
+        EV_DETAIL << "(startTimer) rxAckTimer value=" << macTsRxAckDelay + macTsAckWait + macTsMaxAck
                          << endl;
-        scheduleAt(simTime() + macAckWaitDuration, rxAckTimer);
+        //scheduleAt(simTime() + macAckWaitDuration, rxAckTimer);
+        scheduleAt(simTime() + macTsRxAckDelay + macTsAckWait + macTsMaxAck, rxAckTimer);
     } else if (timer == TIMER_HOPPING) {
         //assert(useMACAcks); TODO verify if channel hopping is enabled?
         // or always on and rely on TschHopping class to disable?
@@ -832,9 +841,12 @@ void Ieee802154eMac::startTimer(t_mac_timer timer) {
     } else if (timer == TIMER_SLOTEND) {
         // TODO currently scheduled right before slot end,
         // but could be done more strict to increase radio sleep
+        // TODO This value should not be calculated this way,
+        // but due to the fact that mactsCcaOffset and macTsRxOffset are not considered
+        // it should be around 0.48
         EV_DETAIL << "(startTimer) slotendTimer value="
-                         << (macTsTimeslotLength * 0.75) << endl;
-        scheduleAt(simTime() + (macTsTimeslotLength * 0.75), slotendTimer);
+                         << (macTsTimeslotLength * 0.48) << endl;
+        scheduleAt(simTime() + (macTsTimeslotLength * 0.48), slotendTimer);
     } else {
         EV << "Unknown timer requested to start:" << timer << endl;
     }
@@ -857,9 +869,7 @@ void Ieee802154eMac::handleSelfMessage(cMessage *msg) {
         executeMac(EV_TIMER_SLOTEND, msg);
     else if (msg == rxAckTimer) {
         nbMissedAcks++;
-
         emitSignal(NBMISSEDACKS);
-
         executeMac(EV_ACK_TIMEOUT, msg);
     } else
         EV << "TSCH Error: unknown timer fired:" << msg << endl;
@@ -1044,6 +1054,10 @@ void Ieee802154eMac::sendUp(cMessage *message)
     }
 
     send(message, upperLayerOutGateId);
+}
+
+InterfaceEntry* Ieee802154eMac::getInterfaceEntry(){
+    return this->interfaceEntry;
 }
 
 

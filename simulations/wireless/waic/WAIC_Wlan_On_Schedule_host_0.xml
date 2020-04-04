@@ -5,47 +5,47 @@
     <Link slotOffset="1" channelOffset="5">
 		<Option tx="false" rx="true" shared="true"/>
 		<Type normal="true" advertising="false" advertisingOnly="false" />
-		<Neighbor address="0A:AA:00:00:00:04" />
+		<Neighbor address="0A:AA:00:00:00:02" />
 	</Link>
 		<Link slotOffset="4" channelOffset="3">
 		<Option tx="false" rx="true" shared="true"/>
 		<Type normal="true" advertising="false" advertisingOnly="false" />
-		<Neighbor address="0A:AA:00:00:00:04" />
+		<Neighbor address="0A:AA:00:00:00:02" />
 	</Link>
 	<Link slotOffset="9" channelOffset="2">
 		<Option tx="false" rx="true" shared="true"/>
 		<Type normal="true" advertising="false" advertisingOnly="false" />
-		<Neighbor address="0A:AA:00:00:00:04" />
+		<Neighbor address="0A:AA:00:00:00:02" />
 	</Link>
 	<Link slotOffset="5" channelOffset="3">
 		<Option tx="false" rx="true" shared="true"/>
 		<Type normal="true" advertising="false" advertisingOnly="false" />
-		<Neighbor address="0A:AA:00:00:00:05" />
+		<Neighbor address="0A:AA:00:00:00:03" />
 	</Link>
 	<Link slotOffset="13" channelOffset="10">
 		<Option tx="false" rx="true" shared="true"/>
 		<Type normal="true" advertising="false" advertisingOnly="false" />
-		<Neighbor address="0A:AA:00:00:00:05" />
+		<Neighbor address="0A:AA:00:00:00:03" />
 	</Link>
 	<Link slotOffset="20" channelOffset="5">
 		<Option tx="false" rx="true" shared="true"/>
 		<Type normal="true" advertising="false" advertisingOnly="false" />
-		<Neighbor address="0A:AA:00:00:00:05" />
+		<Neighbor address="0A:AA:00:00:00:03" />
 	</Link>
 	<Link slotOffset="3" channelOffset="1">
 		<Option tx="false" rx="true" shared="true"/>
 		<Type normal="true" advertising="false" advertisingOnly="false" />
-		<Neighbor address="0A:AA:00:00:00:06" />
+		<Neighbor address="0A:AA:00:00:00:04" />
 	</Link>
 	<Link slotOffset="10" channelOffset="4">
 		<Option tx="false" rx="true" shared="true"/>
 		<Type normal="true" advertising="false" advertisingOnly="false" />
-		<Neighbor address="0A:AA:00:00:00:06" />
+		<Neighbor address="0A:AA:00:00:00:04" />
 	</Link>
 	<Link slotOffset="15" channelOffset="2">
 		<Option tx="false" rx="true" shared="true"/>
 		<Type normal="true" advertising="false" advertisingOnly="false" />
-		<Neighbor address="0A:AA:00:00:00:06" />
+		<Neighbor address="0A:AA:00:00:00:04" />
 	</Link>
   </Slotframe>
 </TSCHSchedule>

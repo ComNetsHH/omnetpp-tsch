@@ -72,13 +72,17 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
         , status(STATUS_OK)
         , radio(nullptr)
         , transmissionState(inet::physicallayer::IRadio::TRANSMISSION_STATE_UNDEFINED)
-        , sifs()
-        , macAckWaitDuration()
+        //, sifs()
+        , macTsTxAckDelay()
+        //, macAckWaitDuration()
+        , macTsRxAckDelay()
+        , macTsAckWait()
+        , macTsMaxAck()
         , headerLength(0)
         , transmissionAttemptInterruptedByRx(false)
         , ccaDetectionTime()
         , rxSetupTime()
-        , aTurnaroundTime()
+        , macTsRxTx()
         , channelSwitchingTime()
         , macMaxFrameRetries(0)
         , useMACAcks(false)
@@ -127,6 +131,8 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
     virtual inet::physicallayer::IRadio* getRadio();
 
     void sendUp(cMessage *message) override;
+
+    InterfaceEntry *getInterfaceEntry();
 
     // OperationalBase:
     virtual void handleStartOperation(inet::LifecycleOperation *operation) override {}    //TODO implementation
@@ -255,7 +261,8 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
      * Usually this is slightly more then the tx-rx turnaround time
      * The channel should stay clear within this period of time.
      */
-    omnetpp::simtime_t sifs;
+    //omnetpp::simtime_t sifs;
+    omnetpp::simtime_t macTsTxAckDelay;
 
     /** @brief timeslot length
      *
@@ -267,7 +274,13 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
     bool useCCA;
 
     /** @brief The amount of time the MAC waits for the ACK of a packet.*/
-    omnetpp::simtime_t macAckWaitDuration;
+    //omnetpp::simtime_t macAckWaitDuration;
+    /** @brief The amount of offset time the Tx MAC waits for the ACK of a packet.*/
+    omnetpp::simtime_t macTsRxAckDelay;
+    /** @brief The amount of time the MAC waits for the ACK of a packet.*/
+    omnetpp::simtime_t macTsAckWait;
+    /** @brief The amount of time the ACK needs to be transmitted completly.*/
+    omnetpp::simtime_t macTsMaxAck;
 
     /** @brief Length of the header*/
     int headerLength;
@@ -278,7 +291,7 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
     /** @brief Time to setup radio from sleep to Rx state */
     omnetpp::simtime_t rxSetupTime;
     /** @brief Time to switch radio from Rx to Tx state */
-    omnetpp::simtime_t aTurnaroundTime;
+    omnetpp::simtime_t macTsRxTx;
     omnetpp::simtime_t channelSwitchingTime;
     /** @brief maximum number of frame retransmissions without ack */
     unsigned int macMaxFrameRetries;

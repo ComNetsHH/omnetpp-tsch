@@ -116,8 +116,8 @@ void Tsch6topSublayer::initialize(int stage) {
             EV_ERROR << "Tsch6topSublayer: no mac submodule found" << endl;
             return;
         }
-        pNodeId = mac->interfaceEntry->getMacAddress().getInt();
-        EV_DETAIL << " for node " << mac->interfaceEntry->getMacAddress().str() << endl;
+        pNodeId = mac->getInterfaceEntry()->getMacAddress().getInt();
+        EV_DETAIL << " for node " << pNodeId << endl;
         std::list<uint64_t> neighbors = getNeighborsInRange(pNodeId, mac);
 
         std::list<uint64_t>::iterator it;
@@ -362,7 +362,7 @@ Packet* Tsch6topSublayer::handle6PMsg(Packet* pkt) {
     Packet* response = NULL;
 
     auto hdr = pkt->popAtFront<tsch::sixtisch::SixpHeader>();
-    auto data = pkt->popAtBack<tsch::sixtisch::SixpData>();
+    auto data = pkt->popAtBack<tsch::sixtisch::SixpData>(b(-1));
     auto addresses = pkt->getTag<MacAddressInd>();
 
     // TODO: lock linkinfo when handling it?!

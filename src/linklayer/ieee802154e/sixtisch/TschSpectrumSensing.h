@@ -24,7 +24,7 @@
 
 #include <omnetpp.h>
 #include "inet/common/InitStages.h"
-#include "inet/common/mapping/MappingBase.h"
+#include "inet/common/math/FunctionBase.h"
 #include "inet/physicallayer/contract/packetlevel/IAnalogModel.h"
 #include "inet/physicallayer/contract/packetlevel/ICommunicationCache.h"
 #include "inet/physicallayer/contract/packetlevel/IRadio.h"

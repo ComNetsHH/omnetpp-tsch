@@ -51,6 +51,6 @@ network WaicBasic
         }
         wlanHost[numWlanHosts]: WirelessHost {
             parameters:
-                @display("r=,,#707070;p=250,200");
+                @display("r=,,#707070;p=250,116");
         }
 }
