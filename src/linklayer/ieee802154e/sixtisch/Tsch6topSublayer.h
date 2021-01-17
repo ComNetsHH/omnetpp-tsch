@@ -102,7 +102,7 @@ public:
      *                     expected at the latest
      */
     void sendDeleteRequest(uint64_t destId, uint8_t cellOptions, int numCells,
-                           std::vector<cellLocation_t> &cellList, int timeout) override;
+                           std::vector<cellLocation_t> cellList, int timeout) override;
 
     /**
      * @brief Send a 6P Relocation request.
@@ -157,12 +157,17 @@ public:
     void setCellOption(uint8_t* cellOptions, uint8_t option) override;
 
     /**
-     * @brief get list of all neighbors in transmission range
+     * @brief Get list of all neighbors in transmission range
      *
      * @param pnodeId ID of the node
      * @param mac pointer to the maclayer
      */
     std::list<uint64_t> getNeighborsInRange(uint64_t pnodeId, Ieee802154eMac* mac);
+
+    /**
+     * @brief Update the schedule of the MAC layer
+     */
+    void updateSchedule(tsch6topCtrlMsg msg);
 
 protected:
     /**
@@ -326,7 +331,7 @@ private:
      *                     NULL otherwise
      */
     Packet* createDeleteRequest(uint64_t destId, uint8_t seqNum, uint8_t cellOptions,
-                            int numCells, std::vector<cellLocation_t> &cellList,
+                            int numCells, std::vector<cellLocation_t> cellList,
                             simtime_t timeout);
 
     /**
@@ -519,10 +524,7 @@ private:
      * @brief Send control message to the MAC layer.
      */
     //void sendControlDown(cMessage *msg);
-    /**
-     * @brief Update the Schedule of the MAC layer
-     */
-    void updateSchedule(tsch6topCtrlMsg* msg);
+
 
 };
 

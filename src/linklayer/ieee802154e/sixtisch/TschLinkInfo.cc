@@ -105,9 +105,9 @@ void TschLinkInfo::revertLink(uint64_t nodeId, tsch6pMsg_t lastKnownType) {
 bool TschLinkInfo::inTransaction(uint64_t nodeId) {
     Enter_Method_Silent();
 
-    if (linkInfoExists(nodeId)) {
+    if (linkInfoExists(nodeId))
         return linkInfo[nodeId].inTransaction;
-    }
+
     return false;
 }
 
@@ -232,7 +232,7 @@ void TschLinkInfo::clearCells(uint64_t nodeId) {
     Enter_Method_Silent();
 
     if (linkInfoExists(nodeId)) {
-        EV_INFO << "clearing cells scheduled with " << inet::MacAddress(nodeId).str() << endl;
+        EV_INFO << "Clearing cells scheduled with " << inet::MacAddress(nodeId) << endl;
         linkInfo[nodeId].scheduledCells.erase(
             std::remove_if(
                 linkInfo[nodeId].scheduledCells.begin(),
@@ -243,35 +243,32 @@ void TschLinkInfo::clearCells(uint64_t nodeId) {
             ),
             linkInfo[nodeId].scheduledCells.end()
         );
-    } else {
-        EV_WARN << "instructed to clear but no linkInfo exists" << endl;
-    }
+    } else
+        EV_WARN << "Instructed to clear but no linkInfo exists" << endl;
 }
 
-void TschLinkInfo::deleteCells(uint64_t nodeId, const std::vector<cellLocation_t> &cellList,
-                                uint8_t linkOption) {
+void TschLinkInfo::deleteCells(uint64_t nodeId, const std::vector<cellLocation_t> &cellList, uint8_t linkOption) {
     Enter_Method_Silent();
 
-    if (linkInfoExists(nodeId)) {
-        cellVector scheduledCells = linkInfo[nodeId].scheduledCells;
-        EV_INFO << "deleting cells scheduled with " << inet::MacAddress(nodeId).str() << ": ";
-        auto it = cellList.begin();
-        for(; (it != cellList.end()); ++it) {
-            EV_INFO << "(" << it->timeOffset << "," << it->channelOffset << ") ";
-            auto elem = std::find_if(scheduledCells.begin(), scheduledCells.end(), [it](decltype(scheduledCells)::value_type a) -> bool {
-                return std::get<0>(a) == *it;
-            });
-
-            if (elem != scheduledCells.end()) {
-                scheduledCells.erase(elem);
-            } else {
-                EV_WARN << "instructed to delete but not found" << endl;
-            }
-        }
-        EV_INFO << endl;
-    } else {
-        EV_WARN << "instructed to delete but no linkInfo exists" << endl;
+    if (!linkInfoExists(nodeId)) {
+        EV_WARN << "Instructed to delete cells with " << inet::MacAddress(nodeId) << " but no linkInfo found" << endl;
+        return;
     }
+
+    cellVector *scheduledCells = &(linkInfo[nodeId].scheduledCells); // TODO: replace with a proper getter method
+    EV_INFO << "Deleting cells scheduled with " << inet::MacAddress(nodeId) << ": " << *scheduledCells << endl;
+    auto it = cellList.begin();
+    for(; (it != cellList.end()); ++it) {
+
+        auto elem = std::find_if(scheduledCells->begin(), scheduledCells->end(),
+                        [it](std::tuple<cellLocation_t, uint8_t> a) -> bool { return std::get<0>(a) == *it; });
+
+        if (elem != scheduledCells->end())
+            scheduledCells->erase(elem);
+        else
+            EV_WARN << "Instructed to delete cell " << *it << " but not found" << endl;
+    }
+    EV_INFO << endl;
 }
 
 bool TschLinkInfo::timeOffsetScheduled(offset_t timeOffset) {
@@ -293,20 +290,19 @@ bool TschLinkInfo::timeOffsetScheduled(offset_t timeOffset) {
 
 bool TschLinkInfo::cellsInSchedule(uint64_t nodeId,
                                    std::vector<cellLocation_t> &cellList,
-                                   uint8_t linkOption) {
+                                   uint8_t linkOption)
+{
     Enter_Method_Silent();
 
     bool inSchedule = false;
 
-    if (linkInfoExists(nodeId)) {
+    if (linkInfo.find(nodeId) != linkInfo.end()) {
         inSchedule = true;
-        cellVector scheduledCells = linkInfo[nodeId].scheduledCells;
-        std::vector<cellLocation_t>::iterator it;
-        for(it = cellList.begin();
-            (it != cellList.end()) && (inSchedule == true); ++it) {
+        cellVector scheduled = linkInfo[nodeId].scheduledCells;
+        std::vector<cellLocation_t>::iterator it; // TODO: replace with auto declaration
+        for(it = cellList.begin(); it != cellList.end() && inSchedule; ++it) {
             auto currCell = std::make_tuple(*it, linkOption);
-            inSchedule = std::find(scheduledCells.begin(), scheduledCells.end(),
-                                   currCell) != scheduledCells.end();
+            inSchedule = std::find(scheduled.begin(), scheduled.end(), currCell) != scheduled.end();
         }
     }
 

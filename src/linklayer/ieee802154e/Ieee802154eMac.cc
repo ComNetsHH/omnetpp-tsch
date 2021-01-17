@@ -152,9 +152,7 @@ void Ieee802154eMac::initialize(int stage) {
 
         neighbor = dynamic_cast<TschNeighbor*>(getModuleByPath("^.neighbor"));
 
-        // minimal schedule as per 6TiSCH some document TODO
-
-        schedule->xmlSchedule();
+//        schedule->xmlSchedule();
         schedule->printSlotframe();
 
         asn.setMacTsTimeslotLength(macTsTimeslotLength);

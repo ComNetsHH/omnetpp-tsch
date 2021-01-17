@@ -25,6 +25,7 @@
 #define __WAIC_TSCH6TISCHCOMPONENTS_H_
 
 #include "WaicCellComponents.h"
+#include <bitset>
 
 /** ID of gates between modules. typedef'd for readability. */
 typedef int GateId;
@@ -59,6 +60,45 @@ typedef enum Tsch6pCommands {
     CMD_CLEAR
 } tsch6pCmd_t;
 
+inline std::ostream& operator<<(std::ostream& out, const Tsch6pCommands cmd6p) {
+    const char* s = 0;
+#define PRINT_ENUM(p) case(p): s = #p; break;
+    switch(cmd6p) {
+        PRINT_ENUM(CMD_ADD);
+        PRINT_ENUM(CMD_DELETE);
+        PRINT_ENUM(CMD_RELOCATE);
+        PRINT_ENUM(CMD_COUNT);
+        PRINT_ENUM(CMD_LIST);
+        PRINT_ENUM(CMD_SIGNAL);
+        PRINT_ENUM(CMD_CLEAR);
+    }
+#undef PRINT_ENUM
+
+    return out << s;
+}
+
+
+inline std::ostream& operator<<(std::ostream& os, std::map<cellLocation_t, double> &list)
+{
+    for (auto const &el: list)
+        os << el.first << " - " << el.second << std::endl;
+
+    return os;
+}
+
+inline std::ostream& operator<<(std::ostream& os, const std::vector<std::tuple<cellLocation_t, uint8_t>> &cellVector)
+{
+
+    for (auto const &el: cellVector) {
+        auto opts = std::get<1>(el);
+        std::bitset<8> x(opts);
+        os << std::get<0>(el) << ": " << x << " (options) " << std::endl;
+    }
+
+    return os;
+}
+
+
 /**
  * 6p Return Code Identifiers
  */
@@ -76,6 +116,26 @@ typedef enum Tsch6pReturnCodes
     RC_LOCKED,    /**< cells are locked */
 } tsch6pReturn_t;
 
+inline std::ostream& operator<<(std::ostream& out, const Tsch6pReturnCodes errc) {
+    const char* s = 0;
+#define PRINT_ENUM(p) case(p): s = #p; break;
+    switch(errc) {
+        PRINT_ENUM(RC_SUCCESS);
+        PRINT_ENUM(RC_EOL);
+        PRINT_ENUM(RC_ERROR);
+        PRINT_ENUM(RC_RESET);
+        PRINT_ENUM(RC_VERSION);
+        PRINT_ENUM(RC_SFID);
+        PRINT_ENUM(RC_SEQNUM);
+        PRINT_ENUM(RC_CELLLIST);
+        PRINT_ENUM(RC_BUSY);
+        PRINT_ENUM(RC_LOCKED);
+    }
+#undef PRINT_ENUM
+
+    return out << s;
+}
+
 /**
  * 6P Scheduling Function Identifiers
  */
@@ -83,6 +143,7 @@ typedef enum Tsch6pSFIDs
 {
     SFID_SFX,  /**< see https://tools.ietf.org/html/draft-ietf-6tisch-6top-sfx */
     SFID_SFSB, // TODO: set to actual name of our SF
+    SFID_MSF,
     SFID_TEST
 } tsch6pSFID_t;
 

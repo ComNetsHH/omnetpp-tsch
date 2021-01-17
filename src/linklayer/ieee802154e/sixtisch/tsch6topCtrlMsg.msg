@@ -22,7 +22,7 @@
 
 cplusplus {{
 #include "WaicCellComponents.h"
-#include "Tsch6tischComponents.h"
+#include "TschSF.h"
 
 #include <stdint.h>
 #include <vector>

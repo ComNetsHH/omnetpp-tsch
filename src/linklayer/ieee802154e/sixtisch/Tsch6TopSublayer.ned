@@ -27,7 +27,7 @@ simple Tsch6TopSublayer
     parameters:
 	    int piggybackingBackoff @unit(ms) = 0;
 	   	
-	   	double sfstarttime @unit(s) = 0.0;
+	   	double sfstarttime @unit(s) = default(0.0);
 	   	bool stats = false;	           	
 	   	@class(Tsch6topSublayer);
     gates:

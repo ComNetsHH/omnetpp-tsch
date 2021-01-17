@@ -108,6 +108,14 @@ public:
                                 std::vector<cellLocation_t> *cellList = NULL) = 0;
 
     /**
+     * @brief More "nullptr exceptions"-safe version of handleResponse().
+     *
+     * @overload
+     */
+    virtual void handleResponse(uint64_t sender, tsch6pReturn_t code, int numCells = -1,
+                                        std::vector<cellLocation_t> cellList = {}) = 0;
+
+    /**
      * @brief Handle the inconsistency which was uncovered by @p seqnum
      *        in the schedule maintained with @p destId
      */

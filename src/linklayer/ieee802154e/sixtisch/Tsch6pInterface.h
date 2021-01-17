@@ -55,7 +55,7 @@ public:
      *                     expected at the latest
      */
     virtual void sendDeleteRequest(uint64_t destId, uint8_t cellOptions, int numCells,
-                           std::vector<cellLocation_t> &cellList, int timeout) = 0;
+                           std::vector<cellLocation_t> cellList, int timeout) = 0;
 
     /**
      * @brief Send a 6P Relocation request.

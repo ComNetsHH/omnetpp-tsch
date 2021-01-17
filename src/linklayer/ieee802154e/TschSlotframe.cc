@@ -40,11 +40,6 @@
 #include "../../common/TschSimsignals.h"
 #include "inet/common/Simsignals.h"
 
-
-// TODO from http://rootdirectory.ddns.net/dokuwiki/doku.php?id=software:sstr
-#define SSTR( x ) static_cast< std::ostringstream & >( \
-        ( std::ostringstream() << std::dec << x ) ).str()
-
 namespace tsch {
 
 using namespace utils;
@@ -54,6 +49,13 @@ Define_Module(TschSlotframe);
 std::ostream& operator<<(std::ostream& os, const TschLink& e)
 {
     os << e.str();
+    return os;
+};
+
+std::ostream& operator<<(std::ostream& os, std::vector<TschLink*> links)
+{
+    for (auto l : links)
+        os << (*l).str() << endl;
     return os;
 };
 
@@ -115,11 +117,11 @@ void TschSlotframe::printSlotframe() const
             virtualLinkID = 0;
         }
         EV << stringf("%-16s %-16s %-16s %-16s %-16s %-16s \n",
-                SSTR(link->getSlotOffset()).c_str(),
-                SSTR(link->getChannelOffset()).c_str(),
+                std::to_string(link->getSlotOffset()).c_str(),
+                std::to_string(link->getChannelOffset()).c_str(),
                 (std::string(link->isNormal()?"NORM ":"") + std::string(link->isAdv()?"ADV ":"")).c_str(),
                 (std::string(link->isRx()?"RX ":"") + std::string(link->isTx()?"TX ":"") + std::string(link->isShared()?"SHARE":"")).c_str(),
-                link->getAddr().str().c_str(), SSTR(virtualLinkID).c_str());
+                link->getAddr().str().c_str(), std::to_string(virtualLinkID).c_str());
     }
     EV << "\n";
 
@@ -139,11 +141,11 @@ void TschSlotframe::printSlotframe() const
             virtualLinkID = 0;
         }
         std::cout << stringf("%-16s %-16s %-16s %-16s %-16s %-16s \n",
-        SSTR(link->getSlotOffset()).c_str(),
-        SSTR(link->getChannelOffset()).c_str(),
+        std::to_string(link->getSlotOffset()).c_str(),
+        std::to_string(link->getChannelOffset()).c_str(),
         (std::string(link->isNormal()?"NORM ":"") + std::string(link->isAdv()?"ADV ":"")).c_str(),
         (std::string(link->isRx()?"RX ":"") + std::string(link->isTx()?"TX ":"") + std::string(link->isShared()?"SHARE":"")).c_str(),
-        link->getAddr().str().c_str(), SSTR(virtualLinkID).c_str());
+        link->getAddr().str().c_str(), std::to_string(virtualLinkID).c_str());
     }
     std::cout << "\n";
 }
@@ -390,14 +392,14 @@ int64_t TschSlotframe::getASNofNextLink(int64_t asn)
     return -1; // should never happen
 }
 
-bool TschSlotframe::removeLinkFromOffset(int slotOffset, int channelOffset) {
-    for (auto it = links.begin(); it != links.end(); ++it) {
-        if (((*it)->getSlotOffset() == slotOffset)
-                && ((*it)->getChannelOffset() == channelOffset)) {
+bool TschSlotframe::removeLinkAtCell(cellLocation_t cell) {
+    for (auto it = links.begin(); it != links.end(); ++it)
+        if ( (*it)->getSlotOffset() == cell.timeOffset && (*it)->getChannelOffset() == cell.channelOffset )
+        {
             links.erase(it);
             return true;
         }
-    }
+
     return false;
 }
 
@@ -414,9 +416,8 @@ std::vector<TschLink*> TschSlotframe::allTxLinks(inet::MacAddress macAddress) {
     std::vector<TschLink*> nbrLinks;
 
     for(auto const& link: links) {
-        if(link->getAddr() == macAddress && link->isTx() && link->isXml() == false && link->isAuto() == false) {
+        if(link->getAddr() == macAddress && link->isTx() && !link->isXml() && !link->isAuto())
             nbrLinks.insert(nbrLinks.end(), link);
-        }
     }
 
     return nbrLinks;

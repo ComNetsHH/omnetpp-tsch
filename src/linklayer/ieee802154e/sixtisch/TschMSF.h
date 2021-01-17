@@ -1,51 +1,63 @@
-/*
- * Simulation model for IEEE 802.15.4 Time Slotted Channel Hopping (TSCH).
- * Implementation of our Scheduling Function with Soft Blacklisting
+/**
+ * @brief       Minimal Scheduling Function implementation
  *
- * Copyright (C) 2019  Institute of Communication Networks (ComNets),
- *                     Hamburg University of Technology (TUHH)
- *           (C) 2017  Lotte Steenbrink
+ * @author      Yevhenii Shudrenko <yevhenii.shudrenko@tuhh.de>
+ * @author      Leo Krueger <leo.krueger@tuhh.de>
  *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __WAIC_TSCHSFSB_H_
-#define __WAIC_TSCHSFSB_H_
+#ifndef __WAIC_TSCHMSF_H_
+#define __WAIC_TSCHMSF_H_
 
 #include <omnetpp.h>
 
 #include "Tsch6topSublayer.h"
-#include "TschLinkInfo.h"
-#include "TschSF.h"
 #include "TschBlacklistManager.h"
-#include "TschSpectrumSensing.h"
+#include "inet/networklayer/common/InterfaceTable.h"
 
 
-class TschSFSB: public TschSF {
-    /** @brief Holds the blacklist update data that is piggybacked onto 6P messages */
-    struct blacklistUpdate_t {
-        uint8_t header;      /**< Specifies whether the entries have start/end/period fields */
-        std::vector<TschBlacklistManager::blacklistEntry_t> entries; /**< New
-                                                    entries for the blacklist,
-                                                    one per channel */
-    };
+class TschMSF: public TschSF, public cListener {
 
 public:
+
+    class MsfControlInfo : public cObject {
+        uint64_t reservedDestId;
+
+        public:
+
+        MsfControlInfo() {};
+        MsfControlInfo(uint64_t nodeId) {
+            this->reservedDestId = nodeId;
+        }
+
+        uint64_t getNodeId() { return this->reservedDestId; }
+        void setNodeId(uint64_t nodeId) { this->reservedDestId = nodeId; }
+    };
+
     virtual int numInitStages() const{return 6;}
     void initialize(int stage);
-    TschSFSB();
-    ~TschSFSB();
+    void finish();
+    void finish(cComponent *component, simsignal_t signalID) { cIListener::finish(component, signalID); }
+    TschMSF();
+    ~TschMSF();
+
+    struct NbrStatistic {
+        uint8_t NumCellsElapsed;
+        uint8_t NumCellsUsed;
+    };
+
+    struct CellStatistic {
+        uint8_t NumTx;
+        uint8_t NumTxAck;
+    };
+
+    friend std::ostream& operator<<(std::ostream& os, std::vector<offset_t> const& slots)
+    {
+        for (auto s : slots)
+            os << s << ", ";
+        return os;
+    }
+
 
     /**
      * @brief Start operating. This function MUST be called after creating a SF
@@ -116,13 +128,8 @@ public:
     void handleResponse(uint64_t sender, tsch6pReturn_t code, int numCells = -1,
                         std::vector<cellLocation_t> *cellList = NULL);
 
-    /**
-     * @brief More "nullptr exceptions"-safe version of handleResponse().
-     *
-     * @overload
-     */
     void handleResponse(uint64_t sender, tsch6pReturn_t code, int numCells = -1,
-                                std::vector<cellLocation_t> cellList = {}) {}
+                            std::vector<cellLocation_t> cellList = {});
 
     /**
      * @brief Handle @p data that was piggybacked by @p sender.
@@ -134,7 +141,7 @@ public:
      *                       It is the task of the SF to explicitly free the data
      *                       behind the pointer once it's done processing it.
      */
-    void handlePiggybackedData(uint64_t sender, void* data);
+    void handlePiggybackedData(uint64_t sender, void* data) {};
 
     /**
      * @brief Handle an update from the @ref TschSpectrumSensing module.
@@ -158,87 +165,49 @@ public:
     int getTimeout();
 
     void handleMessage(cMessage* msg);
+    void handleDoStart(cMessage* msg);
+    void handleHouskeeping(cMessage* msg);
+    void handleMaxCellsReached(cMessage* msg);
 
     /* unimplemented on purpose */
     void recordPDR(cMessage* msg) {}
 
+    void receiveSignal(cComponent *src, simsignal_t id, cObject *value, cObject *details);
+    void receiveSignal(cComponent *src, simsignal_t id, long value, cObject *details);
+    void handleDodagJoinedSignal(uint64_t parentId);
+
 private:
-    // TODO: refactor into enum, this is a mess
-    /**
-     * The space (in Bits) the header field of an entire blacklist update would
-     * take up in a "real" packet (needed to update the bitLength of piggybacked
-     * 6P messages)
-     */
-    const int blacklistupdateHdrSz = 3;
-
-    /**
-     * The space (in Bits) the channel field of one blacklist update entry would
-     * take up in a "real" packet (needed to update the bitLength of piggybacked
-     * 6P messages)
-     */
-    const int blacklistupdateChannelSz = 4;
-
-    /**
-     * The space (in Bits) a start/end/period field of one blacklist update entry
-     * would take up in a "real" packet (needed to update the bitLength of
-     * piggybacked 6P messages)
-     * currently unused because we don't explicitly
-     * send timestamps-- we only use the default ones.
-     */
-    const int blacklistupdateTimestampSz = 8;
-
-    /** The Identifier of this Scheduling Function*/
-    const tsch6pSFID_t pSFID = SFID_SFSB;
+    const tsch6pSFID_t pSFID = SFID_MSF;
 
     /** the time after which an active, unfinished transaction expires
      *  (needs to be defined by every SF as per the 6P standard) */
     int pTimeout;
 
-    /** The number of Spectrum Sensing results to consult for a blacklisting decision */
-    int numSensingResults;
-
-    /** If the channel has been busy >= blacklistThreshold % of the last
-        @p numSensingResults, it should be blacklisted. */
-    double blacklistThreshold;
-
-    /** The number of cells (ideally) initially shared with each neighbor.  */
-    int INIT_NUM_CELLS;
-
-    /** Time (in ms) after which data MUST be sent as a Signal request if it couldn't be
-     *  piggybacked successfully. */
-    int BLACKLIST_UPDATE_TIMEOUT;
-
-    /** The default lifetime (in ms) of a blacklist entry, if nothing else is
-     *  specified in the blacklist update */
-    simtime_t BLACKLIST_LIFETIME;
-
-    /** The maximum time in msthat will pass until another initial ADD request
-     *  is sent if the last one wasn't successful */
-    int MAX_RETRY_BACKOFF;
-
     /* the ID of this node, derived from its MAC address */
     uint64_t pNodeId;
+    uint64_t rplParentId; // MAC of RPL preferred parent
 
-    int pSlotframeSize;
+
+    std::list<uint64_t> neighbors;
+
+    cMessage *internalEvent;
+
+    int pSlotframeLen;
     int pNumChannels;
+    offset_t pNumMinimalCells; // number of minimal cells being scheduled for ICMPv6, RPL broadcast messages
 
-    /** If set to true, SFSB will do nothing other than the initial cell negotiation
-     *  (i.e. performs blind channel hopping with dedicated cells) */
-    bool blindHopping;
+
+    int pMaxNumCells;
+    int pMaxNumTx;
+    double pLimNumCellsUsedHigh;
+    double pLimNumCellsUsedLow;
+
+    double routingParentTransactionDelay; // delay before trying to schedule dedicated TX with RPL preferred parent
+    double pRelocatePdrThres;
+
+    double clearReservedCellsTimeout;
 
     simtime_t SENSE_INTERVAL;
-    /**
-     * Disable the functionality of TschSFSB
-     */
-    bool disable;
-
-    //TODO: Needs to be updated
-    /** The last @p numSensingResults per channel, indexed by channel number */
-    //std::map<int, std::vector<ChannelState>> channelHistory;
-
-    /** The blacklist updates that were sent by neighbors but can't yet be used
-        because no link has been established, indexed by neighbor id */
-    std::map<int,std::vector<TschBlacklistManager::blacklistEntry_t>> pendingBlacklistUpdates;
 
     /** Information about all links maintained by this node */
     TschLinkInfo* pTschLinkInfo;
@@ -246,8 +215,9 @@ private:
     /** The 6P instance this SF is a part of.  */
     Tsch6topSublayer* pTsch6p;
 
-    /** The MAC layer module that manages channel blacklisting */
-    TschBlacklistManager* pTschBlacklistManager;
+    InterfaceTable* interfaceModule;
+
+    Ieee802154eMac* mac;
 
     /**
      * Set to True at index nodeId after @ref initNumCells cells have been
@@ -266,21 +236,48 @@ private:
      */
     std::map<uint64_t, std::vector<offset_t>> reservedTimeOffsets;
 
+    std::map<uint64_t, NbrStatistic> nbrStatistic;
+    std::map<cellLocation_t, CellStatistic> cellStatistic;
+
+    uint32_t autoRxSlOffset;
+
+    bool hasStarted;
+    bool autoTxParentScheduled;
+    bool disable;
+
     /**
      * Emitted each time the schedule setup with a neighbor is complete,
      * i.e. all cells have been allocated in both directions.
      */
     simsignal_t s_InitialScheduleComplete;
 
-    enum sfsbSelfMessage_t {
-        SEND_INITIAL_ADD,
-        DO_SENSE,
+    cModule *hostNode; // reference to this host node's module
+
+    enum msfSelfMessage_t {
+        CHECK_STATISTICS,
+        REACHED_MAXNUMCELLS,
+        DO_START,
+        HOUSEKEEPING,
+        SCHEDULE_AUTO_TX,
+        RESERVED_CELLS_TIMEOUT,
+        UNDEFINED
     };
 
     /**
      * @brief Create & send ADD request to establish the first link to @nodeId
      */
-    void sendInitialAdd(uint64_t nodeId);
+    void addCells(uint64_t nodeId, int numCells);
+
+    void deleteCells(uint64_t nodeId, int numCells);
+
+    void scheduleAutoCell(uint64_t neighbor);
+    void scheduleAutoRxCell(InterfaceToken euiAddr);
+    void removeAutoCell(uint64_t neighbor);
+//    void relocateCell(cellLocation_t cell, double cellPdr, double maxPdr);
+    void relocateTxCells(cellVector cells);
+
+    void scheduleMinimalCells();
+    uint64_t checkInTransaction();
 
     /**
      * @return    true if @p timeOffset is already reserved,
@@ -298,6 +295,31 @@ private:
      * @return    the number of times the channel has been busy in %.
      */
     //double calcBusyness(std::vector<ChannelState> states);
+
+    uint32_t saxHash(int maxReturnVal, InterfaceToken EUI64addr); // TODO: check this, often results in overlapping cells
+    void clearCellStats(std::vector<cellLocation_t> cellList);
+    void printCellUsage(std::string neighborMac, double usage);
+    void updateCellTxStats(cellLocation_t cell, std::string statType);
+    void updateNeighborStats(uint64_t neighbor, std::string statType);
+    bool checkValidSlotRangeBounds(uint16_t start, uint16_t end);
+    bool slotOffsetAvailable(offset_t slOf);
+
+    /**
+     * Pick @param numRequested slot offsets randomly uniformly from @param availableSlots range
+     * without duplicates
+     *
+     * @return vector of picked slot offsets
+     */
+    std::vector<offset_t> pickSlotOffsets(std::vector<offset_t> availableSlots, int numRequested);
+
+    /**
+     * Check for free slot offsets (neither scheduled, nor reserved) in the range @param start -> @param end
+     *
+     * @return vector of free slot offsets
+     */
+    std::vector<offset_t> getAvailableSlotsInRange(offset_t start, offset_t end);
+    std::vector<offset_t> getAvailableSlotsInRange(int slOffsetEnd);
+    std::vector<offset_t> getAvailableSlotsInRange() { return getAvailableSlotsInRange(pSlotframeLen); }
 };
 
-#endif /*__WAIC_TSCHSFSB_H_*/
+#endif /*__WAIC_TSCHCLSF_H_*/

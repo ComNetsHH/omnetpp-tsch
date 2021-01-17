@@ -26,6 +26,7 @@
 #include <vector>
 #include <map>
 #include <cstdint>
+#include <iterator>
 
 typedef unsigned int offset_t;
 
@@ -35,13 +36,30 @@ struct cellLocation_t {
     offset_t channelOffset;
 
     bool operator==(const cellLocation_t& other) const {
-        return (timeOffset == other.timeOffset) &&
-                (channelOffset == other.channelOffset);
+        return (timeOffset == other.timeOffset) && (channelOffset == other.channelOffset);
     }
     bool operator<(const cellLocation_t& other) const {
         return (timeOffset < other.timeOffset);
     }
+
+    std::string toString()
+    {
+        return std::string("(") + std::to_string(timeOffset) + std::string(", ") + std::to_string(channelOffset) + std::string(")");
+    }
+
+    friend std::ostream& operator<<(std::ostream& os, cellLocation_t const& v)
+    {
+        os << "(" << v.timeOffset << ", " << v.channelOffset << ")";
+        return os;
+    }
 };
+
+template <typename T>
+std::ostream& operator<< (std::ostream& out, const std::vector<T>& v) {
+  if ( !v.empty() )
+    std::copy (v.begin(), v.end(), std::ostream_iterator<T>(out, ", "));
+  return out;
+}
 
 /* Bit masks for link options (see fig. 7-54 of the IEEE802.15.4e standard) */
 enum macLinkOption_t {

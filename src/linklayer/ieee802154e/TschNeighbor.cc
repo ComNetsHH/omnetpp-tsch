@@ -23,6 +23,7 @@
 #include "inet/common/INETUtils.h"
 #include <iostream>
 #include <algorithm>
+#include <array>
 
 namespace tsch{
 
