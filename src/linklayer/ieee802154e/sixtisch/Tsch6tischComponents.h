@@ -3,7 +3,7 @@
  * Constants defined by 6TiSCH specifications and data structures used in
  * implementations of 6TiSCH documents.
  *
- * Copyright (C) 2019  Institute of Communication Networks (ComNets),
+ * Copyright (C) 2021  Institute of Communication Networks (ComNets),
  *                     Hamburg University of Technology (TUHH)
  *           (C) 2017  Lotte Steenbrink
  *
@@ -27,6 +27,9 @@
 #include "WaicCellComponents.h"
 #include <bitset>
 
+/** To print enum 'key' as string */
+#define PRINT_ENUM(p, s) case(p): s = #p; break;
+
 /** ID of gates between modules. typedef'd for readability. */
 typedef int GateId;
 
@@ -47,6 +50,28 @@ typedef enum Tsch6pMessageTypes {
     MSG_CONFIRMATION
 } tsch6pMsg_t;
 
+
+inline std::ostream& operator<<(std::ostream& out, const Tsch6pMessageTypes tsch6p) {
+    const char* s = 0;
+    switch(tsch6p) {
+        PRINT_ENUM(MSG_REQUEST, s);
+        PRINT_ENUM(MSG_RESPONSE, s);
+        PRINT_ENUM(MSG_CONFIRMATION, s);
+    }
+    return out << s;
+}
+
+inline std::string to_string(const Tsch6pMessageTypes tsch6p) {
+    const char* s = 0;
+    switch(tsch6p) {
+        PRINT_ENUM(MSG_REQUEST, s);
+        PRINT_ENUM(MSG_RESPONSE, s);
+        PRINT_ENUM(MSG_CONFIRMATION, s);
+    }
+    std::string str(s);
+    return str;
+}
+
 /**
  * 6p Command Identifiers
  */
@@ -62,19 +87,31 @@ typedef enum Tsch6pCommands {
 
 inline std::ostream& operator<<(std::ostream& out, const Tsch6pCommands cmd6p) {
     const char* s = 0;
-#define PRINT_ENUM(p) case(p): s = #p; break;
     switch(cmd6p) {
-        PRINT_ENUM(CMD_ADD);
-        PRINT_ENUM(CMD_DELETE);
-        PRINT_ENUM(CMD_RELOCATE);
-        PRINT_ENUM(CMD_COUNT);
-        PRINT_ENUM(CMD_LIST);
-        PRINT_ENUM(CMD_SIGNAL);
-        PRINT_ENUM(CMD_CLEAR);
+        PRINT_ENUM(CMD_ADD, s);
+        PRINT_ENUM(CMD_DELETE, s);
+        PRINT_ENUM(CMD_RELOCATE, s);
+        PRINT_ENUM(CMD_COUNT, s);
+        PRINT_ENUM(CMD_LIST, s);
+        PRINT_ENUM(CMD_SIGNAL, s);
+        PRINT_ENUM(CMD_CLEAR, s);
     }
-#undef PRINT_ENUM
-
     return out << s;
+}
+
+inline std::string to_string(const Tsch6pCommands cmd6p) {
+    const char* s = 0;
+    switch(cmd6p) {
+        PRINT_ENUM(CMD_ADD, s);
+        PRINT_ENUM(CMD_DELETE, s);
+        PRINT_ENUM(CMD_RELOCATE, s);
+        PRINT_ENUM(CMD_COUNT, s);
+        PRINT_ENUM(CMD_LIST, s);
+        PRINT_ENUM(CMD_SIGNAL, s);
+        PRINT_ENUM(CMD_CLEAR, s);
+    }
+    std::string str(s);
+    return str;
 }
 
 
@@ -118,21 +155,18 @@ typedef enum Tsch6pReturnCodes
 
 inline std::ostream& operator<<(std::ostream& out, const Tsch6pReturnCodes errc) {
     const char* s = 0;
-#define PRINT_ENUM(p) case(p): s = #p; break;
-    switch(errc) {
-        PRINT_ENUM(RC_SUCCESS);
-        PRINT_ENUM(RC_EOL);
-        PRINT_ENUM(RC_ERROR);
-        PRINT_ENUM(RC_RESET);
-        PRINT_ENUM(RC_VERSION);
-        PRINT_ENUM(RC_SFID);
-        PRINT_ENUM(RC_SEQNUM);
-        PRINT_ENUM(RC_CELLLIST);
-        PRINT_ENUM(RC_BUSY);
-        PRINT_ENUM(RC_LOCKED);
+    switch (errc) {
+        PRINT_ENUM(RC_SUCCESS, s);
+        PRINT_ENUM(RC_EOL, s);
+        PRINT_ENUM(RC_ERROR, s);
+        PRINT_ENUM(RC_RESET, s);
+        PRINT_ENUM(RC_VERSION, s);
+        PRINT_ENUM(RC_SFID, s);
+        PRINT_ENUM(RC_SEQNUM, s);
+        PRINT_ENUM(RC_CELLLIST, s);
+        PRINT_ENUM(RC_BUSY, s);
+        PRINT_ENUM(RC_LOCKED, s);
     }
-#undef PRINT_ENUM
-
     return out << s;
 }
 
@@ -146,6 +180,18 @@ typedef enum Tsch6pSFIDs
     SFID_MSF,
     SFID_TEST
 } tsch6pSFID_t;
+
+
+inline std::ostream& operator<<(std::ostream& out, const Tsch6pSFIDs sfid) {
+    const char* s = 0;
+    switch(sfid) {
+        PRINT_ENUM(SFID_SFX, s);
+        PRINT_ENUM(SFID_SFSB, s);
+        PRINT_ENUM(SFID_MSF, s);
+        PRINT_ENUM(SFID_TEST, s);
+    }
+    return out << s;
+}
 
 typedef std::vector<std::tuple<cellLocation_t, uint8_t>> cellVector;
 typedef std::vector<cellLocation_t> cellListVector;

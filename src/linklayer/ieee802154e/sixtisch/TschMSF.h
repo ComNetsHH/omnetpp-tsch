@@ -1,11 +1,24 @@
-/**
- * @brief       Minimal Scheduling Function implementation
+/*
+ * Minimal Scheduling Function Implementation (6TiSCH WG Draft).
  *
- * @author      Yevhenii Shudrenko <yevhenii.shudrenko@tuhh.de>
- * @author      Leo Krueger <leo.krueger@tuhh.de>
+ * Copyright (C) 2021  Institute of Communication Networks (ComNets),
+ *                     Hamburg University of Technology (TUHH)
+ *           (C) 2021  Yevhenii Shudrenko
+ *           (C) 2019  Leo Krüger
  *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 #ifndef __WAIC_TSCHMSF_H_
 #define __WAIC_TSCHMSF_H_
 
@@ -175,6 +188,7 @@ public:
     void receiveSignal(cComponent *src, simsignal_t id, cObject *value, cObject *details);
     void receiveSignal(cComponent *src, simsignal_t id, long value, cObject *details);
     void handleDodagJoinedSignal(uint64_t parentId);
+    void handleParentChangedSignal(uint64_t newParentId);
 
 private:
     const tsch6pSFID_t pSFID = SFID_MSF;
@@ -303,6 +317,9 @@ private:
     void updateNeighborStats(uint64_t neighbor, std::string statType);
     bool checkValidSlotRangeBounds(uint16_t start, uint16_t end);
     bool slotOffsetAvailable(offset_t slOf);
+
+    /** To track status of routing parent update and properly interpret RC_SUCCESS for CLEAR */
+    bool parentUpdateInProgress;
 
     /**
      * Pick @param numRequested slot offsets randomly uniformly from @param availableSlots range

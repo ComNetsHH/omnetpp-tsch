@@ -3,7 +3,7 @@
  * Manages private and neighbor blacklists of a node based on the
  * information it is given by the scheduling function.
  *
- * Copyright (C) 2019  Institute of Communication Networks (ComNets),
+ * Copyright (C) 2021  Institute of Communication Networks (ComNets),
  *                     Hamburg University of Technology (TUHH)
  *           (C) 2017  Lotte Steenbrink
  *

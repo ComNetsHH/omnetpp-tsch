@@ -11,8 +11,9 @@
  * For more details on the sublayer see
  * https://tools.ietf.org/html/draft-ietf-6tisch-architecture
  *
- * Copyright (C) 2019  Institute of Communication Networks (ComNets),
+ * Copyright (C) 2021  Institute of Communication Networks (ComNets),
  *                     Hamburg University of Technology (TUHH)
+ *           (C) 2021  Yevhenii Shudrenko
  *           (C) 2017  Lotte Steenbrink
  *
  * This program is free software: you can redistribute it and/or modify
@@ -223,7 +224,8 @@ void Tsch6topSublayer::sendMessageToRadio(cMessage *msg) {
 
 void Tsch6topSublayer::sendAddRequest(uint64_t destId, uint8_t cellOptions,
                             int numCells, std::vector<cellLocation_t> &cellList,
-                            int timeout) {
+                            int timeout)
+{
     Enter_Method_Silent();
 
     if (pTschLinkInfo->inTransaction(destId)) {
@@ -277,7 +279,8 @@ void Tsch6topSublayer::sendDeleteRequest(uint64_t destId, uint8_t cellOptions, i
 void Tsch6topSublayer::sendRelocationRequest(uint64_t destId, uint8_t cellOptions, int numCells,
                             std::vector<cellLocation_t> &relocationCellList,
                             std::vector<cellLocation_t> &candidateCellList,
-                            int timeout) {
+                            int timeout)
+{
     Enter_Method_Silent();
 
     if (pTschLinkInfo->inTransaction(destId)) {
@@ -309,8 +312,8 @@ void Tsch6topSublayer::sendClearRequest(uint64_t destId, int timeout) {
     uint8_t seqNum = pTschLinkInfo->getLastKnownSeqNum(destId);
     simtime_t absoluteTimeout = getAbsoluteTimeout(timeout);
 
-    /* clear requests end a transaction, so we can override the current status
-       no matter what. however, seqnum & cells are only reset after a RC_SUCCESS
+    /* CLEAR requests end a transaction, so we can override the current status
+       no matter what. However seqnum & cells are only reset after a RC_SUCCESS
        response is received, so we still need to note that we sent a CLEAR */
     if (!pTschLinkInfo->linkInfoExists(destId))
         /* We don't have a link to destId yet, register one and start @ SeqNum 0 */
@@ -358,11 +361,10 @@ Packet* Tsch6topSublayer::handle6PMsg(Packet* pkt) {
     Packet* response = NULL;
 
     auto hdr = pkt->popAtFront<tsch::sixtisch::SixpHeader>();
-//    auto data = pkt->popAtBack<tsch::sixtisch::SixpData>(b(-1));
-    auto data = pkt->popAtFront<tsch::sixtisch::SixpData>(); // TODO: Check if this is really better
+    auto data = pkt->popAtFront<tsch::sixtisch::SixpData>();
     auto addresses = pkt->getTag<MacAddressInd>();
 
-    // TODO: lock linkinfo when handling it?!
+    // TODO: lock linkinfo while handling it?!
     if (hdr->getSfid() != pSFID) {
         /* packet uses scheduling function different from ours */
         EV_ERROR << "Received 6P message sent by wrong SF" << endl;
@@ -1307,7 +1309,7 @@ uint8_t Tsch6topSublayer::prepLinkForRequest(uint64_t destId, simtime_t absolute
         pTschLinkInfo->addLink(destId, true, absoluteTimeout, seqNum);
     } else {
         seqNum = pTschLinkInfo->getSeqNum(destId);
-        EV_INFO << "We already have a link to " << MacAddress(destId) << " with seqNum " << +seqNum << endl;
+        EV_INFO << "Found link to " << MacAddress(destId) << " with seqNum " << +seqNum << endl;
         /* Link already exists, update its info */
         pTschLinkInfo->setInTransaction(destId, absoluteTimeout);
         pTschLinkInfo->setLastKnownType(destId, MSG_REQUEST);

@@ -11,8 +11,9 @@
  * For more details on the sublayer see
  * https://tools.ietf.org/html/draft-ietf-6tisch-architecture
  *
- * Copyright (C) 2019  Institute of Communication Networks (ComNets),
+ * Copyright (C) 2021  Institute of Communication Networks (ComNets),
  *                     Hamburg University of Technology (TUHH)
+ *           (C) 2021  Yevhenii Shudrenko
  *           (C) 2017  Lotte Steenbrink
  *
  * This program is free software: you can redistribute it and/or modify

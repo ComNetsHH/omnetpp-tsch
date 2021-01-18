@@ -1,3 +1,24 @@
+/*
+ * Minimal Scheduling Function Implementation (6TiSCH WG Draft).
+ *
+ * Copyright (C) 2021  Institute of Communication Networks (ComNets),
+ *                     Hamburg University of Technology (TUHH)
+ *           (C) 2021  Yevhenii Shudrenko
+ *           (C) 2019  Leo Krüger
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
 #include "TschMSF.h"
 //#include "TschMacWaic.h"
 #include "../Ieee802154eMac.h"
@@ -49,7 +70,10 @@ void TschMSF::initialize(int stage) {
             return;
 
         hostNode = getModuleByPath("^.^.^.^.");
+
+        /** Schedule minimal cells for broadcast control traffic [RFC8180, 4.1] */
         scheduleMinimalCells();
+        /** And auto RX cell for communication with neighbors [IETF MSF draft, 3]*/
         scheduleAutoRxCell(interfaceModule->getInterface(1)->getMacAddress().formInterfaceIdentifier());
 
         auto rpl = hostNode->getSubmodule("rpl");
@@ -59,6 +83,7 @@ void TschMSF::initialize(int stage) {
         }
 
         rpl->subscribe("joinedDodag", this);
+        rpl->subscribe("parentChanged", this);
     }
 }
 
@@ -95,7 +120,7 @@ void TschMSF::start() {
     tsch6topCtrlMsg* msg = new tsch6topCtrlMsg();
     msg->setKind(DO_START);
 
-    scheduleAt(simTime()+ SimTime(par("startTime").doubleValue()), msg);
+    scheduleAt(simTime() + SimTime(par("startTime").doubleValue()), msg);
 }
 
 void TschMSF::printCellUsage(std::string neighborMac, double usage) {
@@ -152,7 +177,7 @@ void TschMSF::handleDoStart(cMessage* msg) {
     /* Schedule auto TX cell to all neighbors */
     for(auto & neighbor : neighbors) {
         scheduleAutoCell(neighbor);
-        initialScheduleComplete[neighbor] = true; // TODO: set this only after RC_SUCCESS from that neighbor??
+        initialScheduleComplete[neighbor] = true;
     }
 }
 
@@ -331,7 +356,7 @@ void TschMSF::scheduleAutoCell(uint64_t neighbor) {
     cellList.push_back({nbruid % pSlotframeLen, nbruid % pNumChannels});
     ctrlMsg->setNewCells(cellList);
 
-    EV_DETAIL << "Scheduling auto TX cell at " << cellList << " to neighbor " << MacAddress(neighbor) << endl;
+    EV_DETAIL << "Scheduling auto TX cell at " << cellList << " to neighbor - " << MacAddress(neighbor) << endl;
 
     pTschLinkInfo->addLink(neighbor, false, 0, 0);
     pTschLinkInfo->addCell(neighbor, cellList[0], MAC_LINKOPTIONS_TX | MAC_LINKOPTIONS_SHARED | MAC_LINKOPTIONS_SRCAUTO);
@@ -657,7 +682,7 @@ void TschMSF::addCells(uint64_t nodeId, int numCells) {
         return;
     }
 
-    EV_DETAIL << "Adding " << numCells << " cells to neighbor " << MacAddress(nodeId) << endl;
+    EV_DETAIL << "Adding " << numCells << " cell(s) to neighbor " << MacAddress(nodeId) << endl;
     std::vector<cellLocation_t> cellList = {};
 
     createCellList(nodeId, cellList, numCells);
@@ -751,6 +776,20 @@ void TschMSF::handleDodagJoinedSignal(uint64_t parentId) {
     scheduleAt(simTime() + uniform(1, 2) * routingParentTransactionDelay, new cMessage("", SCHEDULE_AUTO_TX));
 }
 
+void TschMSF::handleParentChangedSignal(uint64_t newParentId) {
+    EV_DETAIL << "RPL parent changed to " << MacAddress(newParentId) << endl;
+
+    /** Get a list of dedicated TX cells scheduled with former RPL parent */
+    auto scheduledCells = pTschLinkInfo->getCells(rplParentId);
+
+    /** Clear these cells from former parent's schedule */
+    pTsch6p->sendClearRequest(rplParentId, pTimeout);
+
+    /** Before requesting same cells from new parent, we have to wait until CLEAR confirmation
+      from former parent arrives */
+    parentUpdateInProgress = true;
+}
+
 void TschMSF::receiveSignal(cComponent *src, simsignal_t id, long value, cObject *details)
 {
     Enter_Method_Silent();
@@ -763,6 +802,11 @@ void TschMSF::receiveSignal(cComponent *src, simsignal_t id, long value, cObject
 
     if (std::strcmp(signalName.c_str(), "joinedDodag") == 0) {
         handleDodagJoinedSignal(value);
+        return;
+    }
+
+    if (std::strcmp(signalName.c_str(), "parentChanged") == 0) {
+        handleParentChangedSignal(value);
         return;
     }
 

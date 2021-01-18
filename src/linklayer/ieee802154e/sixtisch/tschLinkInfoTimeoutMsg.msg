@@ -2,7 +2,7 @@
 // Simulation model for IEEE 802.15.4 Time Slotted Channel Hopping (TSCH)
 // Self-messages for link timeouts
 //
-// Copyright (C) 2019  Institute of Communication Networks (ComNets),
+// Copyright (C) 2021  Institute of Communication Networks (ComNets),
 //                     Hamburg University of Technology (TUHH)
 //           (C) 2017  Lotte Steenbrink
 //

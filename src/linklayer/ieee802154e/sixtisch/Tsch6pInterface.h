@@ -3,7 +3,7 @@
  * Interface for a 6P implementation. Used to enable Scheduling Function
  * implementations to send messages via the Tsch6topSublayer they are a part of.
  *
- * Copyright (C) 2019  Institute of Communication Networks (ComNets),
+ * Copyright (C) 2021  Institute of Communication Networks (ComNets),
  *                     Hamburg University of Technology (TUHH)
  *           (C) 2017  Lotte Steenbrink
  *

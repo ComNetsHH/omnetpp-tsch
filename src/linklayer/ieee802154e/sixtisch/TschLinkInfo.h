@@ -3,7 +3,7 @@
  * Stores and handles information about all links maintained by
  * this node.
  *
- * Copyright (C) 2019  Institute of Communication Networks (ComNets),
+ * Copyright (C) 2021  Institute of Communication Networks (ComNets),
  *                     Hamburg University of Technology (TUHH)
  *           (C) 2017  Lotte Steenbrink
  *
@@ -38,7 +38,7 @@ class TschLinkInfo: public cSimpleModule
      * Information about the link to another node.
      */
     typedef struct {
-        uint64_t nodeId;                   /**< Address of the Node we're sharing a link with */
+        uint64_t nodeId;              /**< Address of the Node we're sharing a link with */
         bool inTransaction;           /**< Whether there's currently an
                                            unfinished transaction going on */
         tschLinkInfoTimeoutMsg *tom;  /**< Msg scheduled for when the timeout
@@ -49,15 +49,15 @@ class TschLinkInfo: public cSimpleModule
                                            sent/received */
         tsch6pCmd_t lastKnownCommand; /**< When in transaction: command type last
                                            sent/received */
-        uint8_t lastLinkOption;/**< For transactions initiated by this node:
+        uint8_t lastLinkOption;       /**< For transactions initiated by this node:
                                            The value of the linkOption field in the
                                            Request we sent */
         cellVector scheduledCells;    /**< The cells scheduled between this node and nodeId */
         cellVector relocationCells;   /**< Cells that this node requested relocate.
                                            Is only non-empty during a RELOCATE
                                            transaction started by this node. */
-        //std::mutex nliMutex;          /**< Prevents SF & 6P from read/editing this entry
-        //                                   at the same time */
+        //std::mutex nliMutex;        /**< Prevents SF & 6P from read/editing this entry
+        //                                 at the same time */
     } NodeLinkInfo_t;
 
 public:

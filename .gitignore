@@ -51,6 +51,7 @@ precompiled_*.h.*
 
 # ignore binary files
 out/
+**/tsch-master
 *.so
 *.dylib
 *.dll
