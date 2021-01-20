@@ -227,20 +227,17 @@ uint64_t TschLinkInfo::getNodeOfCell(cellLocation_t candidate) {
 
 void TschLinkInfo::clearCells(uint64_t nodeId) {
     Enter_Method_Silent();
+    EV_INFO << "Clearing cells scheduled with " << inet::MacAddress(nodeId) << endl;
 
-    if (linkInfoExists(nodeId)) {
-        EV_INFO << "Clearing cells scheduled with " << inet::MacAddress(nodeId) << endl;
+    if (linkInfoExists(nodeId))
         linkInfo[nodeId].scheduledCells.erase(
-            std::remove_if(
-                linkInfo[nodeId].scheduledCells.begin(),
-                linkInfo[nodeId].scheduledCells.end(),
-                [](decltype(linkInfo[nodeId].scheduledCells)::value_type l) -> bool {
+            std::remove_if( linkInfo[nodeId].scheduledCells.begin(), linkInfo[nodeId].scheduledCells.end(),
+                [] (decltype(linkInfo[nodeId].scheduledCells)::value_type l) -> bool {
                     return !getCellOptions_isAUTO(std::get<1>(l));
-                }
-            ),
+                }),
             linkInfo[nodeId].scheduledCells.end()
         );
-    } else
+    else
         EV_WARN << "Instructed to clear but no linkInfo exists" << endl;
 }
 

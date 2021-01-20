@@ -144,6 +144,8 @@ public:
     void handleResponse(uint64_t sender, tsch6pReturn_t code, int numCells = -1,
                             std::vector<cellLocation_t> cellList = {});
 
+    void handleSuccessResponse(uint64_t sender, tsch6pCmd_t lastKnownCmd, int numCells, std::vector<cellLocation_t> cellList);
+
     /**
      * @brief Handle @p data that was piggybacked by @p sender.
      *
@@ -256,7 +258,7 @@ private:
     uint32_t autoRxSlOffset;
 
     bool hasStarted;
-    bool autoTxParentScheduled;
+    bool unicastParentCellScheduled;
     bool disable;
 
     /**
@@ -317,6 +319,8 @@ private:
     void updateNeighborStats(uint64_t neighbor, std::string statType);
     bool checkValidSlotRangeBounds(uint16_t start, uint16_t end);
     bool slotOffsetAvailable(offset_t slOf);
+
+    void clearCells(uint64_t sender, std::vector<cellLocation_t> cellList);
 
     /** To track status of routing parent update and properly interpret RC_SUCCESS for CLEAR */
     bool parentUpdateInProgress;

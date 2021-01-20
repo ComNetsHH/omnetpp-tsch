@@ -34,7 +34,7 @@ Define_Module(TschMSF);
 
 TschMSF::TschMSF() :
     routingParentTransactionDelay(3),
-    autoTxParentScheduled(false),
+    unicastParentCellScheduled(false),
     rplParentId(0),
     hasStarted(false)
 {
@@ -301,7 +301,7 @@ void TschMSF::handleMessage(cMessage* msg) {
             if (!rplParentId) {
                 EV_WARN << "Trying to set up auto TX cells to RPL parent, but its ID undefined" << endl;
             }
-            else if (!autoTxParentScheduled) {
+            else if (!unicastParentCellScheduled) {
                 // reset hanging link
                 pTschLinkInfo->resetLink(rplParentId, MSG_RESPONSE);
                 reservedTimeOffsets[rplParentId].clear();
@@ -559,98 +559,98 @@ void TschMSF::handleResponse(uint64_t sender, tsch6pReturn_t code, int numCells,
     EV_WARN << "Deprecated handleResponse() invoked" << endl;
 }
 
-void TschMSF::handleResponse(uint64_t sender, tsch6pReturn_t code, int numCells,
-                              std::vector<cellLocation_t> cellList)
+void TschMSF::handleSuccessResponse(uint64_t sender, tsch6pCmd_t lastKnownCmd, int numCells, std::vector<cellLocation_t> cellList)
+{
+    if (pTschLinkInfo->getLastKnownType(sender) != MSG_RESPONSE)
+        return;
+
+    switch (lastKnownCmd) {
+        case CMD_ADD: {
+            if (cellList.empty())
+                EV_DETAIL << "Seems our last 6P ADD failed" << endl;
+            else {
+                // TODO: refactor this check to be more robust
+                if (sender == rplParentId && !unicastParentCellScheduled) {
+                    unicastParentCellScheduled = true;
+                    EV_DETAIL << "Scheduled " << cellList << " as auto TX to our preferred parent - "
+                            << MacAddress(rplParentId) << endl;
+                }
+
+                removeAutoCell(sender);
+            }
+
+            initialScheduleComplete[sender] = true;
+            emit(s_InitialScheduleComplete, (unsigned long) sender);
+            break;
+        }
+        case CMD_DELETE: {
+            // remove cell statistics for cells that have been deleted
+            clearCellStats(cellList);
+            break;
+        }
+        case CMD_CLEAR: {
+            clearCells(sender, cellList);
+            break;
+        }
+        default: EV_DETAIL << "Unsupported 6P command" << endl;
+    }
+
+}
+
+void TschMSF::clearCells(uint64_t sender, std::vector<cellLocation_t> cellList)
+{
+    clearCellStats(cellList);
+
+    auto ctrlMsg = new tsch6topCtrlMsg();
+    ctrlMsg->setDestId(sender);
+    std::vector<cellLocation_t> deletable = {};
+
+    for (auto &cell : pTschLinkInfo->getCells(sender))
+        deletable.push_back(std::get<0>(cell));
+
+    if (deletable.size() > 0) {
+        ctrlMsg->setDeleteCells(deletable);
+        pTsch6p->updateSchedule(*ctrlMsg);
+    }
+
+    pTschLinkInfo->resetLink(sender, MSG_RESPONSE);
+}
+
+void TschMSF::handleResponse(uint64_t sender, tsch6pReturn_t code, int numCells, std::vector<cellLocation_t> cellList)
 {
     Enter_Method_Silent();
     auto senderMac = MacAddress(sender);
 
+    auto lastKnownCmd = pTschLinkInfo->getLastKnownCommand(sender);
+
+    EV_DETAIL << "Handling " << code << " for " << lastKnownCmd << " and cells: " << cellList << endl;
+
     // free the cells that were reserved during the transaction
     reservedTimeOffsets[sender].clear();
 
-    // TODO: Implement retries for failed 6P commands?
-    if (code == RC_RESET)
-        switch (pTschLinkInfo->getLastKnownCommand(sender)) {
-            case CMD_ADD: {
-                EV_DETAIL << "6P ADD to " << sender << " failed? cell list: " << cellList;
-                break;
-            }
-            case CMD_RELOCATE: {
-                EV_DETAIL << "6P RELOCATE to " << sender << " failed? cell list to relocate: "
-                    << cellList << endl;
-                break;
-            }
-            default: EV_DETAIL << "Received RC_RESET for unknown command "
-                    << pTschLinkInfo->getLastKnownCommand(sender) << endl;
+
+    switch (code) {
+        case RC_SUCCESS: {
+            handleSuccessResponse(sender, lastKnownCmd, numCells, cellList);
+            break;
         }
-
-    if (code == RC_SUCCESS && pTschLinkInfo->getLastKnownType(sender) == MSG_RESPONSE)
-        switch (pTschLinkInfo->getLastKnownCommand(sender)) {
-            case CMD_ADD: {
-                if (cellList.empty())
-                    EV_DETAIL << "Seems our last 6P ADD failed" << endl;
-                else {
-                    // TODO: refactor this check to be more robust
-                    if (sender == rplParentId && !autoTxParentScheduled) {
-                        autoTxParentScheduled = true;
-                        EV_DETAIL << "Scheduled " << cellList << " as auto TX to our preferred parent - "
-                                << MacAddress(rplParentId) << endl;
-                    }
-
-                    removeAutoCell(sender);
-                }
-
-                initialScheduleComplete[sender] = true;
-                emit(s_InitialScheduleComplete, (unsigned long) sender);
-                break;
-            }
-            case CMD_DELETE: {
-                EV_DETAIL << "DELETE succeeded for cells:\n" << cellList << endl;
-                // remove cell statistics for cells that have been deleted
-                clearCellStats(cellList);
-                if (pTschLinkInfo->getNumCells(sender) == 0)
-                    scheduleAutoCell(sender);
-                break;
-            }
-            case CMD_RELOCATE: {
-                EV_DETAIL << "Relocated cells - " << cellList << endl;
-                return;
-            }
-            default: EV_DETAIL << "Received RC_SUCCESS response for unknown last known command type "
-                    << pTschLinkInfo->getLastKnownCommand(sender) << endl;
+        // Skip these for now
+        case RC_BUSY:
+        case RC_LOCKED: {
+            break;
         }
-
-    if (code == RC_CELLLIST)
-        EV_DETAIL << "Received RC_CELLLIST, critical error occurred during transaction with " << senderMac
-            << ", cell list - " << cellList << endl;
-
-    if (code == RC_RESET || code == RC_SUCCESS) {
-//        clearCellStats(cellList);
-
-        if (pTschLinkInfo->getLastKnownCommand(sender) == CMD_CLEAR) {
-            clearCellStats(cellList);
-            EV_DETAIL << "RC_RESET + CLEAR received, clearing the transaction state? with " << senderMac << endl;
-
-//            TODO: Check if we really have to delete all scheduled cells on CMD_CLEAR
-//            auto ctrlMsg = new tsch6topCtrlMsg();
-//            ctrlMsg->setDestId(sender);
-//            std::vector<cellLocation_t> *delCells = {};
-//
-//            for (auto &cell : pTschLinkInfo->getCells(sender))
-//                delCells->push_back(std::get<0>(cell));
-//
-//            if (delCells->size() > 0) {
-//                ctrlMsg->setDeleteCells(*delCells);
-//                pTsch6p->updateSchedule(*ctrlMsg);
-//            }
-
-            // TODO: Schedule auto cells again to ensure minimal connectivity?
-            pTschLinkInfo->resetLink(sender, MSG_RESPONSE);
-//            scheduleAutoCell(sender);
+        case RC_RESET: {
+            if (lastKnownCmd == CMD_CLEAR)
+                EV_DETAIL << "Potential failed CLEAR to previous preferred parent?" << endl;
+        }
+        // Handle all other return codes (RC_ERROR, RC_VERSION, RC_SFID, ...) as error
+        default: {
+            clearCells(sender, cellList);
         }
     }
-
 }
+
+
 
 void TschMSF::handleInconsistency(uint64_t destId, uint8_t seqNum) {
     Enter_Method_Silent();
@@ -676,13 +676,14 @@ uint64_t TschMSF::checkInTransaction() {
 }
 
 void TschMSF::addCells(uint64_t nodeId, int numCells) {
+    EV_DETAIL << "TyiAdding " << numCells << " cell(s) to neighbor " << MacAddress(nodeId) << endl;
+
     if (pTschLinkInfo->inTransaction(nodeId)) {
         /* Only do this if we're not in the process of another transaction */
-        EV_WARN << "Can't add cells, currently in another transaction with the neighbor " << endl;
+        EV_WARN << "Can't add cells, currently in another transaction with " << MacAddress(nodeId) << endl;
         return;
     }
 
-    EV_DETAIL << "Adding " << numCells << " cell(s) to neighbor " << MacAddress(nodeId) << endl;
     std::vector<cellLocation_t> cellList = {};
 
     createCellList(nodeId, cellList, numCells);
@@ -779,8 +780,13 @@ void TschMSF::handleDodagJoinedSignal(uint64_t parentId) {
 void TschMSF::handleParentChangedSignal(uint64_t newParentId) {
     EV_DETAIL << "RPL parent changed to " << MacAddress(newParentId) << endl;
 
-    /** Get a list of dedicated TX cells scheduled with former RPL parent */
-    auto scheduledCells = pTschLinkInfo->getCells(rplParentId);
+    /** Get number of dedicated TX cells scheduled with former RPL parent */
+    auto numScheduledCells = pTschLinkInfo->getCells(rplParentId).size();
+
+    EV_DETAIL << "Dedicated cells found - " << numScheduledCells << endl;
+
+    /** and schedule the same amount with the new parent */
+    addCells(newParentId, numScheduledCells);
 
     /** Clear these cells from former parent's schedule */
     pTsch6p->sendClearRequest(rplParentId, pTimeout);
