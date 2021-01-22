@@ -2,18 +2,33 @@
 <TSCHSchedule xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="TSCH_SCHEDULE.xsd">
   <!-- Slotframe -->
   <Slotframe macSlotframeSize="101">
-    <Link slotOffset="1" channelOffset="5">
+  	<Link slotOffset="0" channelOffset="0">
+		<Option tx="true" rx="true" shared="true"/>
+		<Type normal="false" advertising="true" advertisingOnly="false" />
+		<Neighbor address="FF:FF:FF:FF:FF:FF" />
+	</Link>
+	<Link slotOffset="1" channelOffset="0">
+		<Option tx="true" rx="true" shared="true"/>
+		<Type normal="false" advertising="true" advertisingOnly="false" />
+		<Neighbor address="FF:FF:FF:FF:FF:FF" />
+	</Link>
+    <Link slotOffset="2" channelOffset="0">
+		<Option tx="true" rx="true" shared="true"/>
+		<Type normal="false" advertising="true" advertisingOnly="false" />
+		<Neighbor address="FF:FF:FF:FF:FF:FF" />
+	</Link>
+    <Link slotOffset="16" channelOffset="5">
 		<Option tx="true" rx="false" shared="false"/>
 		<Type normal="true" advertising="false" advertisingOnly="false" />
 		<Neighbor address="0A:AA:00:00:00:01" />
 	</Link>
 	<Link slotOffset="4" channelOffset="3">
-		<Option tx="true" rx="false" shared="true"/>
+		<Option tx="true" rx="false" shared="false"/>
 		<Type normal="true" advertising="false" advertisingOnly="false" />
 		<Neighbor address="0A:AA:00:00:00:01" />
 	</Link>
 	<Link slotOffset="9" channelOffset="2">
-		<Option tx="true" rx="false" shared="true"/>
+		<Option tx="true" rx="false" shared="false"/>
 		<Type normal="true" advertising="false" advertisingOnly="false" />
 		<Neighbor address="0A:AA:00:00:00:01" />
 	</Link>

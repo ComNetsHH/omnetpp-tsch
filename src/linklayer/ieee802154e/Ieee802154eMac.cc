@@ -48,6 +48,7 @@
 #include "inet/physicallayer/common/packetlevel/RadioMedium.h"
 #include "./sixtisch/SixpHeaderChunk_m.h"
 #include "../../common/VirtualLinkTag_m.h"
+#include "sixtisch/TschSF.h"
 
 namespace tsch {
 
@@ -152,8 +153,13 @@ void Ieee802154eMac::initialize(int stage) {
 
         neighbor = dynamic_cast<TschNeighbor*>(getModuleByPath("^.neighbor"));
 
-//        schedule->xmlSchedule();
-        schedule->printSlotframe();
+
+        // Use XML schedule only if SF is disabled
+        auto sf = getModuleByPath("^.sixtischInterface.sf");
+        if (sf->par("disable").boolValue()) {
+            schedule->xmlSchedule();
+            schedule->printSlotframe();
+        }
 
         asn.setMacTsTimeslotLength(macTsTimeslotLength);
         asn.setReference(simTime() + 0.1);

@@ -42,6 +42,7 @@
 #include "TschHopping.h"
 #include "TschNeighbor.h"
 #include "inet/common/Units.h"
+#include "sixtisch/Tsch6tischComponents.h"
 
 using namespace inet;
 
@@ -166,6 +167,22 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
         WAITSIFS_7,
         TRANSMITACK_8
     };
+
+    friend std::ostream& operator<<(std::ostream& out, const t_mac_states state) {
+        const char* s = 0;
+        switch(state) {
+            PRINT_ENUM(IDLE_1, s);
+            PRINT_ENUM(HOPPING_2, s);
+            PRINT_ENUM(CCA_3, s);
+            PRINT_ENUM(TRANSMITFRAME_4, s);
+            PRINT_ENUM(WAITACK_5, s);
+            PRINT_ENUM(RECEIVEFRAME_6, s);
+            PRINT_ENUM(WAITSIFS_7, s);
+            PRINT_ENUM(TRANSMITACK_8, s);
+        }
+        return out << s;
+    }
+
 
     /*************************************************************/
     /****************** TYPES ************************************/

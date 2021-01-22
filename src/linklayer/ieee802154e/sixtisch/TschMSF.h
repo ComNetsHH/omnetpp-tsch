@@ -34,17 +34,23 @@ class TschMSF: public TschSF, public cListener {
 public:
 
     class MsfControlInfo : public cObject {
-        uint64_t reservedDestId;
-
         public:
+            uint64_t reservedDestId;
 
-        MsfControlInfo() {};
-        MsfControlInfo(uint64_t nodeId) {
-            this->reservedDestId = nodeId;
-        }
+            MsfControlInfo() {};
+            MsfControlInfo(uint64_t nodeId) {
+                this->reservedDestId = nodeId;
+            }
 
-        uint64_t getNodeId() { return this->reservedDestId; }
-        void setNodeId(uint64_t nodeId) { this->reservedDestId = nodeId; }
+            uint64_t getNodeId() { return this->reservedDestId; }
+            void setNodeId(uint64_t nodeId) { this->reservedDestId = nodeId; }
+
+            int getNumDedicatedCells() { return this->numDedicatedCellsToAdd; }
+            void setNumDedicatedCells(int numDedicated) { this->numDedicatedCellsToAdd = numDedicated; }
+
+        private:
+            int numDedicatedCellsToAdd;
+
     };
 
     virtual int numInitStages() const{return 6;}
@@ -202,6 +208,7 @@ private:
     /* the ID of this node, derived from its MAC address */
     uint64_t pNodeId;
     uint64_t rplParentId; // MAC of RPL preferred parent
+    uint64_t rplFormerParentId; // and former parent (to track success/failure of clearing its schedule after leaving)
 
 
     std::list<uint64_t> neighbors;
@@ -288,9 +295,13 @@ private:
 
     void scheduleAutoCell(uint64_t neighbor);
     void scheduleAutoRxCell(InterfaceToken euiAddr);
-    void removeAutoCell(uint64_t neighbor);
+    void removeAutoTxCell(uint64_t neighbor);
 //    void relocateCell(cellLocation_t cell, double cellPdr, double maxPdr);
     void relocateTxCells(cellVector cells);
+
+    void clearScheduleWithNode(uint64_t sender);
+
+    void retrySchedulingDedicatedCells(int numCells);
 
     void scheduleMinimalCells();
     uint64_t checkInTransaction();
@@ -320,7 +331,9 @@ private:
     bool checkValidSlotRangeBounds(uint16_t start, uint16_t end);
     bool slotOffsetAvailable(offset_t slOf);
 
-    void clearCells(uint64_t sender, std::vector<cellLocation_t> cellList);
+    void checkDedicatedCellScheduled(uint64_t sender, std::vector<cellLocation_t> cellList);
+
+    void handleFailedTransaction(uint64_t sender, tsch6pCmd_t cmd);
 
     /** To track status of routing parent update and properly interpret RC_SUCCESS for CLEAR */
     bool parentUpdateInProgress;

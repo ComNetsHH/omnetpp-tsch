@@ -113,7 +113,7 @@ public:
      * @brief Mark link with @p nodeId as "in transaction", i.e. an unfinished
      *        transaction exists.
      *
-     * @param nodeId              TODO
+     * @param nodeId              MAC address of the neighbor transaction happens with
      * @param transactionTimeout  Timeout in absolute time
      * @return    0 on success,
      *            -EINVAL if no link to nodeId exists
@@ -123,7 +123,7 @@ public:
     /**
      * @brief Mark link with @p nodeId as "not in transaction"
      *
-     * @param nodeId              TODO
+     * @param nodeId              MAC address of the neighbor transaction happens with
      * @return    0 on success,
      *            -EINVAL if no link to nodeId exists
      */

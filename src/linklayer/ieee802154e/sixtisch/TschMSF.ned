@@ -8,7 +8,7 @@ simple TschMSF like TschSF
         
         // the time after which an active, unfinished transaction expires
         // (needs to be defined by every SF as per the 6P standard)
-        int timeout = default(25000);
+        int timeout = default(15000); // was 25s
 
         // the number of cells to be initially scheduled between all nodes
         int initNumcells = default(6);

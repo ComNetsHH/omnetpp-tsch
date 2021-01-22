@@ -201,8 +201,6 @@ bool TschSlotframe::linkLessThan(const TschLink *a, const TschLink *b) const
 
 void TschSlotframe::internalAddLink(TschLink *entry)
 {
-
-
     // The 'routes' vector may contain multiple routes with the same destination/netmask.
     // Routes are stored in descending netmask length and ascending administrative_distance/metric order,
     // so the first matching is the best one.
@@ -416,10 +414,19 @@ bool TschSlotframe::hasLink(inet::MacAddress macAddress) {
 std::vector<TschLink*> TschSlotframe::allTxLinks(inet::MacAddress macAddress) {
     std::vector<TschLink*> nbrLinks;
 
-    for(auto const& link: links) {
-        if(link->getAddr() == macAddress && link->isTx() && !link->isXml() && !link->isAuto())
+    for (auto const& link: links)
+        if (link->getAddr() == macAddress && link->isTx() && !link->isXml() && !link->isAuto())
             nbrLinks.insert(nbrLinks.end(), link);
-    }
+
+    return nbrLinks;
+}
+
+std::vector<TschLink*> TschSlotframe::getDedicatedLinksForNeighbor(inet::MacAddress neigbhorMac) {
+    std::vector<TschLink*> nbrLinks;
+
+    for (auto const& link: links)
+        if (link->getAddr() == neigbhorMac && !link->isAuto())
+            nbrLinks.insert(nbrLinks.end(), link);
 
     return nbrLinks;
 }

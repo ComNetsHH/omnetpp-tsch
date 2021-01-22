@@ -132,7 +132,7 @@ int TschLinkInfo::abortTransaction(uint64_t nodeId) {
     }
 
     if (linkInfo[nodeId].inTransaction) {
-        if (linkInfo[nodeId].tom){
+        if (linkInfo[nodeId].tom) {
             linkInfo[nodeId].tom->setSeqNum(linkInfo[nodeId].lastKnownSeqNum);
             cancelEvent(linkInfo[nodeId].tom);
         }
@@ -232,8 +232,8 @@ void TschLinkInfo::clearCells(uint64_t nodeId) {
     if (linkInfoExists(nodeId))
         linkInfo[nodeId].scheduledCells.erase(
             std::remove_if( linkInfo[nodeId].scheduledCells.begin(), linkInfo[nodeId].scheduledCells.end(),
-                [] (decltype(linkInfo[nodeId].scheduledCells)::value_type l) -> bool {
-                    return !getCellOptions_isAUTO(std::get<1>(l));
+                [] (decltype(linkInfo[nodeId].scheduledCells)::value_type link) -> bool {
+                    return !getCellOptions_isAUTO(std::get<1>(link));
                 }),
             linkInfo[nodeId].scheduledCells.end()
         );

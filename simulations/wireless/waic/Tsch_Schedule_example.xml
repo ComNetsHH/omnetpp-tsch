@@ -8,6 +8,12 @@
 		<Type normal="true" advertising="false" advertisingOnly="false" />
 		<Neighbor address="0A:AA:00:00:00:02" />
 	</Link>
+	<Link slotOffset="0" channelOffset="0">
+		<Option tx="true" rx="false" shared="false"/>
+		<Virtual id="0" />
+		<Type normal="true" advertising="t" advertisingOnly="false" />
+		<Neighbor address="0A:AA:00:00:00:02" />
+	</Link>
 	    <Link slotOffset="1" channelOffset="0">
 		<Option tx="false" rx="true" shared="false"/>
 		<Virtual id="0" />

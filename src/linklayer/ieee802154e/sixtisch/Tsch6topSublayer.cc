@@ -223,8 +223,7 @@ void Tsch6topSublayer::sendMessageToRadio(cMessage *msg) {
 }*/
 
 void Tsch6topSublayer::sendAddRequest(uint64_t destId, uint8_t cellOptions,
-                            int numCells, std::vector<cellLocation_t> &cellList,
-                            int timeout)
+                            int numCells, std::vector<cellLocation_t> &cellList, int timeout)
 {
     Enter_Method_Silent();
 
@@ -886,10 +885,8 @@ Packet* Tsch6topSublayer::handleTransactionTimeout(tschLinkInfoTimeoutMsg* tom) 
     uint64_t destId = tom->getNodeId();
     //uint8_t seqNum = tom->getSeqNum();
 
-    if (!pTschLinkInfo->linkInfoExists(destId)) {
-        EV_WARN <<"received timeout for link that doesn't exist something"
-                    "went colossally wrong" << endl;
-    }
+    if (!pTschLinkInfo->linkInfoExists(destId))
+        EV_WARN <<"Received timeout for link that doesn't exist, something went very wrong" << endl;
 
     /* Notify SF that it might want to try again */
     pTschSF->handleResponse(destId, RC_RESET, 0, NULL);
@@ -1174,8 +1171,9 @@ Packet* Tsch6topSublayer::createSeqNumErrorResponse(uint64_t destId,
 
 Packet* Tsch6topSublayer::createClearResponse(uint64_t destId, uint8_t seqNum,
                                                     tsch6pReturn_t returnCode,
-                                                    simtime_t timeout) {
-    if ((returnCode != RC_SUCCESS) && (returnCode != RC_RESET)) {
+                                                    simtime_t timeout)
+{
+    if (returnCode != RC_SUCCESS && returnCode != RC_RESET) {
         /* returnCode isn't valid, abort. */
         return NULL;
     }
@@ -1212,7 +1210,8 @@ tsch6topCtrlMsg* Tsch6topSublayer::setCtrlMsg_PatternUpdate(
                             uint8_t cellOption,
                             std::vector<cellLocation_t> newCells,
                             std::vector<cellLocation_t> deleteCells,
-                            simtime_t timeout) {
+                            simtime_t timeout)
+{
     msg->setKind(CTRLMSG_PATTERNUPDATE);
     msg->setDestId(destId);
     msg->setCellOptions(cellOption);

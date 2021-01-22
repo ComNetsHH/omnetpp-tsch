@@ -4,7 +4,6 @@
 	<comment></comment>
 	<projects>
 		<project>inet</project>
-		<project>rpl</project>
 	</projects>
 	<buildSpec>
 		<buildCommand>

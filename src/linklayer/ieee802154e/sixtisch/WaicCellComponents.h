@@ -62,6 +62,12 @@ std::ostream& operator<< (std::ostream& out, const std::vector<T>& v) {
   return out;
 }
 
+//inline std::ostream& operator<<(std::ostream& out, const std::vector<TschLink*>& links) {
+//  for (auto l : links)
+//      out << l.str() << endl;
+//  return out;
+//}
+
 /* Bit masks for link options (see fig. 7-54 of the IEEE802.15.4e standard) */
 enum macLinkOption_t {
     MAC_LINKOPTIONS_TX       = 0x01, /**< The link is a TX link */
