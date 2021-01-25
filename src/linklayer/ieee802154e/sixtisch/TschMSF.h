@@ -215,7 +215,7 @@ private:
 
     cMessage *internalEvent;
 
-    int pSlotframeLen;
+    int pSlotframeLength;
     int pNumChannels;
     offset_t pNumMinimalCells; // number of minimal cells being scheduled for ICMPv6, RPL broadcast messages
 
@@ -325,7 +325,7 @@ private:
 
     uint32_t saxHash(int maxReturnVal, InterfaceToken EUI64addr); // TODO: check this, often results in overlapping cells
     void clearCellStats(std::vector<cellLocation_t> cellList);
-    void printCellUsage(std::string neighborMac, double usage);
+    std::string printCellUsage(std::string neighborMac, double usage);
     void updateCellTxStats(cellLocation_t cell, std::string statType);
     void updateNeighborStats(uint64_t neighbor, std::string statType);
     bool checkValidSlotRangeBounds(uint16_t start, uint16_t end);
@@ -353,7 +353,7 @@ private:
      */
     std::vector<offset_t> getAvailableSlotsInRange(offset_t start, offset_t end);
     std::vector<offset_t> getAvailableSlotsInRange(int slOffsetEnd);
-    std::vector<offset_t> getAvailableSlotsInRange() { return getAvailableSlotsInRange(pSlotframeLen); }
+    std::vector<offset_t> getAvailableSlotsInRange() { return getAvailableSlotsInRange(pSlotframeLength); }
 };
 
 #endif /*__WAIC_TSCHCLSF_H_*/

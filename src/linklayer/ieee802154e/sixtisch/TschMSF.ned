@@ -8,16 +8,9 @@ simple TschMSF like TschSF
         
         // the time after which an active, unfinished transaction expires
         // (needs to be defined by every SF as per the 6P standard)
-        int timeout = default(15000); // was 25s
-
-        // the number of cells to be initially scheduled between all nodes
-        int initNumcells = default(6);
-
-        // The maximum time in ms that will pass until another initial ADD
-        // request is sent if the last one wasn't successful
-        int maxRetryBackoff @unit("ms") = default(60000ms);
-        
-        int NUM_CH_OFFSET = default(16);
+        int timeout = default(20000); // was 25s
+        int initNumcells = default(5); // redundant parameter, required by SF interface
+        int maxRetryBackoff @unit("ms") = default(60000ms); // redundant parameter, required by SF interface
         int KA_PERIOD @unit("s") = default(60s);
         int numMinCells = default(5);
         double upperCellUsageLimit = default(0.75);
@@ -25,17 +18,16 @@ simple TschMSF like TschSF
         int HOUSEKEEPINGCOLLISION_PERIOD @unit("s") = default(60s);
         double RELOCATE_PDRTHRES = default(0.50);
         double clearReservedCellsTimeout = default(15);
-//        int SLOTFRAME_LENGTH = default(101);
         int QUARANTINE_DURATION @unit("s") = default(300s);
         int WAITDURATION_MIN @unit("s") = default(30s);
         int WAITDURATION_MAX @unit("s") = default(60s);
         int maxNumCells = default(intuniform(4, 10));
         int MAX_NUMTX = default(254);
-        int slotframeLen = default(101);
-        int cellListRedundancy = default(3); // number of additional cells to include in 6P ADD/RELOCATE proposals
-        int cellBandwidthIncrement = default(2); // number of cells to add with neighbor if cell usage is excessive
+        int cellListRedundancy = default(5); // number of additional cells to include in 6P ADD/RELOCATE proposals
+        // Custom, non-standard parameter defining number of cells to add while adapting to traffic
+        int cellBandwidthIncrement = default(1); 
         bool disable = default(false);
-        bool disableHousekeeping = default(false); // disable cell PDR assessment 
+        bool disableHousekeeping = default(false); // cell performance monitoring on/off 
         bool allowCellRemoval = default(true);
 
 		double startTime @unit("s") = default(uniform(0s,10s));

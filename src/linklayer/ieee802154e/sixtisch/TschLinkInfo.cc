@@ -234,7 +234,8 @@ void TschLinkInfo::clearCells(uint64_t nodeId) {
             std::remove_if( linkInfo[nodeId].scheduledCells.begin(), linkInfo[nodeId].scheduledCells.end(),
                 [] (decltype(linkInfo[nodeId].scheduledCells)::value_type link) -> bool {
                     return !getCellOptions_isAUTO(std::get<1>(link));
-                }),
+                }
+            ),
             linkInfo[nodeId].scheduledCells.end()
         );
     else
@@ -243,26 +244,32 @@ void TschLinkInfo::clearCells(uint64_t nodeId) {
 
 void TschLinkInfo::deleteCells(uint64_t nodeId, const std::vector<cellLocation_t> &cellList, uint8_t linkOption) {
     Enter_Method_Silent();
+    EV_DETAIL << "Deleting cells scheduled with " << inet::MacAddress(nodeId) << " : " << cellList << endl;
 
     if (!linkInfoExists(nodeId)) {
-        EV_WARN << "Instructed to delete cells with " << inet::MacAddress(nodeId) << " but no linkInfo found" << endl;
+        EV_WARN << "No linkInfo found" << endl;
         return;
     }
 
     cellVector *scheduledCells = &(linkInfo[nodeId].scheduledCells); // TODO: replace with a proper getter method
-    EV_INFO << "Deleting cells scheduled with " << inet::MacAddress(nodeId) << ": " << *scheduledCells << endl;
-    auto it = cellList.begin();
-    for(; (it != cellList.end()); ++it) {
 
+    EV_DETAIL << "Scheduled cells before erasure: " << *scheduledCells << endl;
+
+    auto it = cellList.begin();
+    for(; it != cellList.end(); ++it)
+    {
         auto elem = std::find_if(scheduledCells->begin(), scheduledCells->end(),
-                        [it](std::tuple<cellLocation_t, uint8_t> a) -> bool { return std::get<0>(a) == *it; });
+                        [it](std::tuple<cellLocation_t, uint8_t> link) -> bool {
+            return std::get<0>(link) == *it;
+        });
 
         if (elem != scheduledCells->end())
             scheduledCells->erase(elem);
         else
             EV_WARN << "Instructed to delete cell " << *it << " but not found" << endl;
     }
-    EV_INFO << endl;
+
+    EV_DETAIL << "Scheduled cells after erasure: " << *scheduledCells << endl;
 }
 
 bool TschLinkInfo::timeOffsetScheduled(offset_t timeOffset) {

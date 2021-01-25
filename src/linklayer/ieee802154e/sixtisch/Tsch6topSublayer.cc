@@ -140,58 +140,61 @@ void Tsch6topSublayer::initialize(int stage) {
     }
 };
 
+Packet* Tsch6topSublayer::handleExternalMessage(cMessage* msg) {
+    Packet* response = NULL;
+    auto arrivalGateId = msg->getArrivalGateId();
+
+    if (arrivalGateId == linkInfoControlIn) {
+        tschLinkInfoTimeoutMsg* tom = dynamic_cast<tschLinkInfoTimeoutMsg*> (msg);
+        if (tom)
+            response = handleTransactionTimeout(tom);
+    }
+
+    else if (arrivalGateId == lowerLayerIn) {
+        auto pkt = dynamic_cast<Packet*> (msg);
+        if (pkt)
+            response = handle6PMsg(pkt);
+    }
+    else EV_WARN << "Received message through unexpected gate - " << arrivalGateId << endl;
+
+    delete msg;
+    return response;
+}
+
+Packet* Tsch6topSublayer::handleSelfMessage(cMessage* msg)
+{
+    switch (msg->getKind()) {
+        case SF_START: {
+            EV_DETAIL << "Starting Scheduling Function at node " << MacAddress(pNodeId) << endl;
+            pTschSF->start();
+            break;
+        }
+        case PIGGYBACK_TIMEOUT: {
+            tsch6pPiggybackTimeoutMsg* pgb = dynamic_cast<tsch6pPiggybackTimeoutMsg*> (msg);
+
+            if (!pgb || !pgb->getInTransit())
+                break;
+
+            /* a piggybacking timeout has expired, send data stand-alone*/
+            // TODO: let blacklist updates "accumulate" until they are sent off! otherwise a huge
+            // TODO: is the SIGNAL a transaction too? if so, call prepLinkForRequest!
+            pgb->setInTransit(true);
+            uint64_t destId = pgb->getDestId();
+            return createSignalRequest(destId, pTschLinkInfo->getSeqNum(destId), pgb->getContextPointer(), pgb->getPayloadSz());
+        }
+        default: EV_WARN << "Unknown self-message received - " << msg->getKind() << endl;
+    }
+
+    delete msg;
+    return NULL;
+}
+
 void Tsch6topSublayer::handleMessage(cMessage* msg) {
     Packet* response = NULL;
     tsch6topCtrlMsg* ctrl = NULL;
 
-    if (msg->isSelfMessage()) {
-        if (msg->getKind() == SF_START) {
-            EV_DETAIL << "Starting Scheduling Function at node " << pNodeId << std::endl;
+    response = msg->isSelfMessage() ? handleSelfMessage(msg) : handleExternalMessage(msg);
 
-            pTschSF->start();
-
-            delete msg;
-        }
-        if (msg->getKind() == PIGGYBACK_TIMEOUT) {
-            tsch6pPiggybackTimeoutMsg* piggy = dynamic_cast<tsch6pPiggybackTimeoutMsg*> (msg);
-            if (piggy) {
-                /* a piggybacking timeout has expired, send data stand-alone*/
-
-                if (!piggy->getInTransit()) {
-                    // TODO: let blacklist updates "accumulate" until they are sent off! otherwise a huge
-                    // TODO: is the SIGNAL a transaction too? if so, call prepLinkForRequest!
-
-                    piggy->setInTransit(true);
-                    uint64_t destId = piggy->getDestId();
-                    response = createSignalRequest(destId, pTschLinkInfo->getSeqNum(destId),
-                                                   piggy->getContextPointer(),
-                                                   piggy->getPayloadSz());
-                }
-            }
-        }
-    } else {
-        /* got message from the outside */
-        int arrivalGate = msg->getArrivalGateId();
-        if (arrivalGate == lowerControlIn)
-        {
-        } else if (arrivalGate == linkInfoControlIn) {
-            tschLinkInfoTimeoutMsg* tom = dynamic_cast<tschLinkInfoTimeoutMsg*> (msg);
-            if (tom) {
-                response = handleTransactionTimeout(tom);
-                delete msg;
-            }
-        } else if (arrivalGate == lowerLayerIn) {
-            auto pkt = dynamic_cast<Packet*> (msg);
-            if (pkt) {
-                response = handle6PMsg(pkt);
-                delete msg;
-            }
-        } else {
-            /* message is nothing we can work with */
-            EV_WARN << "received message through unexpected gate" << endl;
-            delete msg;
-        }
-    }
     if (response != NULL) {
         /* a response was created somewhere in the handling process, send it */
         sendMessageToRadio(response);
@@ -199,12 +202,14 @@ void Tsch6topSublayer::handleMessage(cMessage* msg) {
          /* record statistics */
         emit(s_6pMsgSent, 1);
     }
+
+    // TODO: Unreachable code, ctrl variable is unused, check whether bug
+    // or a part of older implementation
     if (ctrl != NULL) {
         // Updated to directly modify the schedule
         //sendControlDown(ctrl);
         updateSchedule(*ctrl);
     }
-
 }
 
 void Tsch6topSublayer::sendMessageToRadio(cMessage *msg) {
@@ -256,6 +261,11 @@ void Tsch6topSublayer::sendDeleteRequest(uint64_t destId, uint8_t cellOptions, i
 
     if (pTschLinkInfo->inTransaction(destId)) {
         EV_ERROR <<"Can't send DELETE request during open transaction" << endl;
+        return;
+    }
+
+    if (!cellList.size()) {
+        EV_WARN << "Received DELETE req with empty cellList" << endl;
         return;
     }
 
@@ -400,19 +410,17 @@ Packet* Tsch6topSublayer::handleRequestMsg(Packet* pkt, inet::IntrusivePtr<const
 
     uint8_t seqNum = hdr->getSeqNum();
     uint64_t sender = addresses->getSrcAddress().getInt();
-    tsch6pCmd_t commandType = (tsch6pCmd_t) hdr->getCode();
+    tsch6pCmd_t cmd = (tsch6pCmd_t) hdr->getCode();
 
-    // TODO: Check if this '+seqNum' shouldn't be the '++seqNum', there are at least 3 occurrences
-    // in this method and more in handleResponseMsg().
-    EV_DETAIL << "Node " << MacAddress(pNodeId) << " received MSG_REQUEST from "
-            << MacAddress(sender) << " with seq num " << +seqNum << " command type - " << commandType << endl;
+    EV_DETAIL << "Received MSG_REQUEST " << cmd << " from " << MacAddress(sender) << ", seqNum - " << +seqNum << endl;
 
-    if (commandType == CMD_CLEAR) {
-        /* we don't need to perform any of the (seqNum) checks. A CLEAR is
+    if (cmd == CMD_CLEAR) {
+        /* We don't need to perform any of the (seqNum) checks. A CLEAR is
            always valid. */
-        std::vector<cellLocation_t> empty = {};
-        pTschLinkInfo->setLastKnownCommand(sender, commandType);
-        pTschSF->handleResponse(sender, RC_SUCCESS, 0, empty);
+        pTschLinkInfo->setLastKnownCommand(sender, cmd);
+        // TODO: This is clearly wrong, why SF REPONSE handler should react
+        // to the REQUEST message, check whether this was really used anywhere
+//        pTschSF->handleResponse(sender, RC_SUCCESS, 0, {});
 
         /* "The Response Code to a 6P CLEAR command SHOULD be RC_SUCCESS unless
            the operation cannot be executed.  When the CLEAR operation cannot be
@@ -432,11 +440,11 @@ Packet* Tsch6topSublayer::handleRequestMsg(Packet* pkt, inet::IntrusivePtr<const
 
     /* TODO untangle the mess of checks following this, this was a quick fix */
     bool isDuplicate = seqNum != 0 && seqNum == pTschLinkInfo->getLastKnownSeqNum(sender)
-            && commandType == pTschLinkInfo->getLastKnownCommand(sender)
+            && cmd == pTschLinkInfo->getLastKnownCommand(sender)
             && MSG_REQUEST == pTschLinkInfo->getLastKnownType(sender)
             && pTschLinkInfo->getLastLinkOption(sender) == data->getCellOptions();
 
-    if (pTschLinkInfo->inTransaction(sender) && (commandType != CMD_SIGNAL) && !isDuplicate) {
+    if (pTschLinkInfo->inTransaction(sender) && cmd != CMD_SIGNAL && !isDuplicate) {
         /* as per the 6P standard, concurrent transactions are not allowed.
          * (but make sure you don't abort an ongoing transaction because initial request received twice) */
         EV_WARN <<"received new MSG_REQUEST during active transaction: ignoring request, sending RC_RESET with seqNum "
@@ -456,7 +464,7 @@ Packet* Tsch6topSublayer::handleRequestMsg(Packet* pkt, inet::IntrusivePtr<const
         return response;
     }
 
-    if (commandType == CMD_SIGNAL) {
+    if (cmd == CMD_SIGNAL) {
         /* SIGNALs currently don't behave like fully-fledged requests so
            we handle them separately*/
         auto pl = pkt->popAtBack<BytesChunk>(pkt->getDataLength(), Chunk::PF_ALLOW_NULLPTR);
@@ -472,16 +480,16 @@ Packet* Tsch6topSublayer::handleRequestMsg(Packet* pkt, inet::IntrusivePtr<const
         /* multiple cell options have been set. The draft doesn't specify how to
          handle this yet. :(*/
         // TODO. still handle piggybacked blacklist update?
-        EV_ERROR <<"Multiple CellOptions set!" << endl;
+        EV_ERROR << "Multiple CellOptions set!" << endl;
         return response;
     }
 
     if (pTschLinkInfo->inTransaction(sender)) {
-        EV_WARN <<"received new MSG_REQUEST during active transaction: ignoring request, sending RC_RESET (noticed late)" << endl;
+        EV_WARN << "Received new MSG_REQUEST during active transaction: ignoring request, sending RC_RESET (noticed late)" << endl;
         return createErrorResponse(sender, seqNum, RC_RESET, data->getTimeout());
     }
 
-    pTschLinkInfo->setLastKnownCommand(sender, commandType);
+    pTschLinkInfo->setLastKnownCommand(sender, cmd);
 
     simtime_t timeout = data->getTimeout();
     int numCells = data->getNumCells();
@@ -499,18 +507,18 @@ Packet* Tsch6topSublayer::handleRequestMsg(Packet* pkt, inet::IntrusivePtr<const
     if (!pTschLinkInfo->linkInfoExists(sender)) {
         /* We don't know this node yet, add link info for it */
         pTschLinkInfo->addLink(sender, true, timeout, seqNum);
-        pTschLinkInfo->setLastKnownCommand(sender, commandType);
+        pTschLinkInfo->setLastKnownCommand(sender, cmd);
     } else if (seqNum == 0) {
         /* node has been reset, clear all existing link information. */
         pTschLinkInfo->resetLink(sender, MSG_REQUEST);
         pTschLinkInfo->setInTransaction(sender, timeout);
-    } else {
+    } else
         pTschLinkInfo->setInTransaction(sender, timeout);
-    }
+
     pTschLinkInfo->setLastKnownType(sender, MSG_REQUEST);
 
     // TODO: Refactor this further/split into separate handler functions
-    switch (commandType) {
+    switch (cmd) {
         case CMD_ADD: {
             std::vector<cellLocation_t> cellList = data->getCellList();
             // TODO: do I need to copy this to make sure it doesn't go out of
@@ -570,8 +578,8 @@ Packet* Tsch6topSublayer::handleRequestMsg(Packet* pkt, inet::IntrusivePtr<const
             }
             else {
                 // in response to delete request send RC_SUCCESS with empty cell list
-                std::vector<cellLocation_t> emptyList = {};
-                response = createSuccessResponse(sender, seqNum, emptyList, data->getTimeout());
+//                std::vector<cellLocation_t> emptyList = {};
+                response = createSuccessResponse(sender, seqNum, cellList, data->getTimeout());
 
                 /* store potential change to our hopping sequence
                  * (activated if LL ACK arrives within this timeslot) */
@@ -628,7 +636,7 @@ Packet* Tsch6topSublayer::handleRequestMsg(Packet* pkt, inet::IntrusivePtr<const
             }
             break;
         }
-        default: EV_WARN << "Unknown 6P command received - " << commandType << endl;
+        default: EV_WARN << "Unknown 6P command received - " << cmd << endl;
     }
 
     return response;
@@ -676,12 +684,11 @@ Packet* Tsch6topSublayer::handleResponseMsg(Packet* pkt, inet::IntrusivePtr<cons
     }
 
     if (pTschLinkInfo->getLastKnownCommand(sender) == CMD_CLEAR) {
-        EV_DETAIL << "successful CMD_CLEAR" << endl;
+        EV_DETAIL << "Successful CMD_CLEAR" << endl;
         /* We interrupted an ongoing transaction or got a response to our CLEAR
           => don't need to perform any other checks
           (TODO: Do we still need to check seqNum though? Unclear in the draft!) */
-        std::vector<cellLocation_t> empty;
-        pTschSF->handleResponse(sender, RC_RESET, 0, empty);
+        pTschSF->handleResponse(sender, RC_RESET, 0, {});
 
         /* cancel any pending pattern update that we might have created */
         pendingPatternUpdates[sender]->setDestId(-1);
@@ -734,11 +741,7 @@ Packet* Tsch6topSublayer::handleResponseMsg(Packet* pkt, inet::IntrusivePtr<cons
                 pTschLinkInfo->addCells(sender, cellList, cellOption);
                 break;
             case CMD_DELETE:
-                if (cellList.size() > 0)
-                    pTschLinkInfo->deleteCells(sender, cellList, cellOption);
-                else
-                    pTschLinkInfo->clearCells(sender);
-
+                pTschLinkInfo->deleteCells(sender, cellList, cellOption);
                 break;
             case CMD_RELOCATE:
                 if (!cellList.size()) {
@@ -793,7 +796,7 @@ void Tsch6topSublayer::receiveSignal(cComponent *source, simsignal_t signalID, c
         return;
 
     auto pkt = dynamic_cast<Packet *>(value);
-    if (pkt == nullptr)
+    if (!pkt)
         return;
 
     // TODO This does not work, find a better solution to filter unwanted signals
@@ -814,7 +817,7 @@ void Tsch6topSublayer::receiveSignal(cComponent *source, simsignal_t signalID, c
 
     auto sixphdr = pkt->popAtFront<tsch::sixtisch::SixpHeader>();
 
-    if (((tsch6pMsg_t) sixphdr->getType()) == MSG_REQUEST)
+    if ( sixphdr && ((tsch6pMsg_t) sixphdr->getType()) == MSG_REQUEST )
         return;
 
     tsch6topCtrlMsg* result = NULL;
@@ -862,7 +865,7 @@ void Tsch6topSublayer::receiveSignal(cComponent *source, simsignal_t signalID, c
         // TODO: wenn reloc: cells in reloccellist aus ptschlinkinfo entfernen
         pTschLinkInfo->addCells(destId, cellsToAdd, cellOptions);
 
-        if (cellsToDelete.size() != 0)
+        if (cellsToDelete.size())
             pTschLinkInfo->deleteCells(destId, cellsToDelete, cellOptions);
 
         /* as far as we're considered, this transaction is complete now. */
@@ -1318,10 +1321,8 @@ uint8_t Tsch6topSublayer::prepLinkForRequest(uint64_t destId, simtime_t absolute
 }
 
 void Tsch6topSublayer::piggybackOnMessage(Packet* pkt, uint64_t destId) {
-    if (piggybackableData.find(destId) == piggybackableData.end()) {
-        EV_DETAIL << "No piggyback data found for " << MacAddress(destId) << endl;
+    if (piggybackableData.find(destId) == piggybackableData.end())
         return;
-    }
 
     auto pigbackData = piggybackableData[destId];
 

@@ -61,7 +61,7 @@ void TschMSF::initialize(int stage) {
     } else if (stage == 5) {
         interfaceModule = dynamic_cast<InterfaceTable *>(getParentModule()->getParentModule()->getParentModule()->getParentModule()->getSubmodule("interfaceTable", 0));
         pNodeId = interfaceModule->getInterface(1)->getMacAddress().getInt();
-        pSlotframeLen = getModuleByPath("^.^.schedule")->par("macSlotframeSize").intValue();
+        pSlotframeLength = getModuleByPath("^.^.schedule")->par("macSlotframeSize").intValue();
         pTsch6p = (Tsch6topSublayer*) getParentModule()->getSubmodule("sixtop");
         mac = check_and_cast<Ieee802154eMac*>(getModuleByPath("^.^.mac")); // TODO this is very ugly
         mac->subscribe(POST_MODEL_CHANGE, this);
@@ -73,7 +73,7 @@ void TschMSF::initialize(int stage) {
 
         /** Schedule minimal cells for broadcast control traffic [RFC8180, 4.1] */
         scheduleMinimalCells();
-        /** And auto RX cell for communication with neighbors [IETF MSF draft, 3]*/
+        /** And auto RX cell for communication with neighbors [IETF MSF draft, 3] */
         scheduleAutoRxCell(interfaceModule->getInterface(1)->getMacAddress().formInterfaceIdentifier());
 
         auto rpl = hostNode->getSubmodule("rpl");
@@ -100,7 +100,7 @@ void TschMSF::scheduleAutoRxCell(InterfaceToken euiAddr) {
     std::vector<cellLocation_t> cellList;
 //    cellList.push_back({autoRxCellslotOffset, autoRxCellchanOffset});
 
-    cellList.push_back({euiAddr.low() % pSlotframeLen, euiAddr.low() % pNumChannels}); // heuristics
+    cellList.push_back({euiAddr.low() % pSlotframeLength, euiAddr.low() % pNumChannels}); // heuristics
     ctrlMsg->setNewCells(cellList);
     EV_DETAIL << "Scheduling auto RX cell at " << cellList << endl;
     pTsch6p->updateSchedule(*ctrlMsg);
@@ -126,35 +126,35 @@ void TschMSF::start() {
     scheduleAt(simTime() + SimTime(par("startTime").doubleValue()), msg);
 }
 
-void TschMSF::printCellUsage(std::string neighborMac, double usage) {
+std::string TschMSF::printCellUsage(std::string neighborMac, double usage) {
     std::string usageInfo = std::string(" Usage to/from neighbor ") + neighborMac
             + std::string(usage >= pLimNumCellsUsedHigh ? " exceeds upper" : "")
             + std::string(usage <= pLimNumCellsUsedLow ? " below lower" : "")
             + std::string((usage < pLimNumCellsUsedHigh && usage > pLimNumCellsUsedLow) ? " within" : "")
             + std::string(" limit with ") + std::to_string(usage);
 
-    EV_DETAIL << usageInfo << endl;
+    return usageInfo;
 //    std::cout << pNodeId << usageInfo << endl;
 }
 
 void TschMSF::handleMaxCellsReached(cMessage* msg) {
-    EV_DETAIL << "MAX_NUM_CELLS reached, assessing cell usage: " << endl;
     auto neighborMac = (MacAddress*) msg->getContextPointer();
     auto neighbor = neighborMac->getInt();
+
+    EV_DETAIL << "MAX_NUM_CELLS reached, assessing cell usage:" << endl;
 
     // we might get a notification from our own mac
     if (neighbor == pNodeId)
         return;
 
-    double usage = (double) nbrStatistic[neighbor].NumCellsUsed
-            / nbrStatistic[neighbor].NumCellsElapsed;
+    double usage = (double) nbrStatistic[neighbor].NumCellsUsed / nbrStatistic[neighbor].NumCellsElapsed;
+
+    EV_DETAIL << printCellUsage(neighborMac->str(), usage) << endl;
 
     if (usage >= pLimNumCellsUsedHigh)
         addCells(neighbor, par("cellBandwidthIncrement").intValue());
     if (usage <= pLimNumCellsUsedLow && par("allowCellRemoval").boolValue())
         deleteCells(neighbor, 1);
-
-    printCellUsage(neighborMac->str(), usage);
 
     // reset values
     nbrStatistic[neighbor].NumCellsUsed = 0; //intrand(pMaxNumCells >> 1);
@@ -281,8 +281,10 @@ void TschMSF::relocateTxCells(cellVector cells) {
 void TschMSF::handleMessage(cMessage* msg) {
     Enter_Method_Silent();
 
-    if (!msg->isSelfMessage())
+    if (!msg->isSelfMessage()) {
+        delete msg;
         return;
+    }
 
     switch (msg->getKind()) {
         case REACHED_MAXNUMCELLS: {
@@ -299,11 +301,11 @@ void TschMSF::handleMessage(cMessage* msg) {
         }
         case SCHEDULE_AUTO_TX: {
             if (!rplParentId) {
-                EV_WARN << "Parent MAC undefined" << endl;
+                EV_WARN << "Parent MAC unknown" << endl;
                 break;
             }
             if (!unicastParentCellScheduled) {
-                EV_DETAIL << "Retrying scheduling dedicated TX cells with preferred parent" << endl;
+                EV_DETAIL << "Retrying scheduling dedicated TX cell(s) with preferred parent" << endl;
                 int numCellsRequired = ((MsfControlInfo *) msg->getControlInfo())->getNumDedicatedCells();
                 addCells(rplParentId, numCellsRequired);
             }
@@ -362,7 +364,7 @@ void TschMSF::scheduleAutoCell(uint64_t neighbor) {
     std::vector<cellLocation_t> cellList;
 //    cellList.push_back({1 + saxHash(pSlotframeLen - 1, neighborIntfIdent), saxHash(16, neighborIntfIdent)});
 
-    cellList.push_back({nbruid % pSlotframeLen, nbruid % pNumChannels});
+    cellList.push_back({nbruid % pSlotframeLength, nbruid % pNumChannels});
     ctrlMsg->setNewCells(cellList);
 
     EV_DETAIL << "Scheduling auto TX cell at " << cellList << " to neighbor - " << MacAddress(neighbor) << endl;
@@ -376,19 +378,21 @@ void TschMSF::scheduleAutoCell(uint64_t neighbor) {
 void TschMSF::scheduleMinimalCells() {
     EV_DETAIL << "Scheduling minimal cells for broadcast messages: " << endl;
     auto ctrlMsg = new tsch6topCtrlMsg();
-    auto macBroadcast = 0xFFFFFFFFFFFF;
+    auto macBroadcast = inet::MacAddress::BROADCAST_ADDRESS.getInt();
     ctrlMsg->setDestId(macBroadcast);
     auto cellOpts = MAC_LINKOPTIONS_TX | MAC_LINKOPTIONS_RX | MAC_LINKOPTIONS_SHARED;
     ctrlMsg->setCellOptions(cellOpts);
 
     std::vector<cellLocation_t> cellList = {};
-    for (offset_t i = 0; i < pNumMinimalCells + 1; i++)
+    for (offset_t i = 0; i < pNumMinimalCells; i++)
         cellList.push_back({i, 0});
 
     ctrlMsg->setNewCells(cellList);
     pTschLinkInfo->addLink(macBroadcast, false, 0, 0);
     for (auto cell : cellList)
         pTschLinkInfo->addCell(macBroadcast, cell, cellOpts);
+
+    EV_DETAIL << cellList << endl;
 
     pTsch6p->updateSchedule(*ctrlMsg);
     delete ctrlMsg;
@@ -403,7 +407,7 @@ void TschMSF::removeAutoTxCell(uint64_t neighbor) {
             cellList.push_back(std::get<0>(cell));
 
     if (cellList.size()) {
-        EV_DETAIL << "Removing auto TX cell to neighbor - " << MacAddress(neighbor) << endl;
+        EV_DETAIL << "Removing auto TX cell " << cellList << " to neighbor " << MacAddress(neighbor) << endl;
         auto ctrlMsg = new tsch6topCtrlMsg();
         ctrlMsg->setDestId(neighbor);
         pTschLinkInfo->deleteCells(neighbor, cellList, MAC_LINKOPTIONS_TX | MAC_LINKOPTIONS_SHARED | MAC_LINKOPTIONS_SRCAUTO);
@@ -419,7 +423,7 @@ tsch6pSFID_t TschMSF::getSFID() {
 }
 
 bool TschMSF::checkValidSlotRangeBounds(uint16_t start, uint16_t end) {
-    return !(start > pSlotframeLen || end > pSlotframeLen || end <= start);
+    return !(start > pSlotframeLength || end > pSlotframeLength || end <= start);
 }
 
 std::vector<offset_t> TschMSF::pickSlotOffsets(std::vector<offset_t> availableSlots, int numRequested) {
@@ -465,7 +469,7 @@ int TschMSF::createCellList(uint64_t destId, std::vector<cellLocation_t> &cellLi
     Enter_Method_Silent();
 
     if (cellList.size()) {
-        EV_WARN << "cellList should be an empty vector" << endl;
+        EV_WARN << "CellList should be an empty vector, aborting" << endl;
         return -EINVAL;
     }
 
@@ -676,7 +680,7 @@ void TschMSF::handleResponse(uint64_t sender, tsch6pReturn_t code, int numCells,
             clearCellStats(cellList);
             clearScheduleWithNode(sender);
             handleFailedTransaction(sender, lastKnownCmd);
-            // no break here is intentional!
+            break;
         }
         // Handle all other return codes (RC_ERROR, RC_VERSION, RC_SFID, ...) as error
         default: {
@@ -691,7 +695,7 @@ void TschMSF::handleResponse(uint64_t sender, tsch6pReturn_t code, int numCells,
 void TschMSF::handleInconsistency(uint64_t destId, uint8_t seqNum) {
     Enter_Method_Silent();
     EV_WARN << "Inconsistency detected" << endl;
-    /*free reserved cells already to avoid race conditions*/
+    /* Free already reserved cells to avoid race conditions */
     reservedTimeOffsets[destId].clear();
 
     pTsch6p->sendClearRequest(destId, pTimeout);
@@ -744,30 +748,38 @@ void TschMSF::addCells(uint64_t nodeId, int numCells) {
 
 void TschMSF::deleteCells(uint64_t nodeId, int numCells) {
     auto schedule = check_and_cast<TschSlotframe*>(getModuleByPath("^.^.schedule"));
-    auto neighbLinks = schedule->allTxLinks(MacAddress(nodeId));
+    std::vector<cellLocation_t> cellList = {};
+    std::vector<cellLocation_t> deletable = {};
 
-    if (!neighbLinks.size()) {
+    // Retrieve list of all links scheduled to neighbor
+    auto neighbLinks = pTschLinkInfo->getCells(nodeId);
+
+    // Filter only dedicated TX links
+    for (auto link : neighbLinks)
+        if (!getCellOptions_isAUTO(std::get<1>(link)) && getCellOptions_isTX(std::get<1>(link)))
+            cellList.push_back(std::get<0>(link));
+
+    if (!cellList.size()) {
         EV_WARN << "Got request to delete " << numCells << " cell(s) to "
-                << MacAddress(nodeId) << "but no dedicated TX cells found" << endl;
+                << MacAddress(nodeId) << " but no dedicated TX cells found" << endl;
         return;
     }
 
     // do not delete last dedicated link/cell, as it may seriously impede connectivity
-    if (neighbLinks.size() < 2)
+    if (cellList.size() < 2)
         return;
 
-    std::vector<cellLocation_t> cellList = {};
-
-    if (neighbLinks.size() - numCells < 1) {
-        EV_WARN << "Requested to delete more cells than available" << endl;
+    if (cellList.size() - numCells < 1) {
+        EV_WARN << "Requested to delete more cells than possible" << endl;
         return;
     }
 
+    // Pick only required amount of cells for deletion
     for (auto i = 0; i < numCells; i++)
-        cellList.push_back({(offset_t) neighbLinks[i]->getSlotOffset(), (offset_t) neighbLinks[i]->getChannelOffset()});
+        deletable.push_back(cellList[i]);
 
-    EV_DETAIL << "Cells chosen for deletion: " << cellList << endl;
-    pTsch6p->sendDeleteRequest(nodeId, MAC_LINKOPTIONS_TX, numCells, cellList, pTimeout);
+    EV_DETAIL << "Cells chosen for deletion: " << deletable << endl;
+    pTsch6p->sendDeleteRequest(nodeId, MAC_LINKOPTIONS_TX, numCells, deletable, pTimeout);
 }
 
 bool TschMSF::timeOffsetReserved(offset_t timeOffset) {
@@ -934,16 +946,17 @@ void TschMSF::updateNeighborStats(uint64_t neighbor, std::string statType) {
 
     if (statType == "nbSlot") {
         nbrStatistic[neighbor].NumCellsElapsed++;
-        EV_DETAIL << "NumCellsElapsed++ for " << MacAddress(neighbor) << " now at " << +(nbrStatistic[neighbor].NumCellsElapsed) << endl;
+        EV_DETAIL << "NumCellsElapsed for " << MacAddress(neighbor) << " now at " << +(nbrStatistic[neighbor].NumCellsElapsed) << endl;
     } else if (statType == "nbTxFrames") {
         nbrStatistic[neighbor].NumCellsUsed++;
-        EV_DETAIL << "NumCellsUsed++ for " << MacAddress(neighbor) << " now at " << +(nbrStatistic[neighbor].NumCellsUsed) << endl;
-        if (nbrStatistic[neighbor].NumCellsUsed >= pMaxNumCells) {
-            cMessage* selfMsg = new cMessage();
-            selfMsg->setKind(REACHED_MAXNUMCELLS);
-            selfMsg->setContextPointer(new MacAddress(neighbor));
-            scheduleAt(simTime(), selfMsg);
-        }
+        EV_DETAIL << "NumCellsUsed for " << MacAddress(neighbor) << " now at " << +(nbrStatistic[neighbor].NumCellsUsed) << endl;
+    }
+
+    if (nbrStatistic[neighbor].NumCellsElapsed >= pMaxNumCells) {
+        cMessage* selfMsg = new cMessage();
+        selfMsg->setKind(REACHED_MAXNUMCELLS);
+        selfMsg->setContextPointer(new MacAddress(neighbor));
+        scheduleAt(simTime(), selfMsg);
     }
 }
 

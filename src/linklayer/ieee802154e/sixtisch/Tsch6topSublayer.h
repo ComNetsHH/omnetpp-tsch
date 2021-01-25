@@ -67,15 +67,18 @@ public:
     virtual void initialize(int) override;
 
     /**
-     * @brief Handle messages containing 6top Data that are sent over from
+     * @brief Handle messages containing 6top data that are sent over from
      *        the MAC layer.
      *        If @p msg is a Tsch6pPacket, handle it according to
      *        the 6P specifications. If it is a tschLinkInfoTimeoutMsg, handle
-     *        the timeout it symbolizes.
+     *        the respective timeout.
      *
      * @param msg          The message to be handled
      */
     virtual void handleMessage(cMessage* msg) override;
+
+    virtual Packet* handleSelfMessage(cMessage* msg);
+    virtual Packet* handleExternalMessage(cMessage* msg);
 
     /**
      * @brief Send a 6P Add request.
