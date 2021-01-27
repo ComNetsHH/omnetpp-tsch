@@ -152,6 +152,11 @@ public:
     cellVector getCells(uint64_t nodeId);
 
     /**
+     * @return all dedicated (non-shared, non-auto) TX cells scheduled for the link with @p nodeId.
+     */
+    std::vector<cellLocation_t> getDedicatedTxCells(uint64_t nodeId);
+
+    /**
      * @return the associated cell options or 0xFF
      */
     uint8_t getCellOptions(uint64_t nodeId, cellLocation_t candidate);

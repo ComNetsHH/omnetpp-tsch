@@ -53,6 +53,7 @@ void TschMSF::initialize(int stage) {
         pLimNumCellsUsedHigh = par("upperCellUsageLimit");
         pLimNumCellsUsedLow = par("lowerCellUsageLimit");
         pRelocatePdrThres = par("RELOCATE_PDRTHRES");
+        pCellListRedundancy = par("cellListRedundancy").intValue();
         pNumMinimalCells = par("numMinCells").intValue();
         disable = par("disable").boolValue();
         internalEvent = new cMessage("SF internal event", UNDEFINED);
@@ -139,26 +140,29 @@ std::string TschMSF::printCellUsage(std::string neighborMac, double usage) {
 
 void TschMSF::handleMaxCellsReached(cMessage* msg) {
     auto neighborMac = (MacAddress*) msg->getContextPointer();
-    auto neighbor = neighborMac->getInt();
+    auto neighborId = neighborMac->getInt();
+
+    // we might get a notification from our own mac
+    if (neighborId == pNodeId)
+        return;
 
     EV_DETAIL << "MAX_NUM_CELLS reached, assessing cell usage:" << endl;
 
-    // we might get a notification from our own mac
-    if (neighbor == pNodeId)
-        return;
+    EV_DETAIL << "Currently scheduled cells with PP: " << pTschLinkInfo->getCells(rplParentId)
+            << "\nfrom them dedicated TX: " << pTschLinkInfo->getDedicatedTxCells(rplParentId) << endl;
 
-    double usage = (double) nbrStatistic[neighbor].NumCellsUsed / nbrStatistic[neighbor].NumCellsElapsed;
+    double usage = (double) nbrStatistic[neighborId].NumCellsUsed / nbrStatistic[neighborId].NumCellsElapsed;
 
     EV_DETAIL << printCellUsage(neighborMac->str(), usage) << endl;
 
     if (usage >= pLimNumCellsUsedHigh)
-        addCells(neighbor, par("cellBandwidthIncrement").intValue());
+        addCells(neighborId, par("cellBandwidthIncrement").intValue());
     if (usage <= pLimNumCellsUsedLow && par("allowCellRemoval").boolValue())
-        deleteCells(neighbor, 1);
+        deleteCells(neighborId, 1);
 
     // reset values
-    nbrStatistic[neighbor].NumCellsUsed = 0; //intrand(pMaxNumCells >> 1);
-    nbrStatistic[neighbor].NumCellsElapsed = 0;
+    nbrStatistic[neighborId].NumCellsUsed = 0; //intrand(pMaxNumCells >> 1);
+    nbrStatistic[neighborId].NumCellsElapsed = 0;
 
     delete neighborMac;
 }
@@ -180,6 +184,21 @@ void TschMSF::handleDoStart(cMessage* msg) {
         scheduleAutoCell(neighbor);
         initialScheduleComplete[neighbor] = true;
     }
+
+    /** Additional manual scheduling to test mobility scenario */
+    std::vector<std::string> manualNeighbrs = {"0A-AA-00-00-00-02", "0A-AA-00-00-00-01"};
+
+    EV_DETAIL << "This node's MAC - " << MacAddress(pNodeId) << endl;
+
+    if (MacAddress(std::string("0A-AA-00-00-00-05").c_str()).getInt() != pNodeId)
+        return;
+
+    for (auto macStr : manualNeighbrs) {
+        auto neighbrId = MacAddress(macStr.c_str()).getInt();
+        scheduleAutoCell(neighbrId);
+        initialScheduleComplete[neighbrId] = true;
+    }
+
 }
 
 void TschMSF::handleHouskeeping(cMessage* msg) {
@@ -305,8 +324,8 @@ void TschMSF::handleMessage(cMessage* msg) {
                 break;
             }
             if (!unicastParentCellScheduled) {
-                EV_DETAIL << "Retrying scheduling dedicated TX cell(s) with preferred parent" << endl;
                 int numCellsRequired = ((MsfControlInfo *) msg->getControlInfo())->getNumDedicatedCells();
+                EV_DETAIL << "Retrying scheduling " << numCellsRequired << " dedicated TX cell(s) with preferred parent" << endl;
                 addCells(rplParentId, numCellsRequired);
             }
 
@@ -717,7 +736,7 @@ uint64_t TschMSF::checkInTransaction() {
 
 void TschMSF::retrySchedulingDedicatedCells(int numCells) {
     auto timeout = simTime() + uniform(1, 1.5) * pTimeout;
-    EV_DETAIL << "Dedicated cell still not scheduled, next attempt at " << timeout << " s" << endl;
+    EV_DETAIL << "Dedicated cell(s) still not scheduled, next attempt at " << timeout << " s" << endl;
     auto ci = new MsfControlInfo();
     ci->setNumDedicatedCells(numCells);
     auto timeoutMsg = new cMessage("", SCHEDULE_AUTO_TX);
@@ -738,12 +757,12 @@ void TschMSF::addCells(uint64_t nodeId, int numCells) {
     }
 
     std::vector<cellLocation_t> cellList = {};
+    createCellList(nodeId, cellList, numCells + pCellListRedundancy);
 
-    createCellList(nodeId, cellList, numCells);
     if (!cellList.size())
         EV_DETAIL << "No cells could be added to cell list, aborting 6P ADD" << endl;
     else
-        pTsch6p->sendAddRequest(nodeId, MAC_LINKOPTIONS_TX, cellList.size(), cellList, pTimeout);
+        pTsch6p->sendAddRequest(nodeId, MAC_LINKOPTIONS_TX, numCells, cellList, pTimeout);
 }
 
 void TschMSF::deleteCells(uint64_t nodeId, int numCells) {
@@ -846,21 +865,42 @@ void TschMSF::handleDodagJoinedSignal(uint64_t parentId) {
 
 void TschMSF::handleParentChangedSignal(uint64_t newParentId) {
     EV_DETAIL << "RPL parent changed to " << MacAddress(newParentId) << endl;
+
+    auto currentCells = pTschLinkInfo->getDedicatedTxCells(rplParentId);
+    EV_DETAIL << "Dedicated TX cells currently scheduled with PP: " << currentCells << endl;
+
+    /** Upon first joining the DODAG RPL emits two signals: 'joinedDodag' and 'parentChanged'.
+     * MSF reacts on the first one and has to discard the other in order not to disrupt the joining process.
+     * To decide whether to skip processing of this signal we check whether there are already dedicated TX cells
+     * scheduled with RPL parent, which would be a clear indication of 'joined and synchronized' status
+     */
+    if (!pTschLinkInfo->getDedicatedTxCells(rplParentId).size()) {
+        EV_DETAIL << "Seems like we just joined a new DODAG and are in the joining process, "
+                << "skipping this signal for now" << endl;
+        return;
+    }
+
+    if (!unicastParentCellScheduled) {
+        EV_DETAIL << "Seems like previous parent migration was not finished, aborting it, last known cmd - "
+                << pTschLinkInfo->getLastKnownCommand(rplParentId) << endl;
+//        pTschLinkInfo->abortTransaction(rplParentId);
+    }
+
     rplFormerParentId = rplParentId;
     rplParentId = newParentId;
 
-    /** Get number of dedicated TX cells scheduled with former RPL parent */
-    auto numScheduledCells = pTschLinkInfo->getCells(rplFormerParentId).size();
+    /** Get number of dedicated TX cells scheduled with now former RPL parent */
+    auto numScheduledCells = pTschLinkInfo->getDedicatedTxCells(rplFormerParentId).size();
 
-    EV_DETAIL << "Dedicated cells found - " << numScheduledCells << endl;
+    EV_DETAIL << numScheduledCells << " dedicated cells found" << endl;
 
     unicastParentCellScheduled = false;
 
     /** and schedule the same amount with the new parent */
     addCells(rplParentId, numScheduledCells);
 
-//    /** Clear these cells from former parent's schedule */
-//    pTsch6p->sendClearRequest(rplFormerParentId, pTimeout);
+    /** Clear these cells from former parent's schedule */
+    pTsch6p->sendClearRequest(rplFormerParentId, pTimeout);
 }
 
 void TschMSF::receiveSignal(cComponent *src, simsignal_t id, long value, cObject *details)

@@ -182,6 +182,20 @@ cellVector TschLinkInfo::getCells(uint64_t nodeId) {
     return cv;
 }
 
+std::vector<cellLocation_t> TschLinkInfo::getDedicatedTxCells(uint64_t nodeId) {
+    std::vector<cellLocation_t> res = {};
+
+    for (auto link : linkInfo[nodeId].scheduledCells) {
+        auto cellOp = std::get<1>(link);
+        if (getCellOptions_isTX(cellOp) && !getCellOptions_isAUTO(cellOp) && !getCellOptions_isSHARED(cellOp))
+            res.push_back(std::get<0>(link));
+    }
+
+    return res;
+}
+
+
+
 uint8_t TschLinkInfo::getCellOptions(uint64_t nodeId, cellLocation_t candidate) {
     Enter_Method_Silent();
 
@@ -213,13 +227,16 @@ int TschLinkInfo::getNumCells(uint64_t nodeId) {
 
 uint64_t TschLinkInfo::getNodeOfCell(cellLocation_t candidate) {
     /* loop through all links */
-    for(auto & info: linkInfo) {
+    for (auto & info: linkInfo) {
+
         auto it = std::find_if(info.second.scheduledCells.begin(), info.second.scheduledCells.end(),
-                       [candidate](const std::tuple<cellLocation_t, uint8_t> & t) -> bool {
-                         return std::get<0>(t) == candidate; });
-        if (it != info.second.scheduledCells.end()) {
+               [candidate](const std::tuple<cellLocation_t, uint8_t> & t) -> bool {
+                 return std::get<0>(t) == candidate;
+            }
+        );
+
+        if (it != info.second.scheduledCells.end())
             return info.first;
-        }
     }
 
     return 0;
@@ -227,19 +244,42 @@ uint64_t TschLinkInfo::getNodeOfCell(cellLocation_t candidate) {
 
 void TschLinkInfo::clearCells(uint64_t nodeId) {
     Enter_Method_Silent();
+
+    if (!linkInfoExists(nodeId)) {
+        EV_WARN << "Instructed to clear but no linkInfo exists" << endl;
+        return;
+    }
+
     EV_INFO << "Clearing cells scheduled with " << inet::MacAddress(nodeId) << endl;
 
-    if (linkInfoExists(nodeId))
-        linkInfo[nodeId].scheduledCells.erase(
-            std::remove_if( linkInfo[nodeId].scheduledCells.begin(), linkInfo[nodeId].scheduledCells.end(),
-                [] (decltype(linkInfo[nodeId].scheduledCells)::value_type link) -> bool {
-                    return !getCellOptions_isAUTO(std::get<1>(link));
-                }
-            ),
-            linkInfo[nodeId].scheduledCells.end()
-        );
-    else
-        EV_WARN << "Instructed to clear but no linkInfo exists" << endl;
+//    cellVector deletable;
+//
+//    for (auto link : linkInfo[nodeId].scheduledCells) {
+//        auto opts = std::get<1>(link);
+//        auto cell = std::get<0>(link);
+//
+//        if (!getCellOptions_isAUTO(opts))
+//            deletable.push_back(link);
+//    }
+
+//    EV_DETAIL << "Deleting links:" << endl;
+//
+//    for (auto linkToDel : deletable) {
+//        EV_DETAIL << std::get<0>(linkToDel) << endl;
+//        std::remove(linkInfo[nodeId].scheduledCells.begin(), linkInfo[nodeId].scheduledCells.end(), linkToDel);
+//    }
+//
+//    return;
+
+    linkInfo[nodeId].scheduledCells.erase(
+        std::remove_if( linkInfo[nodeId].scheduledCells.begin(), linkInfo[nodeId].scheduledCells.end(),
+            [] (decltype(linkInfo[nodeId].scheduledCells)::value_type link) -> bool {
+                return !getCellOptions_isAUTO(std::get<1>(link));
+            }
+        ),
+        linkInfo[nodeId].scheduledCells.end()
+    );
+
 }
 
 void TschLinkInfo::deleteCells(uint64_t nodeId, const std::vector<cellLocation_t> &cellList, uint8_t linkOption) {

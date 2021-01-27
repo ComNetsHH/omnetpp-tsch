@@ -385,18 +385,8 @@ Packet* Tsch6topSublayer::handle6PMsg(Packet* pkt) {
         /* packet is for us and valid, handle it */
         tsch6pMsg_t msgType = (tsch6pMsg_t) hdr->getType();
 
-        switch (msgType) {
-            case MSG_REQUEST: {
-                response = handleRequestMsg(pkt, hdr, data);
-                break;
-            }
-            case MSG_RESPONSE: {
-                response = handleResponseMsg(pkt, hdr, data);
-                break;
-            }
-            default:
-                EV_WARN << "Unknown 6P message type" << endl;
-        }
+        response = msgType == MSG_REQUEST ? handleRequestMsg(pkt, hdr, data)
+                : msgType == MSG_RESPONSE ? handleResponseMsg(pkt, hdr, data) : NULL;
     }
 
     return response;
@@ -418,6 +408,17 @@ Packet* Tsch6topSublayer::handleRequestMsg(Packet* pkt, inet::IntrusivePtr<const
         /* We don't need to perform any of the (seqNum) checks. A CLEAR is
            always valid. */
         pTschLinkInfo->setLastKnownCommand(sender, cmd);
+        pTschLinkInfo->clearCells(sender); // TODO: for some reason doesn't remove simple RX cells from the schedule object
+//        auto links = pTschLinkInfo->getCells(sender);
+//        std::vector<cellLocation_t> cells;
+//        for (auto l : links)
+//            if (!getCellOptions_isAUTO(std::get<1>(l)))
+//                cells.push_back(std::get<0>(l));
+//
+//        auto ctrlMsg = new tsch6topCtrlMsg();
+//        updateSchedule(*(setCtrlMsg_PatternUpdate(ctrlMsg, sender, MAC_LINKOPTIONS_RX | MAC_LINKOPTIONS_TX, {},
+//                cells, data->getTimeout())));
+
         // TODO: This is clearly wrong, why SF REPONSE handler should react
         // to the REQUEST message, check whether this was really used anywhere
 //        pTschSF->handleResponse(sender, RC_SUCCESS, 0, {});
@@ -539,8 +540,8 @@ Packet* Tsch6topSublayer::handleRequestMsg(Packet* pkt, inet::IntrusivePtr<const
                     /* no suitable cell(s) available. Send an (empty) success response
                        anyway, as mandated by the standard */
                     EV_WARN <<"No suitable cell(s) found" << endl;
-                    std::vector<cellLocation_t> emptyList = {};
-                    response = createSuccessResponse(sender, seqNum, emptyList, data->getTimeout());
+                    std::vector<cellLocation_t> empty = {};
+                    response = createSuccessResponse(sender, seqNum, empty, data->getTimeout());
                     break;
                 }
                 case 0:
@@ -577,7 +578,8 @@ Packet* Tsch6topSublayer::handleRequestMsg(Packet* pkt, inet::IntrusivePtr<const
                 response = createErrorResponse(sender, seqNum, RC_CELLLIST, data->getTimeout());
             }
             else {
-                // in response to delete request send RC_SUCCESS with empty cell list
+                // in response to delete request send RC_SUCCESS with empty cell list,
+                // TODO: figure out how and when node sending DELETE request clears ITS local schedule
 //                std::vector<cellLocation_t> emptyList = {};
                 response = createSuccessResponse(sender, seqNum, cellList, data->getTimeout());
 
@@ -642,8 +644,11 @@ Packet* Tsch6topSublayer::handleRequestMsg(Packet* pkt, inet::IntrusivePtr<const
     return response;
 }
 
-Packet* Tsch6topSublayer::handleResponseMsg(Packet* pkt, inet::IntrusivePtr<const tsch::sixtisch::SixpHeader>& hdr, inet::IntrusivePtr<const tsch::sixtisch::SixpData>& data) {
-    //TODO: Does this response does anything at all?
+
+// TODO: refactor this to be more modular
+Packet* Tsch6topSublayer::handleResponseMsg(Packet* pkt, inet::IntrusivePtr<const tsch::sixtisch::SixpHeader>& hdr,
+        inet::IntrusivePtr<const tsch::sixtisch::SixpData>& data)
+{
     Packet* response = NULL;
 
     auto addresses = pkt->getTag<MacAddressInd>();
@@ -695,7 +700,8 @@ Packet* Tsch6topSublayer::handleResponseMsg(Packet* pkt, inet::IntrusivePtr<cons
         return response;
     }
 
-    if (seqNum == pTschLinkInfo->getLastKnownSeqNum(sender) && MSG_RESPONSE == pTschLinkInfo->getLastKnownType(sender)) {
+    if (seqNum == pTschLinkInfo->getLastKnownSeqNum(sender) && MSG_RESPONSE == pTschLinkInfo->getLastKnownType(sender))
+    {
         /* pkt is duplicate, ignore */
         EV_DETAIL << "Received duplicate response, ignoring" << endl;
         return response;
@@ -767,7 +773,7 @@ Packet* Tsch6topSublayer::handleResponseMsg(Packet* pkt, inet::IntrusivePtr<cons
         // TODO: Change to directly update TschSlotframe instead of using msg
         tsch6topCtrlMsg *msg = new tsch6topCtrlMsg();
         if (command == CMD_DELETE)
-            setCtrlMsg_PatternUpdate(msg, sender, cellOption, {}, cellList,data->getTimeout());
+            setCtrlMsg_PatternUpdate(msg, sender, cellOption, {}, cellList, data->getTimeout());
         else
             setCtrlMsg_PatternUpdate(msg, sender, cellOption, cellList, deleteCells,data->getTimeout());
 
@@ -1081,7 +1087,8 @@ Packet* Tsch6topSublayer::createSignalRequest(uint64_t destId, uint8_t seqNum,
 
 Packet* Tsch6topSublayer::createSuccessResponse(uint64_t destId, uint8_t seqNum,
                                         std::vector<cellLocation_t> &cellList,
-                                        simtime_t timeout) {
+                                        simtime_t timeout)
+{
     int cellListSz = cellHdrSz * cellList.size();
 
     const auto& sixpHeader = makeShared<tsch::sixtisch::SixpHeader>();
@@ -1215,6 +1222,11 @@ tsch6topCtrlMsg* Tsch6topSublayer::setCtrlMsg_PatternUpdate(
                             std::vector<cellLocation_t> deleteCells,
                             simtime_t timeout)
 {
+    // TODO: Check if such nullptr handling is really appropriate here or expection should be thrown,
+    // introduced this during MSF mobility handling debug
+    if (!msg)
+        msg = new tsch6topCtrlMsg();
+
     msg->setKind(CTRLMSG_PATTERNUPDATE);
     msg->setDestId(destId);
     msg->setCellOptions(cellOption);

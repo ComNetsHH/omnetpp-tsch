@@ -216,6 +216,7 @@ private:
     cMessage *internalEvent;
 
     int pSlotframeLength;
+    int pCellListRedundancy;
     int pNumChannels;
     offset_t pNumMinimalCells; // number of minimal cells being scheduled for ICMPv6, RPL broadcast messages
 
