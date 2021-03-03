@@ -19,8 +19,8 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-#ifndef __WAIC_TSCHMSF2_H_
-#define __WAIC_TSCHMSF2_H_
+#ifndef __WAIC_TSCHCLSF2_H_
+#define __WAIC_TSCHCLSF2_H_
 
 #include <omnetpp.h>
 
@@ -30,15 +30,69 @@
 #include "inet/networklayer/common/InterfaceTable.h"
 
 
-class TschMSF: public TschSF, public cListener {
+class TschCLSF: public TschSF, public cListener {
 
-  public:
+public:
+
+    class ClsfControlInfo : public cObject {
+        public:
+            uint64_t reservedDestId;
+            uint8_t cellOptions;
+
+            ClsfControlInfo() {
+                this->rtxCtn = 0;
+            };
+            ClsfControlInfo(uint64_t nodeId) {
+                this->reservedDestId = nodeId;
+                this->rtxCtn = 0;
+            }
+
+            uint64_t getNodeId() { return this->reservedDestId; }
+            void setNodeId(uint64_t nodeId) { this->reservedDestId = nodeId; }
+
+            uint64_t getCellOptions() { return this->cellOptions; }
+            void setCellOptions(uint8_t cellOptions) { this->cellOptions = cellOptions; }
+
+            int getNumCells() { return this->numCells; }
+            void setNumCells(int numDedicated) { this->numCells = numDedicated; }
+
+            tsch6pCmd_t get6pCmd() { return this->cmd; }
+            void set6pCmd (tsch6pCmd_t cmd) { this->cmd = cmd; }
+
+            int getRtxCtn() { return this->rtxCtn; }
+            void setRtxCtn (int rtxCtn) { this->rtxCtn = rtxCtn; }
+
+            int incRtxCtn() { this->rtxCtn++; return this->rtxCtn; }
+
+            ClsfControlInfo* dup() {
+                auto copy = new ClsfControlInfo();
+                copy->set6pCmd(this->get6pCmd());
+                copy->setCellOptions(this->getCellOptions());
+                copy->setNumCells(this->getNumCells());
+                copy->setNodeId(this->getNodeId());
+                copy->setRtxCtn(this->getRtxCtn());
+                return copy;
+            }
+
+            friend std::ostream& operator<<(std::ostream& os, ClsfControlInfo ci)
+            {
+                os << inet::MacAddress(ci.getNodeId()).str() << ": " << ci.get6pCmd() << " "
+                        << ci.getNumCells() << " cells, retries - " << ci.getRtxCtn();
+                return os;
+            }
+
+        private:
+            int numCells;
+            int rtxCtn;
+            tsch6pCmd_t cmd;
+    };
+
     virtual int numInitStages() const{return 6;}
     void initialize(int stage);
     void finish();
     void finish(cComponent *component, simsignal_t signalID) { cIListener::finish(component, signalID); }
-    TschMSF();
-    ~TschMSF();
+    TschCLSF();
+    ~TschCLSF();
 
     struct NbrStatistic {
         uint8_t NumCellsElapsed;
@@ -175,14 +229,20 @@ class TschMSF: public TschSF, public cListener {
 
     void receiveSignal(cComponent *src, simsignal_t id, cObject *value, cObject *details);
     void receiveSignal(cComponent *src, simsignal_t id, long value, cObject *details);
+    void handleDodagJoinedSignal(uint64_t parentId);
     void handleParentChangedSignal(uint64_t newParentId);
+    void handleRescheduleSignal(SlotframeChunk slotRange);
     void handlePacketEnqueued(uint64_t destId);
 
-  protected:
+    void startReschedule();
+
+    std::vector<cellLocation_t> getRelocationEligible(std::vector<cellLocation_t> cellList);
+
+   protected:
     virtual void refreshDisplay() const override;
 
-  private:
-    const tsch6pSFID_t pSFID = SFID_MSF;
+   private:
+    const tsch6pSFID_t pSFID = SFID_CLSF;
 
     /** the time after which an active, unfinished transaction expires
      *  (needs to be defined by every SF as per the 6P standard) */
@@ -193,8 +253,23 @@ class TschMSF: public TschSF, public cListener {
     uint64_t rplParentId; // MAC of RPL preferred parent
     uint64_t rplPreviousParentId; // and former parent (to track success/failure of clearing its schedule after leaving)
 
+
+    // 'Reschedule' - alias for cross-layer scheduling phase 2
+    double clRescheduleTimeout;
+    bool rescheduleComplete;
+    bool rescheduleStarted;
+    int numRplParentChanged;
+    offset_t crossLayerChOffset;
+
+    SlotframeChunk crossLayerSlotRange;
+
+
     std::list<uint64_t> neighbors;
 
+    cMessage *internalEvent;
+    cMessage *clInitSecondPhaseMsg; // cross-layer daisy-chaining (second phase) trigger message
+
+    int totalElapsed; // cell usage estimation intervals
     int pSlotframeLength;
     int pCellListRedundancy;
     int pNumChannels;
@@ -203,9 +278,14 @@ class TschMSF: public TschSF, public cListener {
 
     int pMaxNumCells;
     int pMaxNumTx;
+    int tsch6pRtxThresh;
     double pLimNumCellsUsedHigh;
     double pLimNumCellsUsedLow;
+
+    double routingParentTransactionDelay; // delay before trying to schedule dedicated TX with RPL preferred parent
     double pRelocatePdrThres;
+
+    double clearReservedCellsTimeout;
 
     simtime_t SENSE_INTERVAL;
 
@@ -219,11 +299,21 @@ class TschMSF: public TschSF, public cListener {
 
     Ieee802154eMac* mac;
 
+    /** Keeping track of one-hop children of a sink in
+     * order to schedule dedicated TX cells with them */
+    std::vector<uint64_t> oneHopRplChildren;
+
     /**
      * Set to True at index nodeId after @ref initNumCells cells have been
      * allocated successfully for link with nodeId
      */
     std::map<uint64_t, bool> initialScheduleComplete;
+
+
+    /**
+     * Stores status and retransmit counters of failed 6P transactions per neighbor
+     */
+    std::map<uint64_t, ClsfControlInfo*> pendingTransactions;
 
     /**
      * TimeOffsets that have been suggested to a neighbor in an unfinished ADD
@@ -248,6 +338,9 @@ class TschMSF: public TschSF, public cListener {
     cellLocation_t autoRxCell;
     cModule *rpl;
 
+
+    bool crossLayerInfoAvailable();
+
     /**
      * Emitted each time the schedule setup with a neighbor is complete,
      * i.e. all cells have been allocated in both directions.
@@ -257,11 +350,15 @@ class TschMSF: public TschSF, public cListener {
 
     cModule *hostNode; // reference to this host node's module
 
-    enum msfSelfMsg_t {
+    enum clsfSelfMessage_t {
         CHECK_STATISTICS,
         REACHED_MAXNUMCELLS,
         DO_START,
         HOUSEKEEPING,
+        SCHEDULE_DEDICATED,
+        CROSS_LAYER_RESCHEDULE,
+        CHECK_DEDICATED_TX,
+        RESERVED_CELLS_TIMEOUT,
         UNDEFINED
     };
 
@@ -272,13 +369,26 @@ class TschMSF: public TschSF, public cListener {
     void addCells(uint64_t nodeId, int numCells) { addCells(nodeId, numCells, MAC_LINKOPTIONS_TX); }
 
     void deleteCells(uint64_t nodeId, int numCells);
+    bool isOneHopChild(uint64_t nodeId);
+    bool checkDownlinkScheduled(uint64_t childId);
 
     void scheduleAutoCell(uint64_t neighbor);
     void scheduleAutoRxCell(InterfaceToken euiAddr);
     void removeAutoTxCell(uint64_t neighbor);
+//    void relocateCell(cellLocation_t cell, double cellPdr, double maxPdr);
+    void relocateCells(uint64_t neighbor);
+
 
     void clearScheduleWithNode(uint64_t sender) { clearScheduleWithNode(sender, false); }
     void clearScheduleWithNode(uint64_t sender, bool clearAutoCells);
+
+    void scheduleRetryAttempt(uint64_t nodeId, int numCells, uint8_t cellOptions, tsch6pCmd_t cmd);
+    void scheduleRetryAttempt(uint64_t nodeId, int numCells, uint8_t cellOptions) {
+        scheduleRetryAttempt(nodeId, numCells, cellOptions, CMD_ADD);
+    };
+
+    void checkReschedulingInProgress(int numRelocCells, uint64_t sender);
+    bool clSecondPhaseInProgress();
 
     void scheduleMinimalCells();
     uint64_t checkInTransaction();
@@ -304,7 +414,14 @@ class TschMSF: public TschSF, public cListener {
     void updateNeighborStats(uint64_t neighbor, std::string statType);
     bool slotOffsetAvailable(offset_t slOf);
 
+
     bool hasDedicatedCell(); // Check whether we have a dedicated TX cell scheduled to preferred parent already
+    void scheduleDedicatedCell(ClsfControlInfo *ci); // handler for SCHEDULE_DEDICATED event
+
+    void handleFailedTransaction(uint64_t sender, tsch6pCmd_t cmd);
+
+    /** To track status of routing parent update and properly interpret RC_SUCCESS for CLEAR */
+    bool parentUpdateInProgress;
 
     /**
      * Pick @param numRequested items without duplicates randomly uniformly
@@ -325,4 +442,4 @@ class TschMSF: public TschSF, public cListener {
 
 };
 
-#endif /*__WAIC_TSCHMSF_H_*/
+#endif /*__WAIC_TSCHCLSF_H_*/

@@ -350,6 +350,7 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
     cProperty *statisticTemplate;
 
     std::vector<simsignal_t> channelSignals;
+    simsignal_t pktEnqueuedSignal;
 
     std::vector<std::string> registeredSignals;
 

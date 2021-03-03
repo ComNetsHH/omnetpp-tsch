@@ -50,7 +50,7 @@ struct cellLocation_t {
 
     friend std::ostream& operator<<(std::ostream& os, cellLocation_t const& v)
     {
-        os << "(" << v.timeOffset << ", " << v.channelOffset << ")";
+        os << "[" << v.timeOffset << ", " << v.channelOffset << "]";
         return os;
     }
 };
@@ -82,7 +82,6 @@ enum macLinkOption_t {
                                            IEEE802.15.4e standard*/
     MAC_LINKOPTIONS_SRCAUTO = 0x20,
     MAC_LINKOPTIONS_NONE = 0x23,
-
 };
 
 /**

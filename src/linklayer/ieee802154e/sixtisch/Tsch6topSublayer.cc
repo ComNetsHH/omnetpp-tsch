@@ -149,7 +149,6 @@ Packet* Tsch6topSublayer::handleExternalMessage(cMessage* msg) {
         if (tom)
             response = handleTransactionTimeout(tom);
     }
-
     else if (arrivalGateId == lowerLayerIn) {
         auto pkt = dynamic_cast<Packet*> (msg);
         if (pkt)
@@ -212,12 +211,16 @@ void Tsch6topSublayer::handleMessage(cMessage* msg) {
     }
 }
 
-void Tsch6topSublayer::sendMessageToRadio(cMessage *msg) {
-    if (msg) {
-        send(msg, lowerLayerOut);
-    } else {
+void Tsch6topSublayer::sendMessageToRadio(cMessage *msg, double delay) {
+    if (!msg) {
         EV_WARN << "sendMessageToRadio: msg pointer is null!" << endl;
+        return;
     }
+
+    if (delay > 0)
+        sendDelayed(msg, delay, lowerLayerOut);
+    else
+        send(msg, lowerLayerOut);
 }
 /**void Tsch6topSublayer::sendControlDown(cMessage *msg) {
     if (msg) {
@@ -230,6 +233,12 @@ void Tsch6topSublayer::sendMessageToRadio(cMessage *msg) {
 void Tsch6topSublayer::sendAddRequest(uint64_t destId, uint8_t cellOptions,
                             int numCells, std::vector<cellLocation_t> &cellList, int timeout)
 {
+    sendAddRequest(destId, cellOptions, numCells, cellList, timeout, 0);
+}
+
+void Tsch6topSublayer::sendAddRequest(uint64_t destId, uint8_t cellOptions,
+                            int numCells, std::vector<cellLocation_t> &cellList, int timeout, double delay)
+{
     Enter_Method_Silent();
 
     if (pTschLinkInfo->inTransaction(destId)) {
@@ -237,9 +246,10 @@ void Tsch6topSublayer::sendAddRequest(uint64_t destId, uint8_t cellOptions,
         return;
     }
 
-    /* calculate simtime at which this transaction will time out. since simtime_t is
+    /* Calculate simtime at which this transaction will time out. since simtime_t is
        always counted in (fractions of) seconds, we need to convert timeout first */
     simtime_t absoluteTimeout = getAbsoluteTimeout(timeout);
+    EV_DETAIL << "Sending ADD to " << MacAddress(destId) << ", timeout scheduled at: " << absoluteTimeout << endl;
     uint8_t seqNum = prepLinkForRequest(destId, absoluteTimeout);
 
     auto pkt = createAddRequest(destId, seqNum, cellOptions, numCells,
@@ -251,11 +261,11 @@ void Tsch6topSublayer::sendAddRequest(uint64_t destId, uint8_t cellOptions,
     /* record statistics */
     emit(s_6pMsgSent, 1);
 
-    sendMessageToRadio(pkt);
+    sendMessageToRadio(pkt, delay);
 }
 
 void Tsch6topSublayer::sendDeleteRequest(uint64_t destId, uint8_t cellOptions, int numCells,
-                       std::vector<cellLocation_t> cellList, int timeout)
+        std::vector<cellLocation_t> cellList, int timeout)
 {
     Enter_Method_Silent();
 
@@ -298,13 +308,11 @@ void Tsch6topSublayer::sendRelocationRequest(uint64_t destId, uint8_t cellOption
     }
 
     simtime_t absoluteTimeout = getAbsoluteTimeout(timeout);
-    pTschLinkInfo->setRelocationCells(destId, relocationCellList,
-                                      getCellOption(cellOptions));
+    pTschLinkInfo->setRelocationCells(destId, relocationCellList, getCellOption(cellOptions));
     uint8_t seqNum = prepLinkForRequest(destId, absoluteTimeout);
 
-    auto pkt = createRelocationRequest(destId, seqNum, cellOptions,
-                                                numCells, relocationCellList,
-                                                candidateCellList, absoluteTimeout);
+    auto pkt = createRelocationRequest(destId, seqNum, cellOptions, numCells,
+            relocationCellList, candidateCellList, absoluteTimeout);
 
     pTschLinkInfo->setLastKnownCommand(destId, CMD_RELOCATE);
     pTschLinkInfo->setLastLinkOption(destId, (uint8_t) cellOptions);
@@ -393,7 +401,10 @@ Packet* Tsch6topSublayer::handle6PMsg(Packet* pkt) {
 }
 
 
-Packet* Tsch6topSublayer::handleRequestMsg(Packet* pkt, inet::IntrusivePtr<const tsch::sixtisch::SixpHeader>& hdr, inet::IntrusivePtr<const tsch::sixtisch::SixpData>& data) {
+Packet* Tsch6topSublayer::handleRequestMsg(Packet* pkt,
+        inet::IntrusivePtr<const tsch::sixtisch::SixpHeader>& hdr,
+        inet::IntrusivePtr<const tsch::sixtisch::SixpData>& data)
+{
     Packet* response = NULL;
 
     auto addresses = pkt->getTag<MacAddressInd>();
@@ -401,6 +412,7 @@ Packet* Tsch6topSublayer::handleRequestMsg(Packet* pkt, inet::IntrusivePtr<const
     uint8_t seqNum = hdr->getSeqNum();
     uint64_t sender = addresses->getSrcAddress().getInt();
     tsch6pCmd_t cmd = (tsch6pCmd_t) hdr->getCode();
+    std::vector<cellLocation_t> emptyCellList = {};
 
     EV_DETAIL << "Received MSG_REQUEST " << cmd << " from " << MacAddress(sender) << ", seqNum - " << +seqNum << endl;
 
@@ -408,21 +420,7 @@ Packet* Tsch6topSublayer::handleRequestMsg(Packet* pkt, inet::IntrusivePtr<const
         /* We don't need to perform any of the (seqNum) checks. A CLEAR is
            always valid. */
         pTschLinkInfo->setLastKnownCommand(sender, cmd);
-        pTschLinkInfo->clearCells(sender); // TODO: for some reason doesn't remove simple RX cells from the schedule object
-//        auto links = pTschLinkInfo->getCells(sender);
-//        std::vector<cellLocation_t> cells;
-//        for (auto l : links)
-//            if (!getCellOptions_isAUTO(std::get<1>(l)))
-//                cells.push_back(std::get<0>(l));
-//
-//        auto ctrlMsg = new tsch6topCtrlMsg();
-//        updateSchedule(*(setCtrlMsg_PatternUpdate(ctrlMsg, sender, MAC_LINKOPTIONS_RX | MAC_LINKOPTIONS_TX, {},
-//                cells, data->getTimeout())));
-
-        // TODO: This is clearly wrong, why SF REPONSE handler should react
-        // to the REQUEST message, check whether this was really used anywhere
-//        pTschSF->handleResponse(sender, RC_SUCCESS, 0, {});
-
+        pTschSF->handleResponse(sender, RC_SUCCESS, 0, {}); // Note: SF handles schedule cleanup, not 6P!
         /* "The Response Code to a 6P CLEAR command SHOULD be RC_SUCCESS unless
            the operation cannot be executed.  When the CLEAR operation cannot be
            executed, the Response Code MUST be set to RC_RESET." */
@@ -557,7 +555,7 @@ Packet* Tsch6topSublayer::handleRequestMsg(Packet* pkt, inet::IntrusivePtr<const
                        if LL ACK arrives within this timeslot) */
                     pendingPatternUpdates[sender] = setCtrlMsg_PatternUpdate(
                                                         pendingPatternUpdates[sender],
-                                                        sender, myOpt, cellList, {},
+                                                        sender, myOpt, cellList, emptyCellList,
                                                         data->getTimeout());
                     break;
                 }
@@ -580,14 +578,14 @@ Packet* Tsch6topSublayer::handleRequestMsg(Packet* pkt, inet::IntrusivePtr<const
             else {
                 // in response to delete request send RC_SUCCESS with empty cell list,
                 // TODO: figure out how and when node sending DELETE request clears ITS local schedule
-//                std::vector<cellLocation_t> emptyList = {};
+                std::vector<cellLocation_t> emptyList = {};
                 response = createSuccessResponse(sender, seqNum, cellList, data->getTimeout());
 
                 /* store potential change to our hopping sequence
                  * (activated if LL ACK arrives within this timeslot) */
                 pendingPatternUpdates[sender] = setCtrlMsg_PatternUpdate(
                                                     pendingPatternUpdates[sender],
-                                                    sender, MAC_LINKOPTIONS_RX, {},
+                                                    sender, MAC_LINKOPTIONS_RX, emptyList,
                                                     cellList, data->getTimeout());
             }
             break;
@@ -596,21 +594,24 @@ Packet* Tsch6topSublayer::handleRequestMsg(Packet* pkt, inet::IntrusivePtr<const
             std::vector<cellLocation_t> candidateCellList = data->getCellList();
             std::vector<cellLocation_t> relocCellList = data->getRelocationCellList();
 
-            EV_DETAIL << "RELOCATE cells from: " << relocCellList << "\nto: " << candidateCellList << endl;
+            EV_DETAIL << "RELOCATE " << numCells << " cell(s): " << relocCellList
+                    << "\nto (any of the following): " << candidateCellList << endl;
 
             /* all cells currently scheduled on this link */
             cellVector sharedCells = pTschLinkInfo->getCells(sender);
-            uint8_t linkOption = getCellOption(cellOptions);
+            uint8_t linkOption = invertCellOption(getCellOption(cellOptions));
 
-            if ((numCells == (int)relocCellList.size()) &&
-                (pTschLinkInfo->cellsInSchedule(sender, relocCellList, linkOption))) {
+            if (!pTschLinkInfo->cellsInSchedule(sender, relocCellList, linkOption))
+                    EV_WARN << "Cells are not in the schedule?" << endl;
+
+            if (numCells == (int) relocCellList.size() && pTschLinkInfo->cellsInSchedule(sender, relocCellList, linkOption))
+            {
                 /* relocCellList has the right size and all its cells are actually
                    part of the link it is trying to delete them from; handle pkt. */
 
                 /* Since Tx cells for the sender are Rx cells for me and vice versa,
                    results of getCellOptions_isRx/Tx() are inverted */
-                int pickResult = pTschSF->pickCells(sender,
-                                            candidateCellList, numCells,
+                int pickResult = pTschSF->pickCells(sender, candidateCellList, numCells,
                                             !getCellOptions_isRX(cellOptions),
                                             !getCellOptions_isTX(cellOptions),
                                             getCellOptions_isSHARED(cellOptions));
@@ -634,6 +635,7 @@ Packet* Tsch6topSublayer::handleRequestMsg(Packet* pkt, inet::IntrusivePtr<const
                 response = createSuccessResponse(sender, seqNum, candidateCellList, data->getTimeout());
             } else {
                 /* that was an invalid RELOCATE message, respond accordingly */
+                EV_DETAIL << "Received invalid RELOCATE request, sending error response" << endl;
                 response = createErrorResponse(sender, seqNum, RC_CELLLIST, data->getTimeout());
             }
             break;
@@ -653,6 +655,7 @@ Packet* Tsch6topSublayer::handleResponseMsg(Packet* pkt, inet::IntrusivePtr<cons
 
     auto addresses = pkt->getTag<MacAddressInd>();
 
+    std::vector<cellLocation_t> emptyCellList = {};
     uint8_t seqNum = hdr->getSeqNum();
     uint64_t sender = addresses->getSrcAddress().getInt();
     tsch6pReturn_t returnCode = (tsch6pReturn_t) hdr->getCode();
@@ -681,7 +684,7 @@ Packet* Tsch6topSublayer::handleResponseMsg(Packet* pkt, inet::IntrusivePtr<cons
     if (returnCode == RC_RESET) {
         pTschLinkInfo->revertLink(sender, MSG_RESPONSE);
         EV_DETAIL << "Reverted link with " << MacAddress(sender) << endl;
-        pTschSF->handleResponse(sender, RC_RESET, 0, NULL);
+        pTschSF->handleResponse(sender, RC_RESET, 0, emptyCellList);
 
         /* cancel any pending pattern update that we might have created */
         pendingPatternUpdates[sender]->setDestId(-1);
@@ -689,11 +692,10 @@ Packet* Tsch6topSublayer::handleResponseMsg(Packet* pkt, inet::IntrusivePtr<cons
     }
 
     if (pTschLinkInfo->getLastKnownCommand(sender) == CMD_CLEAR) {
-        EV_DETAIL << "Successful CMD_CLEAR" << endl;
         /* We interrupted an ongoing transaction or got a response to our CLEAR
           => don't need to perform any other checks
           (TODO: Do we still need to check seqNum though? Unclear in the draft!) */
-        pTschSF->handleResponse(sender, RC_RESET, 0, {});
+        pTschSF->handleResponse(sender, returnCode, 0, emptyCellList);
 
         /* cancel any pending pattern update that we might have created */
         pendingPatternUpdates[sender]->setDestId(-1);
@@ -733,7 +735,7 @@ Packet* Tsch6topSublayer::handleResponseMsg(Packet* pkt, inet::IntrusivePtr<cons
         /* "In case the received Response Code is RC_ERR_CELLLIST,
             the transaction is aborted and no cell is relocated" */
         pTschLinkInfo->abortTransaction(sender);
-        pTschSF->handleResponse(sender, returnCode, 0, NULL);
+        pTschSF->handleResponse(sender, returnCode, 0, emptyCellList);
     } else if (returnCode == RC_SFID) {
         /* the draft doesn't define how to handle this (yet), wait for updates*/
     } else if (returnCode == RC_SUCCESS) {
@@ -773,9 +775,9 @@ Packet* Tsch6topSublayer::handleResponseMsg(Packet* pkt, inet::IntrusivePtr<cons
         // TODO: Change to directly update TschSlotframe instead of using msg
         tsch6topCtrlMsg *msg = new tsch6topCtrlMsg();
         if (command == CMD_DELETE)
-            setCtrlMsg_PatternUpdate(msg, sender, cellOption, {}, cellList, data->getTimeout());
+            setCtrlMsg_PatternUpdate(msg, sender, cellOption, emptyCellList, cellList, data->getTimeout());
         else
-            setCtrlMsg_PatternUpdate(msg, sender, cellOption, cellList, deleteCells,data->getTimeout());
+            setCtrlMsg_PatternUpdate(msg, sender, cellOption, cellList, deleteCells, data->getTimeout());
 
         //sendControlDown(msg);
         updateSchedule(*msg);
@@ -857,15 +859,19 @@ void Tsch6topSublayer::receiveSignal(cComponent *source, simsignal_t signalID, c
     {
         /* LL ACK arrived and there is a pattern update waiting for this ACK
          * and the transaction hasn't timed out in the meantime */
+        EV_DETAIL << "LL ACK arrived and there is a pattern update waiting for this ACK" << endl;
+
         tsch6topCtrlMsg* pendingPatternUpdate = pendingPatternUpdates[destId];
         auto cellsToAdd = pendingPatternUpdate->getNewCells();
         auto cellsToDelete = pendingPatternUpdate->getDeleteCells();
         auto cellOptions = pendingPatternUpdate->getCellOptions();
 
+        EV_DETAIL << "Cells to add: " << cellsToAdd << "to delete: " << cellsToDelete << endl;
+
         // TODO: using handleResponse() is a bit hacky since we're the ones who
         // sent the response, we're just handling the fact that it was ACKed
         // create dedicated SF fct for that?
-        pTschSF->handleResponse(destId, RC_SUCCESS, 0, NULL);
+//        pTschSF->handleResponse(destId, RC_SUCCESS, 0, NULL);
         pTschLinkInfo->incrementSeqNum(destId);
 
         // TODO: wenn reloc: cells in reloccellist aus ptschlinkinfo entfernen
@@ -892,13 +898,19 @@ void Tsch6topSublayer::receiveSignal(cComponent *source, simsignal_t signalID, c
 
 Packet* Tsch6topSublayer::handleTransactionTimeout(tschLinkInfoTimeoutMsg* tom) {
     uint64_t destId = tom->getNodeId();
-    //uint8_t seqNum = tom->getSeqNum();
+    uint8_t seqNum = tom->getSeqNum();
+    std::vector<cellLocation_t> emptyCellList = {};
+
+    auto lastCmd = pTschLinkInfo->getLastKnownCommand(destId);
+    auto lastType = pTschLinkInfo->getLastKnownType(destId);
+
+    EV_DETAIL << "Timeout fired for " << lastCmd << " " << lastType << " addressed to " << destId << endl;
 
     if (!pTschLinkInfo->linkInfoExists(destId))
-        EV_WARN <<"Received timeout for link that doesn't exist, something went very wrong" << endl;
+        EV_WARN << "Received timeout for link that doesn't exist, something went very wrong" << endl;
 
     /* Notify SF that it might want to try again */
-    pTschSF->handleResponse(destId, RC_RESET, 0, NULL);
+    pTschSF->handleResponse(destId, RC_RESET, 0, emptyCellList);
 
     return NULL;
 }
@@ -906,7 +918,8 @@ Packet* Tsch6topSublayer::handleTransactionTimeout(tschLinkInfoTimeoutMsg* tom) 
 Packet* Tsch6topSublayer::createAddRequest(uint64_t destId, uint8_t seqNum,
                                        uint8_t cellOptions, int numCells,
                                        std::vector<cellLocation_t>& cellList,
-                                       simtime_t timeout) {
+                                       simtime_t timeout)
+{
     if (numCells == 0 || timeout <= 0) {
         return NULL;
     }

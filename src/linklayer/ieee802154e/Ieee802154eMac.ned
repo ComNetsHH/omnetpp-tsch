@@ -109,6 +109,7 @@ simple Ieee802154eMac extends MacProtocolBase like IMacProtocol
         @signal[nbTxAcks-*](type=long);
         @signal[nbDuplicates-*](type=long);
         @signal[nbSlot-*](type=long);
+        @signal[pktEnqueued](type=long);
         
         @statisticTemplate[nbStats](record=count,vector?; interpolationmode=none);
         

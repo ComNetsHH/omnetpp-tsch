@@ -1,10 +1,10 @@
 package tsch.linklayer.ieee802154e.sixtisch;
 import tsch.linklayer.ieee802154e.sixtisch.TschSF;
 
-simple TschMSF like TschSF
+simple TschCLSF like TschSF
 {
     parameters:
-        @class(TschMSF);
+        @class(TschCLSF);
         
         @signal[rplParentChanged](type=unsigned long);
         @statistic[rplParentChanged](title = "Number of rpl parents changed"; source="rplParentChanged"; record=count; interpolationmode=none);
@@ -43,7 +43,11 @@ simple TschMSF like TschSF
         bool disableHousekeeping = default(false);
         bool allowCellRemoval = default(true);
         bool showDedicatedTxCells = default(true); // show scheduled TX cells locations above node
-        bool allowMinimalCellsOverride = default(false);    	 
+        bool allowMinimalCellsOverride = default(false);  
+        // cross-layer phase 2 should relocate 
+       	// all TX cells with preferred parent within
+       	double clRescheduleTimeout @unit("s") = default(15s); 
+       	 
 
 		double startTime @unit("s") = default(uniform(0s,10s));
 }

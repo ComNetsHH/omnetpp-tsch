@@ -167,6 +167,8 @@ void Ieee802154eMac::initialize(int stage) {
 
         EV_DETAIL << "QueueLength = " << neighbor->getQueueLength() << " bitrate = " << bitrate << endl;
         EV_DETAIL << "Finished tsch init stage 1." << endl;
+
+        pktEnqueuedSignal = registerSignal("pktEnqueued");
     }
 }
 
@@ -335,9 +337,10 @@ void Ieee802154eMac::handleUpperPacket(Packet *packet) {
     packet->getTag<PacketProtocolTag>()->setProtocol(&Protocol::ieee802154);
     EV_DETAIL << "Pkt encapsulated, length: " << macPkt->getChunkLength()
                      << "\n";
-    if(neighbor->add2Queue(packet, dest, linkId)){
+    if (neighbor->add2Queue(packet, dest, linkId)) {
         EV_DETAIL << "Added packet to queue" << endl;
-    }else{
+        emit(pktEnqueuedSignal, (long) dest.getInt());
+    } else {
         EV_DETAIL << "Packet is dropped due to Queue Overflow" << endl;
         PacketDropDetails details;
         details.setReason(QUEUE_OVERFLOW);

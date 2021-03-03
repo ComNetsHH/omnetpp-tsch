@@ -52,8 +52,6 @@
 #include "../Ieee802154eMac.h"
 #include "../TschSlotframe.h"
 
-
-
 using namespace tsch;
 using namespace inet;
 
@@ -93,6 +91,8 @@ public:
      */
     void sendAddRequest(uint64_t destId, uint8_t cellOptions, int numCells,
                         std::vector<cellLocation_t> &cellList, int timeout) override;
+    void sendAddRequest(uint64_t destId, uint8_t cellOptions, int numCells,
+                            std::vector<cellLocation_t> &cellList, int timeout, double delay);
 
     /**
      * @brief Send a 6P Delete request.
@@ -522,7 +522,8 @@ private:
     /**
      * @brief Send @p msg to its destination (via MAC, PHY etc)
      */
-    void sendMessageToRadio(cMessage *msg);
+    void sendMessageToRadio(cMessage *msg) { sendMessageToRadio(msg, 0); } ;
+    void sendMessageToRadio(cMessage *msg, double delay);
 
     /**
      * @brief Send control message to the MAC layer.

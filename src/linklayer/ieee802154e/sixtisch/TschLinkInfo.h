@@ -29,15 +29,17 @@
 #include "WaicCellComponents.h"
 #include "Tsch6tischComponents.h"
 #include "tschLinkInfoTimeoutMsg_m.h"
+#include "inet/linklayer/common/MacAddress.h"
 
 using namespace omnetpp;
+using namespace inet;
 
 class TschLinkInfo: public cSimpleModule
 {
     /**
      * Information about the link to another node.
      */
-    typedef struct {
+    struct NodeLinkInfo_t {
         uint64_t nodeId;              /**< Address of the Node we're sharing a link with */
         bool inTransaction;           /**< Whether there's currently an
                                            unfinished transaction going on */
@@ -58,7 +60,15 @@ class TschLinkInfo: public cSimpleModule
                                            transaction started by this node. */
         //std::mutex nliMutex;        /**< Prevents SF & 6P from read/editing this entry
         //                                 at the same time */
-    } NodeLinkInfo_t;
+
+        friend std::ostream& operator<<(std::ostream& os, NodeLinkInfo_t const& info)
+        {
+            os << "scheduled: " << info.scheduledCells << "; lastCmd/Type: "
+                    << info.lastKnownCommand << " / " << info.lastKnownType << endl;
+            return os;
+        }
+
+    };
 
 public:
     /* TODO: make this a singleton?! */
@@ -147,19 +157,29 @@ public:
                  uint8_t linkOption);
 
     /**
-     * @return all cells scheduled for the link with @p nodeId.
+     * @return all cells along with their options scheduled for the link with @p nodeId.
      */
     cellVector getCells(uint64_t nodeId);
+    cellVector getMinimalCells();
+    cellListVector getMinimalCellLocations(offset_t slotOffset = -1);
+    std::vector<cellLocation_t> getCellList(uint64_t nodeId);
 
     /**
-     * @return all dedicated (non-shared, non-auto) TX cells scheduled for the link with @p nodeId.
+     * @brief Get a list of dedicated cells scheduled with @p nodeId
+     *
+     * @param nodeId
+     * @param requireRx flag indicating whether RX cells or TX (default) are required
+     *
+     * @return vector of all dedicated (non-shared, non-auto) cells scheduled with the given node.
      */
-    std::vector<cellLocation_t> getDedicatedTxCells(uint64_t nodeId);
+    std::vector<cellLocation_t> getDedicatedCells(uint64_t nodeId, bool requireRx);
+    std::vector<cellLocation_t> getDedicatedCells(uint64_t nodeId) { return getDedicatedCells(nodeId, false); };
 
     /**
      * @return the associated cell options or 0xFF
      */
     uint8_t getCellOptions(uint64_t nodeId, cellLocation_t candidate);
+    std::vector<cellLocation_t> getCellLocations(uint64_t nodeId);
 
     /**
      * @return the number of cells scheduled between this ode and @p nodeId
@@ -306,6 +326,13 @@ private:
      * Contains one entry per neighbor.
      */
     std::map<uint64_t, NodeLinkInfo_t> linkInfo;
+
+    friend std::ostream& operator<<(std::ostream& os, std::map<uint64_t, NodeLinkInfo_t> linkInfos)
+    {
+        for (auto info : linkInfos)
+            os << inet::MacAddress(std::get<0>(info)) << ":\n     " << std::get<1>(info) << endl;
+        return os;
+    }
 
     /**
      * @brief Start the timeout "countdown" for the current transaction with

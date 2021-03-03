@@ -51,6 +51,21 @@ typedef enum Tsch6pMessageTypes {
 } tsch6pMsg_t;
 
 
+inline std::ostream& operator<<(std::ostream& out, const macLinkOption_t macLinkOption) {
+    const char* s = 0;
+    switch(macLinkOption) {
+        PRINT_ENUM(MAC_LINKOPTIONS_TX, s);
+        PRINT_ENUM(MAC_LINKOPTIONS_RX, s);
+        PRINT_ENUM(MAC_LINKOPTIONS_SHARED, s);
+        PRINT_ENUM(MAC_LINKOPTIONS_PRIORITY, s);
+        PRINT_ENUM(MAC_LINKOPTIONS_TIMEKEEPING, s);
+        PRINT_ENUM(MAC_LINKOPTIONS_SRCAUTO, s);
+        PRINT_ENUM(MAC_LINKOPTIONS_NONE, s);
+    }
+    return out << s;
+}
+
+
 inline std::ostream& operator<<(std::ostream& out, const Tsch6pMessageTypes tsch6p) {
     const char* s = 0;
     switch(tsch6p) {
@@ -123,18 +138,26 @@ inline std::ostream& operator<<(std::ostream& os, std::map<cellLocation_t, doubl
     return os;
 }
 
-inline std::ostream& operator<<(std::ostream& os, const std::vector<std::tuple<cellLocation_t, uint8_t>> &cellVector)
-{
 
-    for (auto const &el: cellVector) {
-        auto opts = std::get<1>(el);
-        std::bitset<8> x(opts);
-        os << std::get<0>(el) << ": " << x << " (options) " << std::endl;
-    }
-
-    return os;
+inline std::string printLinkOptions(uint8_t op) {
+    std::string outstr = "";
+    if (getCellOptions_isRX(op))
+        outstr += "RX ";
+    if (getCellOptions_isTX(op))
+        outstr += "TX ";
+    if (getCellOptions_isSHARED(op))
+        outstr += "SHARED ";
+    if (getCellOptions_isAUTO(op))
+        outstr += "AUTO ";
+    return outstr;
 }
 
+inline std::ostream& operator<<(std::ostream& os, const std::vector<std::tuple<cellLocation_t, uint8_t>> &cellVector)
+{
+    for (auto const &link: cellVector)
+        os << std::get<0>(link) << " " << printLinkOptions(std::get<1>(link)) << std::endl;
+    return os;
+}
 
 /**
  * 6p Return Code Identifiers
@@ -176,8 +199,9 @@ inline std::ostream& operator<<(std::ostream& out, const Tsch6pReturnCodes errc)
 typedef enum Tsch6pSFIDs
 {
     SFID_SFX,  /**< see https://tools.ietf.org/html/draft-ietf-6tisch-6top-sfx */
-    SFID_SFSB, // TODO: set to actual name of our SF
+    SFID_SFSB,
     SFID_MSF,
+    SFID_CLSF,
     SFID_TEST
 } tsch6pSFID_t;
 
@@ -189,6 +213,7 @@ inline std::ostream& operator<<(std::ostream& out, const Tsch6pSFIDs sfid) {
         PRINT_ENUM(SFID_SFSB, s);
         PRINT_ENUM(SFID_MSF, s);
         PRINT_ENUM(SFID_TEST, s);
+        PRINT_ENUM(SFID_CLSF, s);
     }
     return out << s;
 }

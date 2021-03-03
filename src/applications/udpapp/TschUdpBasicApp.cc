@@ -1,7 +1,7 @@
 //
 //  Simulation model for IEEE 802.15.4 Time Slotted Channel Hopping (TSCH)
 //
-//  Copyright (C) 2021  Institute of Communication Networks (ComNets),
+//  Copyright (C) 2019  Institute of Communication Networks (ComNets),
 //                      Hamburg University of Technology (TUHH)
 //            (C) 2019  Louis Yin
 //
@@ -20,6 +20,7 @@
 
 #include "TschUdpBasicApp.h"
 #include "../../common/VirtualLinkTag_m.h"
+#include <iostream>
 #include "inet/applications/base/ApplicationPacket_m.h"
 #include "inet/applications/udpapp/UdpBasicApp.h"
 #include "inet/common/ModuleAccess.h"
@@ -49,9 +50,23 @@ TschUdpBasicApp::~TschUdpBasicApp() {
 }
 
 void TschUdpBasicApp::initialize(int stage){
-    UdpBasicApp::initialize(stage);
+    ApplicationBase::initialize(stage);
     if (stage == INITSTAGE_LOCAL) {
+            numSent = 0;
+            numReceived = 0;
+            WATCH(numSent);
+            WATCH(numReceived);
+
+            localPort = par("localPort");
+            destPort = par("destPort");
+            startTime = par("startTime");
+            stopTime = par("stopTime");
+            packetName = par("packetName");
+            dontFragment = par("dontFragment");
             virtualLinkID = par("VirtualLinkID");
+            if (stopTime >= SIMTIME_ZERO && stopTime < startTime)
+                throw cRuntimeError("Invalid startTime/stopTime parameters");
+            selfMsg = new cMessage("sendTimer");
     }
 }
 

@@ -446,9 +446,6 @@ void Ipv6::routePacket(Packet *packet, const InterfaceEntry *destIE, const Inter
             return;
         }
 
-        if (pktName.find(std::to_string('Udp')) != std::string::npos)
-            EV_DETAIL << "Found UDP datagram" << endl;
-
         // don't forward link-local addresses or weaker (modified to allow UDP through)
         if ((destAddress.isLinkLocal() || destAddress.isLoopback())
                 && !(par("allowLinkLocalFwd").boolValue() && pktName.find(std::string("Udp")) != std::string::npos))

@@ -49,7 +49,8 @@ Define_Module(Ipv6NeighbourDiscovery);
 simsignal_t Ipv6NeighbourDiscovery::startDadSignal = registerSignal("startDad");
 
 Ipv6NeighbourDiscovery::Ipv6NeighbourDiscovery()
-    : neighbourCache(*this)
+    : neighbourCache(*this),
+      numNUDTimeouts(0)
 {
 }
 
@@ -91,6 +92,7 @@ void Ipv6NeighbourDiscovery::initialize(int stage)
     if (stage == INITSTAGE_LOCAL) {
         const char *crcModeString = par("crcMode");
         crcMode = parseCrcMode(crcModeString, false);
+        pReachableTimeOverride = par("nceReachabilityOverride");
     }
     else if (stage == INITSTAGE_NETWORK_LAYER) {
         cModule *node = findContainingNode(this);
@@ -138,7 +140,15 @@ void Ipv6NeighbourDiscovery::initialize(int stage)
             scheduleAt(simTime() + uniform(0, 0.3), msg); //Random Router bootup time
         else
             scheduleAt(simTime() + uniform(0.4, 1), msg); //Random Host bootup time
+
+        host = getParentModule()->getParentModule();
     }
+}
+
+void Ipv6NeighbourDiscovery::refreshDisplay() const {
+    if (par("showNUDs").boolValue())
+        host->getDisplayString().setTagArg("t", 0, std::string("NUDs:" + std::to_string(numNUDTimeouts)).c_str());
+//    host->getDisplayString().setTagArg("t", 1, "l"); // set display text position to 'left'
 }
 
 void Ipv6NeighbourDiscovery::handleMessage(cMessage *msg)
@@ -516,6 +526,7 @@ void Ipv6NeighbourDiscovery::processNudTimeout(cMessage *timeoutMsg)
 {
     EV_INFO << "NUD has timed out\n";
     Neighbour *nce = (Neighbour *)timeoutMsg->getContextPointer();
+    numNUDTimeouts++;
 
     const Key *nceKey = nce->nceKey;
     if (nceKey == nullptr)
@@ -2311,7 +2322,8 @@ void Ipv6NeighbourDiscovery::processNaForIncompleteNceState(const Ipv6NeighbourA
         if (naSolicitedFlag == true) {
             nce->reachabilityState = Ipv6NeighbourCache::REACHABLE;
             EV_INFO << "Reachability confirmed through successful Addr Resolution.\n";
-            nce->reachabilityExpires = simTime() + ie->getProtocolData<Ipv6InterfaceData>()->_getReachableTime();
+            nce->reachabilityExpires = simTime() + (pReachableTimeOverride > 0 ? pReachableTimeOverride : ie->getProtocolData<Ipv6InterfaceData>()->_getReachableTime());
+            EV_DETAIL << "Reachability expires at " << nce->reachabilityExpires << endl;
         }
         else
             nce->reachabilityState = Ipv6NeighbourCache::STALE;
@@ -2394,7 +2406,8 @@ void Ipv6NeighbourDiscovery::processNaForOtherNceStates(const Ipv6NeighbourAdver
             if (msg != nullptr) {
                 EV_INFO << "NUD in progress. Cancelling NUD Timer\n";
                 bubble("Reachability Confirmed via NUD.");
-                nce->reachabilityExpires = simTime() + ie->getProtocolData<Ipv6InterfaceData>()->_getReachableTime();
+                nce->reachabilityExpires = simTime() + (pReachableTimeOverride > 0 ? pReachableTimeOverride : ie->getProtocolData<Ipv6InterfaceData>()->_getReachableTime());
+                EV_DETAIL << "Reachability expires at " << nce->reachabilityExpires << endl;
                 cancelAndDelete(msg);
                 nce->nudTimeoutEvent = nullptr;
             }

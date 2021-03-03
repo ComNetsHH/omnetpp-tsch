@@ -60,6 +60,8 @@ class INET_API Ipv6NeighbourDiscovery : public cSimpleModule, public LifecycleUn
 
   private:
     static simsignal_t startDadSignal;
+    simtime_t pReachableTimeOverride;
+    int numNUDTimeouts;
 
   public:
     /**
@@ -93,9 +95,12 @@ class INET_API Ipv6NeighbourDiscovery : public cSimpleModule, public LifecycleUn
 
   protected:
 
+    virtual void refreshDisplay() const override;
+
     //Packets awaiting Address Resolution or Next-Hop Determination.
     cQueue pendingQueue;
 
+    cModule *host = nullptr;
     IInterfaceTable *ift = nullptr;
     Ipv6RoutingTable *rt6 = nullptr;
     Icmpv6 *icmpv6 = nullptr;
