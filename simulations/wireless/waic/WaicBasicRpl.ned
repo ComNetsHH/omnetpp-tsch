@@ -1,9 +1,8 @@
 //
 // Simulation model for IEEE 802.15.4 Time Slotted Channel Hopping (TSCH)
 //
-// Copyright (C) 2021  Institute of Communication Networks (ComNets),
+// Copyright (C) 2019  Institute of Communication Networks (ComNets),
 //                     Hamburg University of Technology (TUHH)
-//			 (C) 2021  Yevhenii Shudrenko
 //           (C) 2019  Daniel Ploeger
 //           (C) 2019  Leo Krueger
 //           (C) 2006  Andras Varga
@@ -37,6 +36,10 @@ network WaicBasicRpl
     parameters:
         @display("bgb=450,531");
     submodules:
+        //        configurator: Ipv4NetworkConfigurator {
+        //            parameters:
+        //                @display("p=100,100;is=s");
+        //        }
         configurator: Ipv6FlatNetworkConfigurator {
             parameters:
                 @display("p=100,100;is=s");
@@ -51,6 +54,11 @@ network WaicBasicRpl
                 @6tisch;
                 @display("r=,,#707070;p=251.45,72.76");
         }
+        //        host1: RplRouter {
+        //            parameters:
+        //                @6tisch;
+        //                @display("r=,,#707070;p=199,152");
+        //        }
         host2: RplRouter {
             parameters:
                 @6tisch;

@@ -3,7 +3,6 @@
 //
 // Copyright (C) 2019  Institute of Communication Networks (ComNets),
 //                     Hamburg University of Technology (TUHH)
-//           (C) 2019  Daniel Ploeger
 //           (C) 2019  Leo Krueger
 //           (C) 2006  Andras Varga
 //
@@ -22,40 +21,30 @@
 //
 
 
-package tsch.simulations.wireless.waic;
+package tsch.simulations.wireless.nic;
 
 import inet.networklayer.configurator.ipv4.Ipv4NetworkConfigurator;
-import inet.networklayer.configurator.ipv6.Ipv6FlatNetworkConfigurator;
 import inet.physicallayer.contract.packetlevel.IRadioMedium;
 import inet.visualizer.contract.IIntegratedVisualizer;
 import inet.node.inet.WirelessHost;
-import rpl.RplRouter;
 
-network Branches
+network TestNic
 {
     parameters:
-        @display("bgb=40,85");
-        int numSinks = default(1);
-        int numHosts = default(30);
+        int numHosts;
+        @display("bgb=450,450");
     submodules:
-        configurator: Ipv6FlatNetworkConfigurator {
+        configurator: Ipv4NetworkConfigurator {
             parameters:
-                @display("p=27.91269,1.9802921;is=s");
+                @display("p=100,100;is=s");
         }
         radioMedium: <> like IRadioMedium {
             parameters:
-                @display("p=28.006989,6.9781723;is=s");
+                @display("p=100,200;is=s");
         }
-
-        sink[numSinks]: RplRouter {
+        host[numHosts]: WirelessHost {
             parameters:
                 @6tisch;
-                @display("r=,,#707070;p=17.63403,16.219536");
+                @display("r=,,#707070;p=250,200");
         }
-        host[numHosts]: RplRouter {
-            parameters:
-                @6tisch;
-                @display("r=,,#707070;p=17.63403,16.219536");
-        }
-
 }

@@ -1,9 +1,8 @@
 //
 // Simulation model for IEEE 802.15.4 Time Slotted Channel Hopping (TSCH)
 //
-// Copyright (C) 2021  Institute of Communication Networks (ComNets),
+// Copyright (C) 2019  Institute of Communication Networks (ComNets),
 //                     Hamburg University of Technology (TUHH)
-//			 (C) 2021  Yevhenii Shudrenko
 //           (C) 2019  Daniel Ploeger
 //           (C) 2019  Leo Krueger
 //           (C) 2006  Andras Varga
@@ -30,43 +29,31 @@ import inet.networklayer.configurator.ipv6.Ipv6FlatNetworkConfigurator;
 import inet.physicallayer.contract.packetlevel.IRadioMedium;
 import inet.visualizer.contract.IIntegratedVisualizer;
 import inet.node.inet.WirelessHost;
+import rpl.RplRouter;
 
-network WaicBasicAltimeter
+network HighDensity
 {
     parameters:
-        @display("bgb=454.75,496.48");
+        @display("bgb=20,110");
+        int numHosts = default(1);
+        int numSinks = default(1);
     submodules:
         configurator: Ipv6FlatNetworkConfigurator {
             parameters:
-                @display("p=387.34,268.57;is=s");
+                @display("p=1013.768,81.872;is=s");
         }
         radioMedium: <> like IRadioMedium {
             parameters:
-                @display("p=387.34,368.08002;is=s");
+                @display("p=1011.36,228.76;is=s");
         }
-
-        sink: WirelessHost {
+        sink[numSinks]: RplRouter {
             parameters:
                 @6tisch;
-                @display("r=,,#707070;p=116.63,165.85");
+                @display("r=,,#707070;p=391.62,121.98");
         }
-        host1: WirelessHost {
+        host[numHosts]: RplRouter {
             parameters:
                 @6tisch;
-                @display("r=,,#707070;p=84.53,217.21");
-        }
-        host2: WirelessHost {
-            parameters:
-                @6tisch;
-                @display("r=,,#707070;p=139.1,252.52");
-        }
-        host3: WirelessHost {
-            parameters:
-                @6tisch;
-                @display("r=,,#707070;p=84.53,287.83002");
-        }
-        RadioAltimeter: WirelessHost {
-            parameters:
-                @display("r=,,#707070;p=116.63,63.13");
+                @display("r=,,#707070;p=313.04,416.58398");
         }
 }

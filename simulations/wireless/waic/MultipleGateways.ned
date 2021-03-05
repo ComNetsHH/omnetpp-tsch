@@ -31,31 +31,29 @@ import inet.visualizer.contract.IIntegratedVisualizer;
 import inet.node.inet.WirelessHost;
 import rpl.RplRouter;
 
-network Branches
+network MultipleGateways
 {
     parameters:
-        @display("bgb=40,85");
-        int numSinks = default(1);
-        int numHosts = default(30);
+        @display("bgb=500,900");
+        int numHosts;
+        int numSinks;
     submodules:
         configurator: Ipv6FlatNetworkConfigurator {
             parameters:
-                @display("p=27.91269,1.9802921;is=s");
+                @display("p=1013.768,81.872;is=s");
         }
         radioMedium: <> like IRadioMedium {
             parameters:
-                @display("p=28.006989,6.9781723;is=s");
+                @display("p=1011.36,228.76;is=s");
         }
-
         sink[numSinks]: RplRouter {
             parameters:
                 @6tisch;
-                @display("r=,,#707070;p=17.63403,16.219536");
+                @display("r=,,#707070;p=391.62,121.98");
         }
         host[numHosts]: RplRouter {
             parameters:
                 @6tisch;
-                @display("r=,,#707070;p=17.63403,16.219536");
+                @display("r=,,#707070;p=313.04,416.58398");
         }
-
 }

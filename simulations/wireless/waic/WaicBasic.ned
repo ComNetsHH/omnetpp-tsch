@@ -3,7 +3,6 @@
 //
 // Copyright (C) 2019  Institute of Communication Networks (ComNets),
 //                     Hamburg University of Technology (TUHH)
-//			 (C) 2021  Yevhenii Shudrenko
 //           (C) 2019  Daniel Ploeger
 //           (C) 2019  Leo Krueger
 //           (C) 2006  Andras Varga
@@ -26,9 +25,11 @@
 package tsch.simulations.wireless.waic;
 
 import inet.networklayer.configurator.ipv4.Ipv4NetworkConfigurator;
+import inet.networklayer.configurator.ipv6.Ipv6FlatNetworkConfigurator;
 import inet.physicallayer.contract.packetlevel.IRadioMedium;
 import inet.visualizer.contract.IIntegratedVisualizer;
 import inet.node.inet.WirelessHost;
+import rpl.RplRouter;
 
 network WaicBasic
 {
@@ -52,6 +53,6 @@ network WaicBasic
         }
         wlanHost[numWlanHosts]: WirelessHost {
             parameters:
-                @display("r=,,#707070;p=250,116");
+                @display("r=,,#707070;p=250,200");
         }
 }
