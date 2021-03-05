@@ -34,6 +34,8 @@ simple Ipv6NeighbourDiscovery
         string xmipv6Module;
         string routingTableModule;
         bool addRandomDelays = default(false);
+    	bool showNUDs = default(false); // display number of Neighbor Unreachability Detection timeouts above node's pictogram
+        double nceReachabilityOverride @unis(s) = default(0); // overriding Ipv6InterfaceData IPv6_REACHABLE_TIME constant to reduce amount of ND traffic
         double minIntervalBetweenRAs @unit(s) = default(30ms); //minRtrAdvInterval:  0.03 sec for MIPv6 , declared as parameter to facilitate testing without recompiling (Zarrar 15.07.07)
         double maxIntervalBetweenRAs @unit(s) = default(70ms);  //MaxrtrAdvInterval: 0.07 sec for MIPv6, declared as parameter to facilitate testing without recompiling (Zarrar 15.07.07)
         @display("i=block/network");
