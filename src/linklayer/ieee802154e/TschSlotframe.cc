@@ -209,9 +209,7 @@ void TschSlotframe::internalAddLink(TschLink *entry)
     // we keep entries sorted by netmask desc, metric asc in routeList, so that we can
     // stop at the first match when doing the longest netmask matching
     auto pos = upper_bound(links.begin(), links.end(), entry, LinkLessThan(*this));
-    EV_DETAIL << "Links before insertion - " << links << endl;
     links.insert(pos, entry);
-    EV_DETAIL << "Links after insertion - " << links << endl;
     entry->setSlotframe(this);
 }
 
@@ -355,6 +353,21 @@ TschLink *TschSlotframe::getLinkFromASN(int64_t asn)
         return *it;
     else
         return nullptr;
+}
+
+std::vector<TschLink*> TschSlotframe::getLinksFromASN(int64_t asn)
+{
+    std::vector<TschLink*> currentLinks = {};
+
+    for (auto it = links.begin(); it != links.end(); ++it) {
+        if ((*it)->getSlotOffset() == getOffsetFromASN(asn))
+            currentLinks.push_back(*it);
+    }
+
+    if (currentLinks.size() > 1)
+        EV_DETAIL << "Found multiple cells sharing slot offset:\n" << currentLinks << endl;
+
+    return currentLinks;
 }
 
 /**

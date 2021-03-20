@@ -89,6 +89,7 @@ void Ipv6::initialize(int stage)
         tunneling = getModuleFromPar<Ipv6Tunneling>(par("ipv6TunnelingModule"), this);
 
         allowedTarget = new Ipv6Address(par("allowedTarget").stringValue());
+        pOverrideDestCache = par("disableDestCache").boolValue();
 
         EV_DETAIL << "Initialized allowedTarget to " << allowedTarget << endl;
 
@@ -1020,7 +1021,7 @@ bool Ipv6::determineOutputInterface(const Ipv6Address& destAddress, Ipv6Address&
     // try destination cache
     nextHop = rt->lookupDestCache(destAddress, interfaceId);
 
-    if (interfaceId == -1) {
+    if (interfaceId == -1 || pOverrideDestCache) {
         // address not in destination cache: do longest prefix match in routing table
         EV_INFO << "do longest prefix match in routing table" << endl;
         const Ipv6Route *route = rt->doLongestPrefixMatch(destAddress);

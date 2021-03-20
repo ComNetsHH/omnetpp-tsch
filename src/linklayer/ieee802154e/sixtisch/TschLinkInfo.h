@@ -174,6 +174,7 @@ public:
      */
     std::vector<cellLocation_t> getDedicatedCells(uint64_t nodeId, bool requireRx);
     std::vector<cellLocation_t> getDedicatedCells(uint64_t nodeId) { return getDedicatedCells(nodeId, false); };
+    std::vector<cellLocation_t> getCellsByType(uint64_t nodeId, uint8_t requiredCellType);
 
     /**
      * @return the associated cell options or 0xFF
@@ -195,6 +196,8 @@ public:
      * @brief Delete all cells that are scheduled on the link with @p nodeId.
      */
     void clearCells(uint64_t nodeId);
+
+    bool hasSharedCell(uint64_t nodeId);
 
     /**
      * @brief Delete the cells specified in @p cellList from the link with

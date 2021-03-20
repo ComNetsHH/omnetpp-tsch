@@ -72,6 +72,13 @@ class TschLink : public omnetpp::cObject
     virtual std::string detailedInfo() const OMNETPP5_CODE(override);
     virtual std::string slug() const;
 
+//    friend std::ostream& operator<<(std::ostream& os, const TschLink& link) { os << link.str(); return os; }
+//    friend std::ostream& operator<<(std::ostream& os, std::vector<TschLink *> links) {
+//        for (auto l : links)
+//            os << l->str() << std::endl;
+//        return os;
+//    }
+
     virtual bool operator==(const TschLink& link) const { return equals(link); }
     virtual bool operator!=(const TschLink& link) const { return !equals(link); }
     virtual bool equals(const TschLink& link) const;

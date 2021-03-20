@@ -188,6 +188,15 @@ cellVector TschLinkInfo::getCells(uint64_t nodeId) {
     return cv;
 }
 
+bool TschLinkInfo::hasSharedCell(uint64_t nodeId) {
+    for (auto link: linkInfo[nodeId].scheduledCells) {
+        auto opts = std::get<1>(link);
+        if (getCellOptions_isSHARED(opts) && getCellOptions_isTX(opts))
+            return true;
+    }
+    return false;
+}
+
 std::vector<cellLocation_t> TschLinkInfo::getCellLocations(uint64_t nodeId) {
     Enter_Method_Silent();
 
@@ -245,8 +254,6 @@ std::vector<cellLocation_t> TschLinkInfo::getCellList(uint64_t nodeId) {
 //}
 
 std::vector<cellLocation_t> TschLinkInfo::getDedicatedCells(uint64_t nodeId, bool requireRx) {
-    // TODO: Check why linkInfo seems not to be cleared properly after cell relocation!
-
     std::vector<cellLocation_t> res = {};
 
     for (auto link : linkInfo[nodeId].scheduledCells) {
@@ -258,6 +265,20 @@ std::vector<cellLocation_t> TschLinkInfo::getDedicatedCells(uint64_t nodeId, boo
             res.push_back(std::get<0>(link));
 
         if (!requireRx && getCellOptions_isTX(cellOp))
+            res.push_back(std::get<0>(link));
+    }
+
+    return res;
+}
+
+std::vector<cellLocation_t> TschLinkInfo::getCellsByType(uint64_t nodeId, uint8_t requiredCellType) {
+    std::vector<cellLocation_t> res = {};
+
+    for (auto link : linkInfo[nodeId].scheduledCells) {
+        auto cellOp = std::get<1>(link);
+        if (getCellOptions_isTX(cellOp) && requiredCellType == MAC_LINKOPTIONS_TX)
+            res.push_back(std::get<0>(link));
+        if (getCellOptions_isRX(cellOp) && requiredCellType == MAC_LINKOPTIONS_RX)
             res.push_back(std::get<0>(link));
     }
 
@@ -388,9 +409,10 @@ bool TschLinkInfo::timeOffsetScheduled(offset_t timeOffset) {
     /* loop through all links */
     for(auto & info: linkInfo) {
         auto it = std::find_if(info.second.scheduledCells.begin(), info.second.scheduledCells.end(),
-                          [timeOffset](const std::tuple<cellLocation_t, uint8_t> & t) -> bool {
-                            cellLocation_t cell = std::get<0>(t);
-                            return cell.timeOffset == timeOffset; });
+          [timeOffset] (const std::tuple<cellLocation_t, uint8_t> & t) -> bool {
+            return std::get<0>(t).timeOffset == timeOffset;
+        });
+
         if (it != info.second.scheduledCells.end()) {
             return true;
         }
@@ -424,13 +446,11 @@ int TschLinkInfo::setRelocationCells(uint64_t nodeId,
                                      uint8_t linkOption) {
     Enter_Method_Silent();
 
-    if (!linkInfoExists(nodeId)) {
+    if (!linkInfoExists(nodeId))
         return -EINVAL;
-    }
-    if ((linkInfo[nodeId].relocationCells.size() != 0) ||
-        (linkInfo[nodeId].inTransaction == true)) {
+
+    if (linkInfo[nodeId].relocationCells.size() || linkInfo[nodeId].inTransaction)
         return -EINVAL;
-    }
 
     for (auto cell: cellList) {
         auto cellTuple = std::make_tuple(cell, linkOption);

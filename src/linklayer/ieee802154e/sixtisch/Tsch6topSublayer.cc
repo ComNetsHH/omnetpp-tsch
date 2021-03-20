@@ -601,9 +601,6 @@ Packet* Tsch6topSublayer::handleRequestMsg(Packet* pkt,
             cellVector sharedCells = pTschLinkInfo->getCells(sender);
             uint8_t linkOption = invertCellOption(getCellOption(cellOptions));
 
-            if (!pTschLinkInfo->cellsInSchedule(sender, relocCellList, linkOption))
-                    EV_WARN << "Cells are not in the schedule?" << endl;
-
             if (numCells == (int) relocCellList.size() && pTschLinkInfo->cellsInSchedule(sender, relocCellList, linkOption))
             {
                 /* relocCellList has the right size and all its cells are actually
@@ -871,7 +868,7 @@ void Tsch6topSublayer::receiveSignal(cComponent *source, simsignal_t signalID, c
         // TODO: using handleResponse() is a bit hacky since we're the ones who
         // sent the response, we're just handling the fact that it was ACKed
         // create dedicated SF fct for that?
-//        pTschSF->handleResponse(destId, RC_SUCCESS, 0, NULL);
+        pTschSF->handleResponse(destId, RC_SUCCESS, 0, NULL);
         pTschLinkInfo->incrementSeqNum(destId);
 
         // TODO: wenn reloc: cells in reloccellist aus ptschlinkinfo entfernen

@@ -19,8 +19,8 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-#ifndef __WAIC_TSCHMSF2_H_
-#define __WAIC_TSCHMSF2_H_
+#ifndef __WAIC_TSCHMSF_H_
+#define __WAIC_TSCHMSF_H_
 
 #include <omnetpp.h>
 
@@ -32,7 +32,61 @@
 
 class TschMSF: public TschSF, public cListener {
 
-  public:
+public:
+
+    class SfControlInfo : public cObject {
+        public:
+            uint64_t reservedDestId;
+            uint8_t cellOptions;
+
+            SfControlInfo() {
+                this->rtxCtn = 0;
+            };
+            SfControlInfo(uint64_t nodeId) {
+                this->reservedDestId = nodeId;
+                this->rtxCtn = 0;
+            }
+
+            uint64_t getNodeId() { return this->reservedDestId; }
+            void setNodeId(uint64_t nodeId) { this->reservedDestId = nodeId; }
+
+            uint64_t getCellOptions() { return this->cellOptions; }
+            void setCellOptions(uint8_t cellOptions) { this->cellOptions = cellOptions; }
+
+            int getNumCells() { return this->numCells; }
+            void setNumCells(int numDedicated) { this->numCells = numDedicated; }
+
+            tsch6pCmd_t get6pCmd() { return this->cmd; }
+            void set6pCmd (tsch6pCmd_t cmd) { this->cmd = cmd; }
+
+            int getRtxCtn() { return this->rtxCtn; }
+            void setRtxCtn (int rtxCtn) { this->rtxCtn = rtxCtn; }
+
+            int incRtxCtn() { this->rtxCtn++; return this->rtxCtn; }
+
+            SfControlInfo* dup() {
+                auto copy = new SfControlInfo();
+                copy->set6pCmd(this->get6pCmd());
+                copy->setCellOptions(this->getCellOptions());
+                copy->setNumCells(this->getNumCells());
+                copy->setNodeId(this->getNodeId());
+                copy->setRtxCtn(this->getRtxCtn());
+                return copy;
+            }
+
+            friend std::ostream& operator<<(std::ostream& os, SfControlInfo ci)
+            {
+                os << inet::MacAddress(ci.getNodeId()).str() << ": " << ci.get6pCmd() << " "
+                        << ci.getNumCells() << " cells, retries - " << ci.getRtxCtn();
+                return os;
+            }
+
+        private:
+            int numCells;
+            int rtxCtn;
+            tsch6pCmd_t cmd;
+    };
+
     virtual int numInitStages() const{return 6;}
     void initialize(int stage);
     void finish();
@@ -48,6 +102,15 @@ class TschMSF: public TschSF, public cListener {
     struct CellStatistic {
         uint8_t NumTx;
         uint8_t NumTxAck;
+        uint8_t NumRx;
+
+        friend std::ostream& operator<<(std::ostream& os, CellStatistic const& stat)
+        {
+            os << "TX: " << stat.NumTx
+                    << ", ACKs: " << stat.NumTxAck
+                    << ", RX: " << stat.NumRx << endl;
+            return os;
+        }
     };
 
     friend std::ostream& operator<<(std::ostream& os, std::vector<offset_t> const& slots)
@@ -56,7 +119,6 @@ class TschMSF: public TschSF, public cListener {
             os << s << ", ";
         return os;
     }
-
 
     /**
      * @brief Start operating. This function MUST be called after creating a SF
@@ -167,7 +229,7 @@ class TschMSF: public TschSF, public cListener {
 
     void handleMessage(cMessage* msg);
     void handleDoStart(cMessage* msg);
-    void handleHouskeeping(cMessage* msg);
+    void handleHousekeeping(cMessage* msg);
     void handleMaxCellsReached(cMessage* msg);
 
     /* unimplemented on purpose */
@@ -175,13 +237,14 @@ class TschMSF: public TschSF, public cListener {
 
     void receiveSignal(cComponent *src, simsignal_t id, cObject *value, cObject *details);
     void receiveSignal(cComponent *src, simsignal_t id, long value, cObject *details);
+
     void handleParentChangedSignal(uint64_t newParentId);
     void handlePacketEnqueued(uint64_t destId);
 
-  protected:
+   protected:
     virtual void refreshDisplay() const override;
 
-  private:
+   private:
     const tsch6pSFID_t pSFID = SFID_MSF;
 
     /** the time after which an active, unfinished transaction expires
@@ -191,20 +254,29 @@ class TschMSF: public TschSF, public cListener {
     /* the ID of this node, derived from its MAC address */
     uint64_t pNodeId;
     uint64_t rplParentId; // MAC of RPL preferred parent
-    uint64_t rplPreviousParentId; // and former parent (to track success/failure of clearing its schedule after leaving)
+
+    bool pAutoCellOnDemand;
+    bool hasOverlapping;
+    int pHousekeepingPeriod;
+    bool pHousekeepingDisabled;
+    bool pCellDeletionAllowed;
 
     std::list<uint64_t> neighbors;
 
+    cMessage *internalEvent;
+
+    int totalElapsed; // cell usage estimation intervals
     int pSlotframeLength;
     int pCellListRedundancy;
     int pNumChannels;
     offset_t pNumMinimalCells; // number of minimal cells being scheduled for ICMPv6, RPL broadcast messages
 
-
     int pMaxNumCells;
     int pMaxNumTx;
+    int tsch6pRtxThresh;
     double pLimNumCellsUsedHigh;
     double pLimNumCellsUsedLow;
+
     double pRelocatePdrThres;
 
     simtime_t SENSE_INTERVAL;
@@ -217,13 +289,22 @@ class TschMSF: public TschSF, public cListener {
 
     InterfaceTable* interfaceModule;
 
-    Ieee802154eMac* mac;
+    Ieee802154eMac *mac;
+    TschSlotframe *schedule;
+    cModule *rpl;
+    cModule *hostNode; // reference to this host node's module
 
     /**
      * Set to True at index nodeId after @ref initNumCells cells have been
      * allocated successfully for link with nodeId
      */
     std::map<uint64_t, bool> initialScheduleComplete;
+
+
+    /**
+     * Stores status and retransmit counters of failed 6P transactions per neighbor
+     */
+    std::map<uint64_t, SfControlInfo*> pendingTransactions;
 
     /**
      * TimeOffsets that have been suggested to a neighbor in an unfinished ADD
@@ -239,14 +320,9 @@ class TschMSF: public TschSF, public cListener {
     std::map<uint64_t, NbrStatistic> nbrStatistic;
     std::map<cellLocation_t, CellStatistic> cellStatistic;
 
-    uint32_t autoRxSlOffset;
-
     bool hasStarted;
-    bool unicastParentCellScheduled;
     bool disable;
-    bool cellsLocked;
     cellLocation_t autoRxCell;
-    cModule *rpl;
 
     /**
      * Emitted each time the schedule setup with a neighbor is complete,
@@ -255,13 +331,12 @@ class TschMSF: public TschSF, public cListener {
     simsignal_t s_InitialScheduleComplete;
     simsignal_t rplParentChangedSignal;
 
-    cModule *hostNode; // reference to this host node's module
-
     enum msfSelfMsg_t {
         CHECK_STATISTICS,
         REACHED_MAXNUMCELLS,
         DO_START,
         HOUSEKEEPING,
+        SCHEDULE_DEDICATED,
         UNDEFINED
     };
 
@@ -272,17 +347,29 @@ class TschMSF: public TschSF, public cListener {
     void addCells(uint64_t nodeId, int numCells) { addCells(nodeId, numCells, MAC_LINKOPTIONS_TX); }
 
     void deleteCells(uint64_t nodeId, int numCells);
-
     void scheduleAutoCell(uint64_t neighbor);
     void scheduleAutoRxCell(InterfaceToken euiAddr);
     void removeAutoTxCell(uint64_t neighbor);
+//    void relocateCell(cellLocation_t cell, double cellPdr, double maxPdr);
+    void relocateCells(uint64_t neighbor);
+    void relocateCells(uint64_t neighbor, cellLocation_t cell);
+    void relocateCells(uint64_t neighbor, std::vector<cellLocation_t> relocCells);
 
-    void clearScheduleWithNode(uint64_t sender) { clearScheduleWithNode(sender, false); }
-    void clearScheduleWithNode(uint64_t sender, bool clearAutoCells);
+    void clearScheduleWithNode(uint64_t sender);
+
+    bool checkOverlapping();
+
+    void scheduleRetryAttempt(uint64_t nodeId, int numCells, uint8_t cellOptions, tsch6pCmd_t cmd);
+    void scheduleRetryAttempt(uint64_t nodeId, int numCells, uint8_t cellOptions) {
+        scheduleRetryAttempt(nodeId, numCells, cellOptions, CMD_ADD);
+    };
+
+    void checkDedicatedCellScheduled(uint64_t neighbor);
+
+    void clearReservedTimeout(uint64_t destId);
 
     void scheduleMinimalCells();
     uint64_t checkInTransaction();
-    bool validSlotOffsets(SlotframeChunk chunk);
     bool isRoot; // RPL root/sink indicator
 
     /**
@@ -291,6 +378,7 @@ class TschMSF: public TschSF, public cListener {
      */
     bool slotOffsetReserved(offset_t slOf);
     bool slotOffsetReserved(uint64_t nodeId, offset_t slOf);
+    bool slOfScheduled(offset_t slOf);
 
     /**
      * @return    the number of times the channel has been busy in %.
@@ -301,10 +389,14 @@ class TschMSF: public TschSF, public cListener {
     void clearCellStats(std::vector<cellLocation_t> cellList);
     std::string printCellUsage(std::string neighborMac, double usage);
     void updateCellTxStats(cellLocation_t cell, std::string statType);
+    void removeCell(uint64_t neighbor, cellLocation_t cell, uint8_t cellOptions);
+
     void updateNeighborStats(uint64_t neighbor, std::string statType);
     bool slotOffsetAvailable(offset_t slOf);
 
-    bool hasDedicatedCell(); // Check whether we have a dedicated TX cell scheduled to preferred parent already
+    void scheduleDedicatedCell(SfControlInfo *ci); // handler for SCHEDULE_DEDICATED event
+
+    void handleFailedTransaction(uint64_t sender, tsch6pCmd_t cmd);
 
     /**
      * Pick @param numRequested items without duplicates randomly uniformly
@@ -321,8 +413,6 @@ class TschMSF: public TschSF, public cListener {
      */
     std::vector<offset_t> getAvailableSlotsInRange(offset_t start, offset_t end);
     std::vector<offset_t> getAvailableSlotsInRange(int slOffsetEnd);
-    std::vector<offset_t> getAvailableSlotsInRange() { return getAvailableSlotsInRange(pSlotframeLength); }
-
 };
 
 #endif /*__WAIC_TSCHMSF_H_*/

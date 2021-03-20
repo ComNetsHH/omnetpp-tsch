@@ -93,6 +93,8 @@ class INET_API Ipv6NeighbourDiscovery : public cSimpleModule, public LifecycleUn
      */
     virtual void reachabilityConfirmed(const Ipv6Address& neighbour, int interfaceId);
 
+    void invalidateNeigbourCache();
+
   protected:
 
     virtual void refreshDisplay() const override;
@@ -391,9 +393,6 @@ class INET_API Ipv6NeighbourDiscovery : public cSimpleModule, public LifecycleUn
      * (RFC 3775 7.5.).
      */
     virtual bool canServeWirelessNodes(InterfaceEntry *ie);
-
-  public:
-    void invalidateNeigbourCache();
 
   protected:
     void routersUnreachabilityDetection(const InterfaceEntry *ie);    // 3.9.07 - CB

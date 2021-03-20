@@ -124,6 +124,8 @@ class TschSlotframe : public cSimpleModule, protected cListener, public ILifecyc
      */
     virtual int getNumLinks() const { return links.size(); }
 
+    virtual LinkVector getLinks() const { return links; }
+
     /**
      * Returns the kth link.
      */
@@ -198,6 +200,8 @@ class TschSlotframe : public cSimpleModule, protected cListener, public ILifecyc
      * or null if nothing is scheduled.
      */
     TschLink *getLinkFromASN(int64_t asn);
+
+    std::vector<TschLink*> getLinksFromASN(int64_t asn);
 
     /**
      * Get the next scheduled link considering the given ASN.

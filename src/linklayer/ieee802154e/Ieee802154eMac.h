@@ -315,6 +315,10 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
     /** @brief Stores if the MAC expects Acks for Unicast packets.*/
     bool useMACAcks;
 
+    // Prioritize dedicated TX cells used for application traffic in case several
+    // cells are scheduled at the same slot offset
+    bool pPrioAppData;
+
     /** @brief Defines the backoff method to be used.*/
     backoff_methods backoffMethod;
 
@@ -400,6 +404,10 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
     void startTimer(t_mac_timer timer);
 
     omnetpp::simtime_t scheduleSlot();
+
+    int getVirtualLinkId(TschLink* link);
+    TschLink* selectActiveLink(std::vector<TschLink*> links);
+    TschLink* selectActiveLink(std::vector<TschLink*> links, bool prioAppData);
 
     virtual void decapsulate(inet::Packet *packet);
 

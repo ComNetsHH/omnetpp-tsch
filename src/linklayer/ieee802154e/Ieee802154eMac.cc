@@ -120,6 +120,8 @@ void Ieee802154eMac::initialize(int stage) {
         macState = IDLE_1;
         txAttempts = 0;
 
+        pPrioAppData = par("prioritizeApplicationData").boolValue();
+
         statisticTemplate = getProperties()->get("statisticTemplate", "nbStats");
 
     } else if (stage == INITSTAGE_LINK_LAYER) {
@@ -350,6 +352,60 @@ void Ieee802154eMac::handleUpperPacket(Packet *packet) {
     }
 }
 
+int Ieee802154eMac::getVirtualLinkId(TschLink* link) {
+    auto vl = dynamic_cast<TschVirtualLink*>(link);
+
+    return vl ? vl->getVirtualLink() : 0;
+}
+
+TschLink* Ieee802154eMac::selectActiveLink(std::vector<TschLink*> links) {
+    return selectActiveLink(links, false);
+}
+
+TschLink* Ieee802154eMac::selectActiveLink(std::vector<TschLink*> links, bool prioAppData) {
+    if (links.size() == 1)
+        return links.back();
+
+    if (prioAppData) {
+        // First check for the DEDICATED TX link with packets in queue
+        for (auto link : links) {
+            if (link->isTx() && !link->isAuto()
+                    // TODO: check virtual link id is determined correctly
+                    && neighbor->checkVirtualQueueSizeAt(link->getAddr(), getVirtualLinkId(link)))
+            {
+                EV_DETAIL << "Found dedicated TX link with non-empty queue: " << link << endl;
+                return link;
+            }
+        }
+    }
+
+    // Next look for ANY TX link (auto, shared)
+    for (auto link : links) {
+        if (link->isTx() && neighbor->checkVirtualQueueSizeAt(link->getAddr(), getVirtualLinkId(link)))
+        {
+            EV_DETAIL << "Found shared TX link with non-empty queue: " << link << endl;
+            return link;
+        }
+    }
+
+    EV_DETAIL << "No active TX link detected, choosing RX one" << endl;
+
+    // Else just pick remainig RX/AUTO link randomly
+    std::vector<TschLink*> rxLinks = {};
+    for (auto link : links)
+        if (!link->isTx())
+            rxLinks.push_back(link);
+
+    if (!rxLinks.size())
+        return nullptr;
+
+    auto activeLink = rxLinks[intrand(rxLinks.size())];
+    EV_DETAIL << "Selected active link: " << endl;
+
+    return activeLink;
+}
+
+
 void Ieee802154eMac::updateStatusIdle(t_mac_event event, cMessage *msg) {
     switch (event) {
     case EV_TIMER_SLOT: {
@@ -362,18 +418,16 @@ void Ieee802154eMac::updateStatusIdle(t_mac_event event, cMessage *msg) {
         // start of new slot
         // Done in  startTimer(Timer_Slot);
         //currentAsn = asn.getAsn(simTime());
-        currentLink = schedule->getLinkFromASN(currentAsn);
-        if (currentLink == nullptr) {
+//        currentLink = schedule->getLinkFromASN(currentAsn);
+
+        currentLink = selectActiveLink(schedule->getLinksFromASN(currentAsn), pPrioAppData);
+
+        if (!currentLink)
             return;
-        }
+
         currentChannel = hopping->channel(currentAsn, currentLink->getChannelOffset());
         auto freq = hopping->channelToCenterFrequency(currentChannel);
-        int currentVirtualLinkID;
-        if(dynamic_cast<TschVirtualLink*>(currentLink) != nullptr){
-            currentVirtualLinkID = (dynamic_cast<TschVirtualLink*>(currentLink))->getVirtualLink();
-        }else{
-            currentVirtualLinkID = 0;
-        }
+        int currentVirtualLinkID = getVirtualLinkId(currentLink);
 
         EV_DETAIL << currentLink->str() << endl;
 
@@ -382,9 +436,8 @@ void Ieee802154eMac::updateStatusIdle(t_mac_event event, cMessage *msg) {
 
         neighbor->reset();
         auto queueSize = neighbor->checkVirtualQueueSizeAt(currentLink->getAddr(), currentVirtualLinkID);
-        EV_DETAIL << "We are in ASN " << currentAsn << " queue size "
-                         << queueSize
-                         << " channel " << currentChannel << " frequency " << freq << endl;
+        EV_DETAIL << "We are in ASN " << currentAsn << " queue size " << queueSize
+                << " channel " << currentChannel << " frequency " << freq << endl;
         EV_DETAIL << "This Node is: " << interfaceEntry->getMacAddress() << endl;
         neighbor->printQueue();
 
@@ -515,42 +568,39 @@ void Ieee802154eMac::updateStatusCCA(t_mac_event event, cMessage *msg) {
     }
 }
 
-void Ieee802154eMac::updateStatusTransmitFrame(t_mac_event event,
-        cMessage *msg) {
-    if (event == EV_FRAME_TRANSMITTED) {
-        Packet *packet =
-                neighbor->getCurrentNeighborQueueFirstPacket();
-        const auto& csmaHeader = packet->peekAtFront<Ieee802154eMacHeader>();
-
-        bool expectAck = useMACAcks;
-        if (!csmaHeader->getDestAddr().isBroadcast()
-                && !csmaHeader->getDestAddr().isMulticast()) {
-            //unicast
-            EV_DETAIL << "(4) FSM State TRANSMITFRAME_4, "
-                             << "EV_FRAME_TRANSMITTED [Unicast]: ";
-        } else {
-            //broadcast
-            EV_DETAIL << "(27) FSM State TRANSMITFRAME_4, EV_FRAME_TRANSMITTED "
-                             << " [Broadcast]";
-            expectAck = false;
-        }
-
-        if (expectAck) {
-            EV_DETAIL << "RadioSetupRx -> WAITACK." << endl;
-            radio->setRadioMode(IRadio::RADIO_MODE_RECEIVER);
-            updateMacState(WAITACK_5);
-            startTimer(TIMER_RX_ACK);
-        } else {
-            EV_DETAIL << ": RadioSetupSleep..." << endl;
-            radio->setRadioMode(IRadio::RADIO_MODE_SLEEP);
-            neighbor->removeFirstPacketFromQueue();
-            delete packet;
-            updateMacState(IDLE_1);
-        }
-        delete msg;
-    } else {
+void Ieee802154eMac::updateStatusTransmitFrame(t_mac_event event, cMessage *msg) {
+    if (event != EV_FRAME_TRANSMITTED)
         fsmError(event, msg);
+
+    Packet *packet = neighbor->getCurrentNeighborQueueFirstPacket();
+    const auto& csmaHeader = packet->peekAtFront<Ieee802154eMacHeader>();
+
+    bool expectAck = useMACAcks;
+    if (!csmaHeader->getDestAddr().isBroadcast() && !csmaHeader->getDestAddr().isMulticast())
+    {
+        //unicast
+        EV_DETAIL << "(4) FSM State TRANSMITFRAME_4, "
+                         << "EV_FRAME_TRANSMITTED [Unicast]: ";
+    } else {
+        //broadcast
+        EV_DETAIL << "(27) FSM State TRANSMITFRAME_4, EV_FRAME_TRANSMITTED "
+                         << " [Broadcast]";
+        expectAck = false;
     }
+
+    if (expectAck) {
+        EV_DETAIL << "RadioSetupRx -> WAITACK." << endl;
+        radio->setRadioMode(IRadio::RADIO_MODE_RECEIVER);
+        updateMacState(WAITACK_5);
+        startTimer(TIMER_RX_ACK);
+    } else {
+        EV_DETAIL << ": RadioSetupSleep..." << endl;
+        radio->setRadioMode(IRadio::RADIO_MODE_SLEEP);
+        neighbor->removeFirstPacketFromQueue();
+        delete packet;
+        updateMacState(IDLE_1);
+    }
+    delete msg;
 }
 
 void Ieee802154eMac::updateStatusWaitAck(t_mac_event event, cMessage *msg) {
@@ -612,27 +662,21 @@ void Ieee802154eMac::updateStatusWaitAck(t_mac_event event, cMessage *msg) {
 
 void Ieee802154eMac::manageFailedTX() {
     neighbor->failedTX();
-    if ((int) macMaxFrameRetries
-            < (neighbor->getCurrentTschCSMA()->getNB())) {
+    if ((int) macMaxFrameRetries < (neighbor->getCurrentTschCSMA()->getNB())) {
         EV_DETAIL << "Packet was transmitted " << macMaxFrameRetries
-                                 << " times and an ACK was never received. The packet is dropped."
-                                 << endl;
-                cMessage *mac =
-                        neighbor->getCurrentNeighborQueueFirstPacket();
-                neighbor->removeFirstPacketFromQueue();
-                neighbor->terminateCurrentTschCSMA();
-                PacketDropDetails details;
-                details.setReason(RETRY_LIMIT_REACHED);
-                details.setLimit(macMaxFrameRetries);
-                emit(packetDroppedSignal, mac, &details);
-                emit(linkBrokenSignal, mac);
-                delete mac;
+                << " times and an ACK was never received. The packet is dropped." << endl;
+        cMessage *mac = neighbor->getCurrentNeighborQueueFirstPacket();
+        neighbor->removeFirstPacketFromQueue();
+        neighbor->terminateCurrentTschCSMA();
+        PacketDropDetails details;
+        details.setReason(RETRY_LIMIT_REACHED);
+        details.setLimit(macMaxFrameRetries);
+        emit(packetDroppedSignal, mac, &details);
+        emit(linkBrokenSignal, mac);
+        delete mac;
     }
     neighbor->reset();
 }
-
-
-
 
 void Ieee802154eMac::updateStatusReceiveFrame(t_mac_event event,
         omnetpp::cMessage *msg) {

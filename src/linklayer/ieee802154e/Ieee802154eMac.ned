@@ -92,6 +92,9 @@ simple Ieee802154eMac extends MacProtocolBase like IMacProtocol
         string backoffMethod = default("exponential");
         // The path to the Radio module  //FIXME remove default value
         string radioModule = default("^.^.radio");
+        
+        // See header explanation for pPrioAppData
+        bool prioritizeApplicationData = default(false);
 
         @class(Ieee802154eMac);
         @signal[linkBroken](type=inet::Packet);

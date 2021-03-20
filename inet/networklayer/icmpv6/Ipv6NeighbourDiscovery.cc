@@ -2446,6 +2446,12 @@ void Ipv6NeighbourDiscovery::processNaForOtherNceStates(const Ipv6NeighbourAdver
     }
 }
 
+void Ipv6NeighbourDiscovery::invalidateNeigbourCache()
+{
+    //Enter_Method("Invalidating Neigbour Cache Entries");
+    neighbourCache.invalidateAllEntries();
+}
+
 void Ipv6NeighbourDiscovery::createAndSendRedirectPacket(InterfaceEntry *ie)
 {
     //Construct a Redirect message
@@ -2639,12 +2645,6 @@ void Ipv6NeighbourDiscovery::routersUnreachabilityDetection(const InterfaceEntry
         else
             ++it;
     }
-}
-
-void Ipv6NeighbourDiscovery::invalidateNeigbourCache()
-{
-    //Enter_Method("Invalidating Neigbour Cache Entries");
-    neighbourCache.invalidateAllEntries();
 }
 
 bool Ipv6NeighbourDiscovery::canServeWirelessNodes(InterfaceEntry *ie)

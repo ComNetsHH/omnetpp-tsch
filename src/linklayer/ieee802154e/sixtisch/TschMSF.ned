@@ -13,7 +13,7 @@ simple TschMSF like TschSF
         // (needs to be defined by every SF as per the 6P standard)
         int timeout @unit("ms") = default(25000ms);
 
-        // the number of cells to be initially scheduled between all nodes
+        // DEPRECATED the number of cells to be initially scheduled between all nodes, 
         int initNumcells = default(6);
 
         // The maximum time in ms that will pass until another initial ADD
@@ -25,7 +25,7 @@ simple TschMSF like TschSF
         int numMinCells = default(5);
         double upperCellUsageLimit = default(0.75);
         double lowerCellUsageLimit = default(0.25);
-        int HOUSEKEEPINGCOLLISION_PERIOD @unit("s") = default(60s);
+        int housekeepingPeriod @unit("s") = default(60s);
         double RELOCATE_PDRTHRES = default(0.50);
         double clearReservedCellsTimeout = default(50000);
 //        int SLOTFRAME_LENGTH = default(101);
@@ -45,5 +45,5 @@ simple TschMSF like TschSF
         bool showDedicatedTxCells = default(true); // show scheduled TX cells locations above node
         bool allowMinimalCellsOverride = default(false);    	 
 
-		double startTime @unit("s") = default(uniform(0s,10s));
+		double startTime @unit("s") = default(uniform(0s, 10s));
 }

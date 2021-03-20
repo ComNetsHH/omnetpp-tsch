@@ -481,6 +481,12 @@ const Ipv6Route *Ipv6RoutingTable::doLongestPrefixMatch(const Ipv6Address& dest)
     // we'll just stop at the first match, because the table is sorted
     // by prefix lengths and metric (see addRoute())
 
+    EV_DETAIL << "Doing longest prefix match for dest " << dest
+            << ", current rt: " << endl;
+    for (auto rt: routeList)
+        EV_DETAIL << rt->getDestinationAsGeneric().toIpv6() << " via " << rt->getNextHopAsGeneric().toIpv6() << endl;
+
+
     auto it = routeList.begin();
     while (it != routeList.end()) {
         if (dest.matches((*it)->getDestPrefix(), (*it)->getPrefixLength())) {
