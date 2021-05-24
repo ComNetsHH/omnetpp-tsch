@@ -318,6 +318,7 @@ public:
     std::map<uint64_t, std::vector<offset_t>> reservedTimeOffsets;
 
     std::map<uint64_t, NbrStatistic> nbrStatistic;
+    std::vector<uint64_t> oneHopRplChildren;
     std::map<cellLocation_t, CellStatistic> cellStatistic;
 
     bool hasStarted;
@@ -336,7 +337,6 @@ public:
         REACHED_MAXNUMCELLS,
         DO_START,
         HOUSEKEEPING,
-        SCHEDULE_DEDICATED,
         UNDEFINED
     };
 
@@ -359,18 +359,12 @@ public:
 
     bool checkOverlapping();
 
-    void scheduleRetryAttempt(uint64_t nodeId, int numCells, uint8_t cellOptions, tsch6pCmd_t cmd);
-    void scheduleRetryAttempt(uint64_t nodeId, int numCells, uint8_t cellOptions) {
-        scheduleRetryAttempt(nodeId, numCells, cellOptions, CMD_ADD);
-    };
-
     void checkDedicatedCellScheduled(uint64_t neighbor);
 
     void clearReservedTimeout(uint64_t destId);
 
     void scheduleMinimalCells();
     uint64_t checkInTransaction();
-    bool isRoot; // RPL root/sink indicator
 
     /**
      * @return    true if @p slotOffset is already reserved,
@@ -393,10 +387,6 @@ public:
 
     void updateNeighborStats(uint64_t neighbor, std::string statType);
     bool slotOffsetAvailable(offset_t slOf);
-
-    void scheduleDedicatedCell(SfControlInfo *ci); // handler for SCHEDULE_DEDICATED event
-
-    void handleFailedTransaction(uint64_t sender, tsch6pCmd_t cmd);
 
     /**
      * Pick @param numRequested items without duplicates randomly uniformly

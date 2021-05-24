@@ -161,7 +161,7 @@ public:
      */
     cellVector getCells(uint64_t nodeId);
     cellVector getMinimalCells();
-    cellListVector getMinimalCellLocations(offset_t slotOffset = -1);
+    cellListVector getMinimalCells(offset_t slotOffset);
     std::vector<cellLocation_t> getCellList(uint64_t nodeId);
 
     /**
@@ -197,7 +197,7 @@ public:
      */
     void clearCells(uint64_t nodeId);
 
-    bool hasSharedCell(uint64_t nodeId);
+    bool sharedTxScheduled(uint64_t nodeId);
 
     /**
      * @brief Delete the cells specified in @p cellList from the link with

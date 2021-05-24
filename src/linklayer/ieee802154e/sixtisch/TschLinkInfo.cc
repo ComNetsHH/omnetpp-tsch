@@ -168,6 +168,8 @@ int TschLinkInfo::addCells(uint64_t nodeId, const std::vector<cellLocation_t> &c
 {
     Enter_Method_Silent();
 
+    EV_DETAIL << "Adding cells: " << cellList << " " << printLinkOptions(linkOption) << endl;
+
     if (!linkInfoExists(nodeId))
         return -EINVAL;
 
@@ -188,7 +190,7 @@ cellVector TschLinkInfo::getCells(uint64_t nodeId) {
     return cv;
 }
 
-bool TschLinkInfo::hasSharedCell(uint64_t nodeId) {
+bool TschLinkInfo::sharedTxScheduled(uint64_t nodeId) {
     for (auto link: linkInfo[nodeId].scheduledCells) {
         auto opts = std::get<1>(link);
         if (getCellOptions_isSHARED(opts) && getCellOptions_isTX(opts))
@@ -214,15 +216,12 @@ cellVector TschLinkInfo::getMinimalCells() {
     return linkInfo[inet::MacAddress::BROADCAST_ADDRESS.getInt()].scheduledCells;
 }
 
-cellListVector TschLinkInfo::getMinimalCellLocations(offset_t slotOffset) {
-    auto links = getMinimalCells();
+cellListVector TschLinkInfo::getMinimalCells(offset_t slotOffset) {
+    auto minCellLinks = getMinimalCells();
     cellListVector cv = {};
-    for (auto l : links) {
-        auto cellLoc = std::get<0>(l);
-        if (slotOffset != - 1 && cellLoc.timeOffset == slotOffset)
-            cv.push_back(cellLoc);
-        if (slotOffset == -1)
-            cv.push_back(cellLoc);
+    for (auto mc : minCellLinks) {
+        if (std::get<0>(mc).timeOffset == slotOffset)
+            cv.push_back(std::get<0>(mc));
     }
 
     return cv;

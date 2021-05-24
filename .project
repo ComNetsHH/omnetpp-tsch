@@ -3,7 +3,8 @@
 	<name>tsch</name>
 	<comment></comment>
 	<projects>
-		<project>inet</project>
+		<project>inet4</project>
+		<project>omnetpp-rpl</project>
 	</projects>
 	<buildSpec>
 		<buildCommand>

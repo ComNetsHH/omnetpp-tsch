@@ -29,7 +29,9 @@ import inet.networklayer.configurator.ipv6.Ipv6FlatNetworkConfigurator;
 import inet.physicallayer.contract.packetlevel.IRadioMedium;
 import inet.visualizer.contract.IIntegratedVisualizer;
 import inet.node.inet.WirelessHost;
+import rpl.configurator.RplNetConfigurator;
 import rpl.RplRouter;
+import rpl.Rpl;
 
 network HighDensity
 {
@@ -38,7 +40,7 @@ network HighDensity
         int numHosts = default(1);
         int numSinks = default(1);
     submodules:
-        configurator: Ipv6FlatNetworkConfigurator {
+        configurator: RplNetConfigurator {
             parameters:
                 @display("p=1013.768,81.872;is=s");
         }

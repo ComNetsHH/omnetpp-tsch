@@ -30,6 +30,7 @@ import inet.physicallayer.contract.packetlevel.IRadioMedium;
 import inet.visualizer.contract.IIntegratedVisualizer;
 import inet.node.inet.WirelessHost;
 import rpl.RplRouter;
+import rpl.configurator.RplNetConfigurator;
 
 network Branches
 {
@@ -38,7 +39,7 @@ network Branches
         int numSinks = default(1);
         int numHosts = default(30);
     submodules:
-        configurator: Ipv6FlatNetworkConfigurator {
+        configurator: RplNetConfigurator {
             parameters:
                 @display("p=27.91269,1.9802921;is=s");
         }

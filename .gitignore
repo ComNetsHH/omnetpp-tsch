@@ -51,6 +51,8 @@ precompiled_*.h.*
 
 # ignore binary files
 out/
+**/tsch
+**/tsch_dbg
 **/tsch-master
 *.so
 *.dylib
@@ -80,3 +82,4 @@ backups
 *~
 xxx
 /tmp/
+**/.DS_STORE
