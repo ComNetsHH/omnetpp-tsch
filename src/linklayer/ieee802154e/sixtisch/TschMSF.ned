@@ -35,13 +35,10 @@ simple TschMSF like TschSF
         int maxNumCells = default(intuniform(4, 10));
         int MAX_NUMTX = default(254);
         int slotframeLen = default(101);
-        int cellListRedundancy = default(3); // number of additional cells to include in 6P ADD/RELOCATE proposals
+        int cellListRedundancy = default(3); // number of additional cells to pad CELL_LIST in 6P transcations
         int cellBandwidthIncrement = default(1); // number of cells to add with neighbor if cell usage is excessive
         bool disable = default(false);
-        // determines whether auto TX cells to neighbors are scheduled on demand (per transmission), or globally during initialization stage
-        bool autoCellOnDemand = default(true); // WARNING: may lead to cell collisions (adding AUTO cell on top of dedicated cell)  
-        bool disableHousekeeping = default(false);
-        bool allowCellRemoval = default(true);
+        bool disableHousekeeping = default(true);
         bool showDedicatedTxCells = default(true); // show scheduled TX cells locations above node
         bool allowMinimalCellsOverride = default(false);    	 
 

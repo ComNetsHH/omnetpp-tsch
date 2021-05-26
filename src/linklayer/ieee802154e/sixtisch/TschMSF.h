@@ -238,7 +238,22 @@ public:
     void receiveSignal(cComponent *src, simsignal_t id, cObject *value, cObject *details);
     void receiveSignal(cComponent *src, simsignal_t id, long value, cObject *details);
 
+    /**
+     * Process RPL preferred parent updates
+     *
+     * Whenever a new preferred parent is selected, we have to schedule dedicated TX cell to it
+     *
+     * @param newParentId MAC address of the new parent
+     */
     void handleParentChangedSignal(uint64_t newParentId);
+
+    /**
+     * Process packet enqueue event coming from the MAC layer.
+     * Ensures there's a TX cell to this destination
+     * by adding an auto cell if there's no dedicated / auto cells present.
+     *
+     * @param destId MAC address of the destination for which there's a packet enqueued
+     */
     void handlePacketEnqueued(uint64_t destId);
 
    protected:
@@ -255,7 +270,6 @@ public:
     uint64_t pNodeId;
     uint64_t rplParentId; // MAC of RPL preferred parent
 
-    bool pAutoCellOnDemand;
     bool hasOverlapping;
     int pHousekeepingPeriod;
     bool pHousekeepingDisabled;
@@ -295,18 +309,6 @@ public:
     cModule *hostNode; // reference to this host node's module
 
     /**
-     * Set to True at index nodeId after @ref initNumCells cells have been
-     * allocated successfully for link with nodeId
-     */
-    std::map<uint64_t, bool> initialScheduleComplete;
-
-
-    /**
-     * Stores status and retransmit counters of failed 6P transactions per neighbor
-     */
-    std::map<uint64_t, SfControlInfo*> pendingTransactions;
-
-    /**
      * TimeOffsets that have been suggested to a neighbor in an unfinished ADD
      * or RELOCATE transactions (and can thus currently not be suggested to any
      * other neighbor).
@@ -330,7 +332,6 @@ public:
      * i.e. all cells have been allocated in both directions.
      */
     simsignal_t s_InitialScheduleComplete;
-    simsignal_t rplParentChangedSignal;
 
     enum msfSelfMsg_t {
         CHECK_STATISTICS,
@@ -350,20 +351,44 @@ public:
     void scheduleAutoCell(uint64_t neighbor);
     void scheduleAutoRxCell(InterfaceToken euiAddr);
     void removeAutoTxCell(uint64_t neighbor);
-//    void relocateCell(cellLocation_t cell, double cellPdr, double maxPdr);
+
+    /**
+     * Randomly relocate all cells scheduled with specified neighbor
+     *
+     * @param neighbor MAC address of the neighbour to relocate cells with
+     */
     void relocateCells(uint64_t neighbor);
+
+    /**
+     * Relocate single cell scheduled with the neighbor at specified location
+     *
+     * @param neighbor MAC address of the neighbor to relocate cells with
+     * @param cell location of cell to be relocated
+     */
     void relocateCells(uint64_t neighbor, cellLocation_t cell);
+
+    /**
+     * Relocate multiple cells scheduled with the neighbor
+     *
+     * @param neighbor MAC address of the neighbor to relocate cells with
+     */
     void relocateCells(uint64_t neighbor, std::vector<cellLocation_t> relocCells);
 
+    /**
+     * Remove cells from the schedule as well as corresponding cell statsistics associated with neighbour
+     *
+     * @param sender MAC address of the neighbour to clear schedule with
+     */
     void clearScheduleWithNode(uint64_t sender);
 
-    bool checkOverlapping();
+    /**
+     * Schedule minimal cells (TX RX SHARED) for broadcast and control messages
+     *
+     * @param numMinimalCells number of cells to schedule evenly across the slotframe length
+     * @param slotframeLength length of the slotframe in timeslots
+     */
+    void scheduleMinimalCells(int numMinimalCells, int slotframeLength);
 
-    void checkDedicatedCellScheduled(uint64_t neighbor);
-
-    void clearReservedTimeout(uint64_t destId);
-
-    void scheduleMinimalCells();
     uint64_t checkInTransaction();
 
     /**

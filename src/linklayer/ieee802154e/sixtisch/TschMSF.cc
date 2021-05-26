@@ -22,7 +22,7 @@
 #include "TschMSF.h"
 
 #include "../Ieee802154eMac.h"
-#include "Rpl.h"
+//#include "Rpl.h"
 #include "Tsch6tischComponents.h"
 #include <omnetpp.h>
 #include <random>
@@ -37,7 +37,6 @@ TschMSF::TschMSF() :
     rplParentId(0),
     tsch6pRtxThresh(3),
     hasStarted(false),
-    pCellDeletionAllowed(true),
     pHousekeepingDisabled(false),
     hasOverlapping(false)
 {
@@ -58,14 +57,11 @@ void TschMSF::initialize(int stage) {
         pRelocatePdrThres = par("RELOCATE_PDRTHRES");
         pCellListRedundancy = par("cellListRedundancy").intValue();
         pNumMinimalCells = par("numMinCells").intValue();
-        pCellDeletionAllowed = par("allowCellRemoval").boolValue();
         disable = par("disable").boolValue();
         pHousekeepingPeriod = par("housekeepingPeriod").intValue();
         pHousekeepingDisabled = par("disableHousekeeping").boolValue();
         internalEvent = new cMessage("SF internal event", UNDEFINED);
         s_InitialScheduleComplete = registerSignal("initial_schedule_complete");
-        rplParentChangedSignal = registerSignal("rplParentChanged");
-        pAutoCellOnDemand = par("autoCellOnDemand").boolValue();
     } else if (stage == 5) {
         interfaceModule = dynamic_cast<InterfaceTable *>(getParentModule()->getParentModule()->getParentModule()->getParentModule()->getSubmodule("interfaceTable", 0));
         pNodeId = interfaceModule->getInterface(1)->getMacAddress().getInt();
@@ -83,8 +79,9 @@ void TschMSF::initialize(int stage) {
         hostNode = getModuleByPath("^.^.^.^.");
 
         /** Schedule minimal cells for broadcast control traffic [RFC8180, 4.1] */
-        scheduleMinimalCells();
-        /** And an auto RX cell for communication with neighbors [IETF MSF draft, 3] */
+        scheduleMinimalCells(pNumMinimalCells, pSlotframeLength);
+
+        /** And an auto RX cell for communication with neighbours [IETF MSF draft, 3] */
         scheduleAutoRxCell(interfaceModule->getInterface(1)->getMacAddress().formInterfaceIdentifier());
 
         rpl = hostNode->getSubmodule("rpl");
@@ -94,6 +91,8 @@ void TschMSF::initialize(int stage) {
         }
 
         rpl->subscribe("parentChanged", this);
+
+        WATCH_LIST(neighbors);
     }
 }
 
@@ -124,7 +123,6 @@ void TschMSF::scheduleAutoRxCell(InterfaceToken euiAddr) {
     }
 
     pTsch6p->updateSchedule(*ctrlMsg);
-    initialScheduleComplete[pNodeId] = true;
     delete ctrlMsg;
 }
 
@@ -187,36 +185,11 @@ std::string TschMSF::printCellUsage(std::string neighborMac, double usage) {
 //    std::cout << pNodeId << usageInfo << endl;
 }
 
-void TschMSF::checkDedicatedCellScheduled(uint64_t neighbor) {
-    if (!pTschLinkInfo->getDedicatedCells(neighbor).size() && !pTschLinkInfo->inTransaction(neighbor))
-        addCells(neighbor, 1);
-}
-
 bool TschMSF::slOfScheduled(offset_t slOf) {
     auto links = schedule->getLinks();
     for (auto l : links)
         if (slOf == l->getSlotOffset())
             return true;
-    return false;
-}
-
-bool TschMSF::checkOverlapping() {
-    auto numLinks = schedule->getNumLinks();
-    std::vector<offset_t> dedicatedSlOffsets = {};
-    for (auto i = 0; i < numLinks; i++) {
-        auto link = schedule->getLink(i);
-        if (link->getAddr() != MacAddress::BROADCAST_ADDRESS && !link->isShared()) {
-            auto slOf = link->getSlotOffset();
-            auto nodeId = link->getAddr().getInt();
-            if (std::count(dedicatedSlOffsets.begin(), dedicatedSlOffsets.end(), slOf)) {
-                handleInconsistency(link->getAddr().getInt(), 0);
-
-                return true;
-            }
-            else
-                dedicatedSlOffsets.push_back(slOf);
-        }
-    }
     return false;
 }
 
@@ -237,7 +210,7 @@ void TschMSF::handleMaxCellsReached(cMessage* msg) {
 
     if (usage >= pLimNumCellsUsedHigh)
         addCells(neighborId, par("cellBandwidthIncrement").intValue());
-    if (usage <= pLimNumCellsUsedLow && pCellDeletionAllowed)
+    if (usage <= pLimNumCellsUsedLow)
         deleteCells(neighborId, 1);
 
     // reset values
@@ -250,58 +223,26 @@ void TschMSF::handleMaxCellsReached(cMessage* msg) {
 void TschMSF::handleDoStart(cMessage* msg) {
     hasStarted = true;
     EV_DETAIL << "MSF has started" << endl;
-//
-//    if (!pHousekeepingDisabled)
-//        scheduleAt(simTime() + SimTime(par("housekeepingStart"), SIMTIME_S), new tsch6topCtrlMsg("", HOUSEKEEPING));
+
+    if (!pHousekeepingDisabled)
+        scheduleAt(simTime() + SimTime(par("housekeepingStart"), SIMTIME_S), new tsch6topCtrlMsg("", HOUSEKEEPING));
 
     /** Get all nodes that are within communication range of @p nodeId.
     *   Note that this only works if all nodes have been initialized (i.e.
     *   maybe not in init() step 1!) **/
     neighbors = pTsch6p->getNeighborsInRange(pNodeId, mac);
-
-    // By MSF draft we shouldn't really schedule an auto cell to each neighbor at startup,
-    // keeping this as an option for compatibility reasons
-    for (auto & neighbor : neighbors) {
-        if (!pAutoCellOnDemand)
-            scheduleAutoCell(neighbor);
-        initialScheduleComplete[neighbor] = true;
-    }
 }
 
 void TschMSF::handleHousekeeping(cMessage* msg) {
     EV_DETAIL << "Performing housekeeping: " << endl;
     scheduleAt(simTime()+ uniform(0.5, 1.25) * SimTime(pHousekeepingPeriod, SIMTIME_S), msg);
 
-    // Try to ensure there's a dedicated uplink cell through preferred parent,
-    // as well as dedicated downlink cell per neighbor
-    if (rplParentId) {
-        // OPTIONAL: periodic cell overlap detection mechanism
-        if (par("cellOverlapDetection").boolValue()) {
-            totalElapsed++;
-            // FIXME: magic numbers
-            if (totalElapsed > 5) {
-                hasOverlapping = checkOverlapping();
-                totalElapsed = 0;
-            }
-        }
-
-        checkDedicatedCellScheduled(rplParentId);
-    }
-
-    if (par("keepDedicatedDownlink").boolValue()) {
-        // OPTIONAL: keep a dedicated downlink cell
-        for (auto oneHopChild : oneHopRplChildren)
-            checkDedicatedCellScheduled(oneHopChild);
-    }
-
-    return;
-
     // iterate over all neighbors
-    for (auto const& entry : initialScheduleComplete) {
+    for (auto const& neighbourId : neighbors) {
         std::map<cellLocation_t, double> pdrStat;
 
         // calc cell PDR per neighbor
-        for (auto & cell :pTschLinkInfo->getCells(entry.first)) {
+        for (auto & cell :pTschLinkInfo->getCells(neighbourId)) {
             auto slotOffset = std::get<0>(cell).timeOffset;
             auto channelOffset = std::get<0>(cell).channelOffset;
             cellLocation_t cellLoc = {slotOffset, channelOffset};
@@ -339,7 +280,7 @@ void TschMSF::handleHousekeeping(cMessage* msg) {
 //                std::cout << " and " << cellPdr.second << " at " << cellPdr.first << endl;
 
             if ((maxPdr->second - cellPdr.second) > pRelocatePdrThres)
-                relocateCells(entry.first, cellPdr.first);
+                relocateCells(neighbourId, cellPdr.first);
         }
     }
 }
@@ -401,14 +342,14 @@ void TschMSF::handleMessage(cMessage* msg) {
         }
         case HOUSEKEEPING: {
             handleHousekeeping(msg);
-            return;
+            break;
         }
         default: EV_ERROR << "Unknown message received: " << msg << endl;
     }
     delete msg;
 }
 
-void TschMSF::scheduleMinimalCells() {
+void TschMSF::scheduleMinimalCells(int numMinimalCells, int slotframeLength) {
     EV_DETAIL << "Scheduling minimal cells for broadcast messages: " << endl;
     auto ctrlMsg = new tsch6topCtrlMsg();
     auto macBroadcast = inet::MacAddress::BROADCAST_ADDRESS.getInt();
@@ -418,10 +359,10 @@ void TschMSF::scheduleMinimalCells() {
 
     std::vector<cellLocation_t> cellList = {};
 
-    int minCellPeriod = floor(pSlotframeLength / pNumMinimalCells);
+    int minCellPeriod = floor(slotframeLength / numMinimalCells);
     EV_DETAIL << "Min cells period - " << minCellPeriod << endl;
 
-    for (offset_t i = 0; i < pNumMinimalCells; i++)
+    for (offset_t i = 0; i < numMinimalCells; i++)
         cellList.push_back({i * minCellPeriod, 0});
 
     ctrlMsg->setNewCells(cellList);
@@ -464,13 +405,11 @@ std::vector<cellLocation_t> TschMSF::pickRandomly(std::vector<cellLocation_t> in
     if ((int) inputVec.size() < numRequested)
         return {};
 
-    // shuffle the array
     std::random_device rd;
     std::mt19937 e{rd()};
 
     std::shuffle(inputVec.begin(), inputVec.end(), e);
 
-    // copy the picked ones
     std::vector<cellLocation_t> picked = {};
     for (auto i = 0; i < numRequested; i++)
         picked.push_back(inputVec[i]);
@@ -541,8 +480,9 @@ int TschMSF::createCellList(uint64_t destId, std::vector<cellLocation_t> &cellLi
 
     // Select only required number of cells from cell list
     cellList = pickRandomly(cellList, numCells);
-    EV_DETAIL << "After picking required number of cells: " << cellList << endl;
-    // Block selected cells' slot offsets until 6P transaction finishes
+    EV_DETAIL << "After picking required number of cells (" << numCells << "): " << cellList << endl;
+
+    // Block selected slot offsets until 6P transaction finishes
     for (auto c : cellList)
         reservedTimeOffsets[destId].push_back(c.timeOffset);
 
@@ -608,31 +548,26 @@ void TschMSF::refreshDisplay() const {
     std::ostringstream out;
     out << txCells;
 
-    // Paint dedicated TX cell in red if overlapping cells are detected
-    if (hasOverlapping)
-        hostNode->getDisplayString().setTagArg("t", 2, "#fc2803");
-
     hostNode->getDisplayString().setTagArg("t", 0, out.str().c_str());
 }
 
-void TschMSF::handleSuccessResponse(uint64_t sender, tsch6pCmd_t cmd, int numCells, std::vector<cellLocation_t> cellList)
+void TschMSF::handleSuccessResponse(uint64_t sender, tsch6pCmd_t cmd, int numCells,
+        std::vector<cellLocation_t> cellList)
 {
     if (pTschLinkInfo->getLastKnownType(sender) != MSG_RESPONSE)
         return;
 
     switch (cmd) {
         case CMD_ADD: {
-            // No cells were added
+            // No cells were added if 6P SUCCESS responds with empty CELL_LIST
             if (!cellList.size()) {
-                EV_DETAIL << "Seems 6P ADD to " << MacAddress(sender) << " failed" << endl;
+                EV_DETAIL << "Seems ADD to " << MacAddress(sender) << " failed" << endl;
                 return;
-//                scheduleRetryAttempt(sender, numCells, MAC_LINKOPTIONS_TX); // TODO: cell options can be other than TX
             }
 
             removeAutoTxCell(sender);
 
             EV_DETAIL << "Seems ADD succeeded with cells: " << cellList << ",\nerasing entry from pending transactions" << endl;
-//            pendingTransactions.erase(sender);
             emit(s_InitialScheduleComplete, (unsigned long) sender);
             break;
         }
@@ -663,14 +598,8 @@ void TschMSF::clearScheduleWithNode(uint64_t sender)
 {
     auto ctrlMsg = new tsch6topCtrlMsg();
     ctrlMsg->setDestId(sender);
-    std::vector<cellLocation_t> deletable = {};
+    std::vector<cellLocation_t> deletable = pTschLinkInfo->getCellLocations(sender);
     EV_DETAIL << "Clearing schedule with " << MacAddress(sender) << endl;
-
-    // Clearing cells scheduled with sender (except for auto-cells preserving minimal connectivity)
-    // from local schedule
-    for (auto &cell : pTschLinkInfo->getCells(sender))
-        if (!getCellOptions_isAUTO(std::get<1>(cell)))
-            deletable.push_back(std::get<0>(cell));
 
     if (deletable.size()) {
         EV_DETAIL << "Found cells to delete: " << deletable << endl;
@@ -678,16 +607,10 @@ void TschMSF::clearScheduleWithNode(uint64_t sender)
         pTsch6p->updateSchedule(*ctrlMsg);
     } else
         delete ctrlMsg;
-
-    // Keep AUTO TX cell to pref. parent for better connectivity
-//    if (sender == rplParentId)
-//        scheduleAutoCell(sender);
-
-//    delete ctrlMsg;
 }
 
 
-// Hacky function to free cells reserved to @param sender when LL ACK is received by 6P layer
+/** Hacky way to free cells reserved to @param sender when link-layer ACK is received from it */
 void TschMSF::handleResponse(uint64_t sender, tsch6pReturn_t code, int numCells, std::vector<cellLocation_t> *cellList)
 {
     reservedTimeOffsets[sender].clear();
@@ -764,12 +687,8 @@ void TschMSF::deleteCells(uint64_t nodeId, int numCells) {
 
     if (!dedicated.size()) {
         EV_DETAIL << "No dedicated cells found" << endl;
-        // If auto-cell-on-demand is enabled, we can safely delete
-        // unused auto cells, as they will be dynamically later
-        if (pAutoCellOnDemand) {
-            EV_DETAIL << "Auto-cell-on-demand enabled, deleting auto cell" << endl;
-            removeAutoTxCell(nodeId);
-        }
+        // We can remove also an auto cell to this neigbhor, since it can be added dynamically later if needed
+        removeAutoTxCell(nodeId);
         return;
     }
 
@@ -818,9 +737,9 @@ void TschMSF::receiveSignal(cComponent *src, simsignal_t id, cObject *value, cOb
     // this is a hint we should check for new dynamic signals
     if (dynamic_cast<cPostParameterChangeNotification *>(value)) {
         // consider all neighbors we already know
-        for (auto const& entry : initialScheduleComplete) {
-            // subscribe to all neighbor related signals
-            auto macStr = MacAddress(entry.first).str();
+        for (auto const& neigbhor : neighbors) {
+            // subscribe to all neighbor-related signals
+            auto macStr = MacAddress(neigbhor).str();
             for (auto & name: namesNeigh) {
                 auto fullname = name + macStr;
                 if (src->isSubscribed(fullname.c_str(), this) == false)
@@ -828,7 +747,7 @@ void TschMSF::receiveSignal(cComponent *src, simsignal_t id, cObject *value, cOb
             }
 
             // subscribe to all link related signals
-            for (auto & cell :pTschLinkInfo->getCells(entry.first)) {
+            for (auto & cell :pTschLinkInfo->getCells(neigbhor)) {
                 auto slotOffset = std::get<0>(cell).timeOffset;
                 auto channelOffset = std::get<0>(cell).channelOffset;
 
@@ -845,7 +764,6 @@ void TschMSF::receiveSignal(cComponent *src, simsignal_t id, cObject *value, cOb
 
 void TschMSF::handleParentChangedSignal(uint64_t newParentId) {
     EV_DETAIL << "RPL parent changed to " << MacAddress(newParentId) << endl;
-    emit(rplParentChangedSignal, (unsigned long) newParentId);
 
     // If RPL parent hasn't been set, we've just joined the DODAG
     if (!rplParentId) {
@@ -873,10 +791,9 @@ void TschMSF::handlePacketEnqueued(uint64_t dest) {
     auto txCells = pTschLinkInfo->getCellsByType(dest, MAC_LINKOPTIONS_TX);
     EV_DETAIL << "Received MAC notification for a packet enqueued to "
             << MacAddress(dest) << ", cells scheduled to this neighbor:" << txCells << endl;
-    if (!txCells.size() && par("autoCellOnDemand").boolValue()) {
-        EV_DETAIL << "No TX cell found, scheduling auto cell" << endl;
+
+    if (!txCells.size())
         scheduleAutoCell(dest);
-    }
 }
 
 void TschMSF::receiveSignal(cComponent *src, simsignal_t id, long value, cObject *details)
@@ -896,11 +813,6 @@ void TschMSF::receiveSignal(cComponent *src, simsignal_t id, long value, cObject
 
     if (std::strcmp(signalName.c_str(), "pktEnqueued") == 0) {
         handlePacketEnqueued(value);
-        return;
-    }
-
-    if (std::strcmp(signalName.c_str(), "oneHopChildJoined") == 0) {
-        oneHopRplChildren.push_back(value);
         return;
     }
 
