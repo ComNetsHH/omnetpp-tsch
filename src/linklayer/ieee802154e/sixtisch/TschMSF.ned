@@ -41,9 +41,10 @@ simple TschMSF like TschSF
         // determines whether auto TX cells to neighbors are scheduled on demand (per transmission), or globally during initialization stage
         bool autoCellOnDemand = default(true); // WARNING: may lead to cell collisions (adding AUTO cell on top of dedicated cell)  
         bool disableHousekeeping = default(false);
-        bool allowCellRemoval = default(true);
-        bool showDedicatedTxCells = default(true); // show scheduled TX cells locations above node
-        bool allowMinimalCellsOverride = default(false);    	 
+        bool showDedicatedTxCells = default(true); // show scheduled TX cells coordinates above node pictorgram
+    	bool showTxCellCount = default(false); // instead of all TX cells locations, show only their count
+        bool allowMinimalCellsOverride = default(false); 
+         	 
 
 		double startTime @unit("s") = default(uniform(0s, 10s));
 }

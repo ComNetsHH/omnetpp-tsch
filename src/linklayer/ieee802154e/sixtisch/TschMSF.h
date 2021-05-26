@@ -31,8 +31,7 @@
 
 
 class TschMSF: public TschSF, public cListener {
-
-public:
+    public:
 
     class SfControlInfo : public cObject {
         public:
@@ -241,6 +240,15 @@ public:
     void handleParentChangedSignal(uint64_t newParentId);
     void handlePacketEnqueued(uint64_t destId);
 
+    /** DELAY_TEST: Add number of dedicated TX cells according to node's own rank
+     * as well as the number of nodes in the network. Here a simple linear topology is assumed,
+     * where number of node's descendants can be deduced based on the rank and # of hosts in the simulation
+     *
+     * @param rank Rpl rank of this node
+     * @param numHosts number of hosts in the entire simulation
+     * */
+    void handleRplRankUpdate(long rank, int numHosts);
+
    protected:
     virtual void refreshDisplay() const override;
 
@@ -255,11 +263,12 @@ public:
     uint64_t pNodeId;
     uint64_t rplParentId; // MAC of RPL preferred parent
 
+    int numHosts; // DELAY_TEST: Number of hosts in the simulation
+
     bool pAutoCellOnDemand;
     bool hasOverlapping;
     int pHousekeepingPeriod;
     bool pHousekeepingDisabled;
-    bool pCellDeletionAllowed;
 
     std::list<uint64_t> neighbors;
 
@@ -276,7 +285,6 @@ public:
     int tsch6pRtxThresh;
     double pLimNumCellsUsedHigh;
     double pLimNumCellsUsedLow;
-
     double pRelocatePdrThres;
 
     simtime_t SENSE_INTERVAL;
@@ -323,6 +331,11 @@ public:
 
     bool hasStarted;
     bool disable;
+
+    /** Parameter variables */
+    bool showTxCells; // see NED
+    bool showTxCellCount; // see NED
+
     cellLocation_t autoRxCell;
 
     /**
@@ -332,11 +345,14 @@ public:
     simsignal_t s_InitialScheduleComplete;
     simsignal_t rplParentChangedSignal;
 
+    int rplRank;
+
     enum msfSelfMsg_t {
         CHECK_STATISTICS,
         REACHED_MAXNUMCELLS,
         DO_START,
         HOUSEKEEPING,
+        DELAY_TEST,
         UNDEFINED
     };
 
