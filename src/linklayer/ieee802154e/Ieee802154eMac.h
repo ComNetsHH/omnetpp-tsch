@@ -42,9 +42,12 @@
 #include "TschHopping.h"
 #include "TschNeighbor.h"
 #include "inet/common/Units.h"
+#include <vector>
+#include <tuple>
 #include "sixtisch/Tsch6tischComponents.h"
 
 using namespace inet;
+using namespace std;
 
 namespace tsch {
 
@@ -139,6 +142,18 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
     virtual void handleStartOperation(inet::LifecycleOperation *operation) override {}    //TODO implementation
     virtual void handleStopOperation(inet::LifecycleOperation *operation) override {}    //TODO implementation
     virtual void handleCrashOperation(inet::LifecycleOperation *operation) override {}    //TODO implementation
+
+
+    vector<tuple<int, int>> getQueueSizes(MacAddress neighbor, vector<int> virtualLinkIds = {-1, 0});
+
+    /**
+     * Compute queue utilization as number of packets in queue / queue size
+     *
+     * @param neighbor neighbor MAC address to compute the queue size for
+     *
+     * @return queue utilization
+     */
+    double getQueueUtilization(MacAddress neighbor);
 
   protected:
     /** @name Different tracked statistics.*/
@@ -406,6 +421,21 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
     omnetpp::simtime_t scheduleSlot();
 
     int getVirtualLinkId(TschLink* link);
+
+    /**
+     * --Yevhenii
+     *
+     * Custom functions to handle cell overlapping in time.
+     *
+     * Select current active link by iterating through all links / cells
+     * and applying the following "priorities", rather than selecting the first one found:
+     *  1. Dedicated TX link with non-empty queue (if @param prioAppData is true)
+     *  2. Shared TX link with non-empty queue
+     *  3. Random RX link
+     *
+     *  @param links list of all links scheduled with neigbhors
+     *  @return link selected to be active for current ASN
+     */
     TschLink* selectActiveLink(std::vector<TschLink*> links);
     TschLink* selectActiveLink(std::vector<TschLink*> links, bool prioAppData);
 

@@ -85,6 +85,7 @@ void TschMSF::initialize(int stage) {
         EV_DETAIL << "Found a total of " << numHosts << " in the network" << endl;
 
         showTxCells = par("showDedicatedTxCells").boolValue();
+        showQueueUtilization = par("showQueueUtilization").boolValue();
         showTxCellCount = par("showTxCellCount").boolValue();
 
         /** Schedule minimal cells for broadcast control traffic [RFC8180, 4.1] */
@@ -610,29 +611,36 @@ void TschMSF::clearCellStats(std::vector<cellLocation_t> cellList) {
 }
 
 void TschMSF::refreshDisplay() const {
-    if (!rplParentId || !showTxCells)
+    if (!rplParentId)
         return;
 
-    auto txCells = pTschLinkInfo->getDedicatedCells(rplParentId);
+    if (showTxCells || showTxCellCount) {
+        std::vector<cellLocation_t> txCells = {};
+        txCells = pTschLinkInfo->getDedicatedCells(rplParentId);
 
-    if (!txCells.size())
-        return;
+        std::ostringstream outCells;
 
-    std::ostringstream out;
+        // Paint dedicated TX cell(s) in red if overlapping cells are detected
+        if (hasOverlapping)
+            hostNode->getDisplayString().setTagArg("t", 2, "#fc2803");
 
-    if (showTxCellCount)
-        out << txCells.size();
-    else {
-        std::sort(txCells.begin(), txCells.end(),
-                    [](const cellLocation_t c1, const cellLocation_t c2) { return c1.timeOffset < c2.timeOffset; });
-        out << txCells;
+        if (showTxCellCount)
+            outCells << txCells.size();
+        else {
+            std::sort(txCells.begin(), txCells.end(),
+                [](const cellLocation_t c1, const cellLocation_t c2) { return c1.timeOffset < c2.timeOffset; });
+            outCells << txCells;
+        }
+
+        hostNode->getDisplayString().setTagArg(showQueueUtilization ? "tt" : "t", 0, outCells.str().c_str());
     }
 
-    // Paint dedicated TX cell in red if overlapping cells are detected
-    if (hasOverlapping)
-        hostNode->getDisplayString().setTagArg("t", 2, "#fc2803");
+    if (showQueueUtilization) {
+        std::ostringstream outUtil;
+        outUtil << mac->getQueueUtilization(MacAddress(rplParentId)) << "%";
+        hostNode->getDisplayString().setTagArg("t", 0, outUtil.str().c_str()); // show queue utilization above nodes
+    }
 
-    hostNode->getDisplayString().setTagArg("t", 0, out.str().c_str());
 }
 
 void TschMSF::handleSuccessResponse(uint64_t sender, tsch6pCmd_t cmd, int numCells, std::vector<cellLocation_t> cellList)
@@ -913,11 +921,14 @@ void TschMSF::handleRplRankUpdate(long rank, int numHosts) {
     EV_DETAIL << "Found " << currentTxCells.size() << " cells already scheduled with PP: "
             << currentTxCells << endl;
 
-
-    auto numCellsRequired = numHosts - ((int) rank) + 1 - ((int) currentTxCells.size());
+    auto numCellsRequired = numHosts + 3 - ((int) rank) - ((int) currentTxCells.size());
     EV_DETAIL << "Num cells required to schedule - " << numCellsRequired << endl;
-    /** "numHosts - rank + 1" corresponds to the number of cells required to handle traffic
+    /**
+     * "numHosts - rank + 3" corresponds to the number of cells required to handle traffic
      * from the descendant nodes (numHosts - rank) as well as the node itself (+1).
+     * Additional +1 to account for the fact, that node closest to the sink are of rank 2 rather than 1.
+     * And another +1 to have service rate > arrival rate for stability condition.
+     *
      * Each node is assumed to be M/M/1 system with incoming rate of 1 packet per slotframe
      */
     addCells(rplParentId, numCellsRequired);

@@ -14,6 +14,7 @@ precompiled_*.h.*
 **/MoBAN_Pattern*.txt
 
 # output and result files
+**/*.anf
 .settings/
 /doc/doxy/
 /doc/neddoc/

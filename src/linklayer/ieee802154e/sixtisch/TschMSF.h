@@ -332,9 +332,10 @@ class TschMSF: public TschSF, public cListener {
     bool hasStarted;
     bool disable;
 
-    /** Parameter variables */
-    bool showTxCells; // see NED
-    bool showTxCellCount; // see NED
+    /** Parameter variables, see NED */
+    bool showTxCells;
+    bool showQueueUtilization;
+    bool showTxCellCount;
 
     cellLocation_t autoRxCell;
 

@@ -50,6 +50,7 @@
 #include "../../common/VirtualLinkTag_m.h"
 #include "sixtisch/TschSF.h"
 
+
 namespace tsch {
 
 using namespace inet::physicallayer;
@@ -362,6 +363,20 @@ TschLink* Ieee802154eMac::selectActiveLink(std::vector<TschLink*> links) {
     return selectActiveLink(links, false);
 }
 
+vector<tuple<int, int>> Ieee802154eMac::getQueueSizes(MacAddress nbrAddr, vector<int> virtuaLinkIds)
+{
+    vector<tuple<int, int>> queueSizes;
+
+    for (auto linkId : virtuaLinkIds)
+        queueSizes.emplace_back(linkId, neighbor->checkVirtualQueueSizeAt(nbrAddr, linkId));
+
+    return queueSizes;
+}
+
+double Ieee802154eMac::getQueueUtilization(MacAddress nbrAddr) {
+    return neighbor->checkQueueSizeAt(nbrAddr) / (double) neighbor->getQueueLength();
+}
+
 TschLink* Ieee802154eMac::selectActiveLink(std::vector<TschLink*> links, bool prioAppData) {
     if (links.size() == 1)
         return links.back();
@@ -379,18 +394,28 @@ TschLink* Ieee802154eMac::selectActiveLink(std::vector<TschLink*> links, bool pr
         }
     }
 
-    // Next look for ANY TX link (auto, shared)
+    // Next look for any UNICAST TX link (auto, shared)
+    for (auto link : links) {
+        if (link->isTx() && link->getAddr() != MacAddress::BROADCAST_ADDRESS
+                && neighbor->checkVirtualQueueSizeAt(link->getAddr(), getVirtualLinkId(link)))
+        {
+            EV_DETAIL << "Found unicasst TX link with non-empty queue: " << link << endl;
+            return link;
+        }
+    }
+
+    // If no unicast link with packets found, check shared broadcast links
     for (auto link : links) {
         if (link->isTx() && neighbor->checkVirtualQueueSizeAt(link->getAddr(), getVirtualLinkId(link)))
         {
-            EV_DETAIL << "Found shared TX link with non-empty queue: " << link << endl;
+            EV_DETAIL << "Found broadcast TX link with non-empty queue: " << link << endl;
             return link;
         }
     }
 
     EV_DETAIL << "No active TX link detected, choosing RX one" << endl;
 
-    // Else just pick remainig RX/AUTO link randomly
+    // Else just pick remaining RX/AUTO link randomly
     std::vector<TschLink*> rxLinks = {};
     for (auto link : links)
         if (!link->isTx())
@@ -400,7 +425,7 @@ TschLink* Ieee802154eMac::selectActiveLink(std::vector<TschLink*> links, bool pr
         return nullptr;
 
     auto activeLink = rxLinks[intrand(rxLinks.size())];
-    EV_DETAIL << "Selected active link: " << endl;
+    EV_DETAIL << "Selected active link: " << activeLink << endl;
 
     return activeLink;
 }

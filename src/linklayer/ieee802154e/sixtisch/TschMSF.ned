@@ -43,6 +43,7 @@ simple TschMSF like TschSF
         bool disableHousekeeping = default(false);
         bool showDedicatedTxCells = default(true); // show scheduled TX cells coordinates above node pictorgram
     	bool showTxCellCount = default(false); // instead of all TX cells locations, show only their count
+        bool showQueueUtilization = default(false); // displays queue utilization for preferred parent (if available)
         bool allowMinimalCellsOverride = default(false); 
          	 
 

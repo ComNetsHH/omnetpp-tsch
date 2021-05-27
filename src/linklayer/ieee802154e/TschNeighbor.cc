@@ -98,7 +98,7 @@ int TschNeighbor::checkQueueSizeAt(MacAddress macAddress) {
     }
 }
 
-int TschNeighbor::checkVirtualQueueSizeAt(MacAddress macAddress,int virtualLinkID){
+int TschNeighbor::checkVirtualQueueSizeAt(MacAddress macAddress, int virtualLinkID) {
     auto search = this->macToQueueMap.find(macAddress);
     if(search != this->macToQueueMap.end()){
         auto virtualQueue = search->second;
