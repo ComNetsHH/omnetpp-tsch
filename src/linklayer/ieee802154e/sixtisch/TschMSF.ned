@@ -12,35 +12,27 @@ simple TschMSF like TschSF
         // the time after which an active, unfinished transaction expires
         // (needs to be defined by every SF as per the 6P standard)
         int timeout @unit("ms") = default(25000ms);
-
-        // DEPRECATED the number of cells to be initially scheduled between all nodes, 
-        int initNumcells = default(6);
-
-        // The maximum time in ms that will pass until another initial ADD
-        // request is sent if the last one wasn't successful
-        int maxRetryBackoff @unit("ms") = default(60000ms);
         
-        int NUM_CH_OFFSET = default(16);
-        int KA_PERIOD @unit("s") = default(60s);
-        int numMinCells = default(5);
+        int numMinCells = default(5); // number of minimal cells (broadcast / control traffic) to schedule
         double upperCellUsageLimit = default(0.75);
-        double lowerCellUsageLimit = default(0.25);
-        int housekeepingPeriod @unit("s") = default(60s);
-        double RELOCATE_PDRTHRES = default(0.50);
-        double clearReservedCellsTimeout = default(50000);
-//        int SLOTFRAME_LENGTH = default(101);
-        int QUARANTINE_DURATION @unit("s") = default(300s);
-        int WAITDURATION_MIN @unit("s") = default(30s);
-        int WAITDURATION_MAX @unit("s") = default(60s);
-        int maxNumCells = default(intuniform(4, 10));
-        int MAX_NUMTX = default(254);
-        int slotframeLen = default(101);
+        double lowerCellUsageLimit = default(0.25); 
+        int housekeepingPeriod @unit("s") = default(60s); // how often should we check cell PDR
+        double relocatePdrThresh = default(0.50); // if cell exhibits PDR worse than this, relocate it!
+        int maxNumTx = default(254); // maximum number of elapsed cells to consider for PDR calculation
+        int maxNumCells = default(intuniform(4, 10)); // sliding window size to esmitate cell utilization
         int cellListRedundancy = default(3); // number of additional cells to pad CELL_LIST in 6P transcations
         int cellBandwidthIncrement = default(1); // number of cells to add with neighbor if cell usage is excessive
         bool disable = default(false);
         bool disableHousekeeping = default(true);
         bool showDedicatedTxCells = default(true); // show scheduled TX cells locations above node
-        bool allowMinimalCellsOverride = default(false);    	 
-
 		double startTime @unit("s") = default(uniform(0s, 10s));
+		
+		// custom parameter to add random delay before 6P requests to minimize
+		// probability of simulatenous transactions in both directions between two nodes
+		bool send6pDelayed = default(false);  
+		
+		// Module parameters required by the interface but is actually unused
+		
+		int initNumcells = default(6);
+		int maxRetryBackoff @unit(ms) = default(60000ms);
 }

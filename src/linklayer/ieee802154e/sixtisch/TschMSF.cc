@@ -37,6 +37,7 @@ TschMSF::TschMSF() :
     rplParentId(0),
     tsch6pRtxThresh(3),
     hasStarted(false),
+    pSend6pDelayed(false),
     pHousekeepingDisabled(false),
     hasOverlapping(false)
 {
@@ -51,17 +52,18 @@ void TschMSF::initialize(int stage) {
         pTschLinkInfo = (TschLinkInfo*) getParentModule()->getSubmodule("linkinfo");
         pTimeout = par("timeout").intValue();
         pMaxNumCells = par("maxNumCells");
-        pMaxNumTx = par("MAX_NUMTX");
+        pMaxNumTx = par("maxNumTx");
         pLimNumCellsUsedHigh = par("upperCellUsageLimit");
         pLimNumCellsUsedLow = par("lowerCellUsageLimit");
-        pRelocatePdrThres = par("RELOCATE_PDRTHRES");
+        pRelocatePdrThres = par("relocatePdrThresh");
         pCellListRedundancy = par("cellListRedundancy").intValue();
         pNumMinimalCells = par("numMinCells").intValue();
         disable = par("disable").boolValue();
+        pCellIncrement = par("cellBandwidthIncrement").intValue();
+        pSend6pDelayed = par("send6pDelayed").boolValue();
         pHousekeepingPeriod = par("housekeepingPeriod").intValue();
         pHousekeepingDisabled = par("disableHousekeeping").boolValue();
         internalEvent = new cMessage("SF internal event", UNDEFINED);
-        s_InitialScheduleComplete = registerSignal("initial_schedule_complete");
     } else if (stage == 5) {
         interfaceModule = dynamic_cast<InterfaceTable *>(getParentModule()->getParentModule()->getParentModule()->getParentModule()->getSubmodule("interfaceTable", 0));
         pNodeId = interfaceModule->getInterface(1)->getMacAddress().getInt();
@@ -209,7 +211,7 @@ void TschMSF::handleMaxCellsReached(cMessage* msg) {
     EV_DETAIL << printCellUsage(neighborMac->str(), usage) << endl;
 
     if (usage >= pLimNumCellsUsedHigh)
-        addCells(neighborId, par("cellBandwidthIncrement").intValue());
+        addCells(neighborId, pCellIncrement, MAC_LINKOPTIONS_TX, pSend6pDelayed ? uniform(1, 5) : 0);
     if (usage <= pLimNumCellsUsedLow)
         deleteCells(neighborId, 1);
 
@@ -344,9 +346,44 @@ void TschMSF::handleMessage(cMessage* msg) {
             handleHousekeeping(msg);
             break;
         }
+        case SEND_6P_DELAYED: {
+            auto ctrlInfo = check_and_cast<SfControlInfo*> (msg->getControlInfo());
+            send6topRequestDelayed(ctrlInfo);
+            break;
+        }
         default: EV_ERROR << "Unknown message received: " << msg << endl;
     }
     delete msg;
+}
+
+void TschMSF::send6topRequestDelayed(SfControlInfo *ctrlInfo) {
+    auto sixTopCmd = ctrlInfo->get6pCmd();
+    auto nodeId = ctrlInfo->getNodeId();
+    auto cellOp = ctrlInfo->getCellOptions();
+    auto numCells = ctrlInfo->getNumCells();
+
+    switch (sixTopCmd) {
+        case CMD_ADD: {
+            addCells(nodeId, numCells);
+            break;
+        }
+        case CMD_DELETE: {
+            deleteCells(nodeId, numCells);
+            break;
+        }
+        case CMD_CLEAR: {
+            pTsch6p->sendClearRequest(nodeId, pTimeout);
+            break;
+        }
+        case CMD_RELOCATE: {
+            EV_WARN << "Delayed 6P relocate commands are not supported, aborting" << endl;
+            break;
+        }
+        default:
+            std::string errMsg = "Cannot send out delayed 6P request, unknown 6P command type - "
+                    + std::to_string(sixTopCmd);
+            throw cRuntimeError(errMsg.c_str());
+    }
 }
 
 void TschMSF::scheduleMinimalCells(int numMinimalCells, int slotframeLength) {
@@ -559,16 +596,16 @@ void TschMSF::handleSuccessResponse(uint64_t sender, tsch6pCmd_t cmd, int numCel
 
     switch (cmd) {
         case CMD_ADD: {
-            // No cells were added if 6P SUCCESS responds with empty CELL_LIST
+            // No cells were added if 6P SUCCESS responds with an empty CELL_LIST
             if (!cellList.size()) {
                 EV_DETAIL << "Seems ADD to " << MacAddress(sender) << " failed" << endl;
                 return;
             }
 
+            // if we successfully scheduled dedicated TX we don't need an auto, shared TX cell anymore
             removeAutoTxCell(sender);
 
-            EV_DETAIL << "Seems ADD succeeded with cells: " << cellList << ",\nerasing entry from pending transactions" << endl;
-            emit(s_InitialScheduleComplete, (unsigned long) sender);
+            EV_DETAIL << "6P ADD succeeded, " << cellList << " added" << endl;
             break;
         }
         case CMD_DELETE: {
@@ -657,13 +694,26 @@ int TschMSF::getTimeout() {
     return pTimeout;
 }
 
-void TschMSF::addCells(uint64_t nodeId, int numCells, uint8_t cellOptions) {
+void TschMSF::addCells(uint64_t nodeId, int numCells, uint8_t cellOptions, int delay) {
     if (numCells < 1) {
         EV_WARN << "Invalid number of cells requested - " << numCells << endl;
         return;
     }
 
     EV_DETAIL << "Trying to add " << numCells << " cell(s) to " << MacAddress(nodeId) << endl;
+
+    if (delay > 0) {
+        auto selfMsg = new cMessage("SEND_6P_DELAYED", SEND_6P_DELAYED);
+        auto ctrlInfo = new SfControlInfo(nodeId);
+        ctrlInfo->set6pCmd(CMD_ADD);
+        ctrlInfo->setNumCells(numCells);
+        ctrlInfo->setCellOptions(cellOptions);
+
+        selfMsg->setControlInfo(ctrlInfo);
+        scheduleAt(simTime() + SimTime(delay, SIMTIME_S), selfMsg);
+        EV_DETAIL << "6P ADD will be sent out after " << delay << " seconds timeout" << endl;
+        return;
+    }
 
     if (pTschLinkInfo->inTransaction(nodeId)) {
         EV_WARN << "Can't add cells, currently in another transaction with this node" << endl;
@@ -680,9 +730,6 @@ void TschMSF::addCells(uint64_t nodeId, int numCells, uint8_t cellOptions) {
 }
 
 void TschMSF::deleteCells(uint64_t nodeId, int numCells) {
-    // If on-demand scheduling of auto cells enabled (IETF MSF draft, 3, p.5)
-    // we should remove auto cells if they're not needed
-    // legacy option is to prohibit auto cell removal at all, to be factored out after verifying CLSF functionality
     std::vector<cellLocation_t> dedicated = pTschLinkInfo->getDedicatedCells(nodeId);
 
     if (!dedicated.size()) {
