@@ -345,7 +345,7 @@ class TschMSF: public TschSF, public cListener {
         DO_START,
         HOUSEKEEPING,
         DELAY_TEST,
-        SEND_DELAYED,
+        SEND_6P_DELAYED,
         UNDEFINED
     };
 
@@ -366,7 +366,16 @@ class TschMSF: public TschSF, public cListener {
 
     void clearScheduleWithNode(uint64_t sender);
 
-    void scheduleMinimalCells();
+    void send6topRequestDelayed(SfControlInfo *ctrlInfo);
+
+    /**
+     * Schedule minimal cells (TX RX SHARED) for broadcast and control messages
+     *
+     * @param numMinimalCells number of cells to schedule evenly across the slotframe length
+     * @param slotframeLength length of the slotframe in timeslots
+     */
+    void scheduleMinimalCells(int numMinimalCells, int slotframeLength);
+
     uint64_t checkInTransaction();
     bool checkOverlapping();
 

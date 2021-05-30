@@ -25,13 +25,8 @@ simple TschMSF like TschSF
         int numMinCells = default(5);
         double upperCellUsageLimit = default(0.75);
         double lowerCellUsageLimit = default(0.25);
-        int housekeepingPeriod @unit("s") = default(60s);
-        double RELOCATE_PDRTHRES = default(0.50);
-        double clearReservedCellsTimeout = default(50000);
-//        int SLOTFRAME_LENGTH = default(101);
-        int QUARANTINE_DURATION @unit("s") = default(300s);
-        int WAITDURATION_MIN @unit("s") = default(30s);
-        int WAITDURATION_MAX @unit("s") = default(60s);
+        int housekeepingPeriod @unit("s") = default(60s); 	
+        double relocatePdrThresh = default(0.50); // if cell exhibits PDR worse than this, relocate it!
         int maxNumCells = default(intuniform(4, 10));
         int MAX_NUMTX = default(254);
         int slotframeLen = default(101);
@@ -46,6 +41,7 @@ simple TschMSF like TschSF
         bool showQueueUtilization = default(false); // displays queue utilization for preferred parent (if available)
         bool allowMinimalCellsOverride = default(false); 
         
+        bool send6pDelayed = default(false); // add random delay before sending out 6P packets  
      	bool handleRankUpdates = default(false); // TEST parameter, only needed for delay-testing scenarios 
 
 		double startTime @unit("s") = default(uniform(0s, 10s));

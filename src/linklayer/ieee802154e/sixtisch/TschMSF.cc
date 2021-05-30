@@ -54,14 +54,13 @@ void TschMSF::initialize(int stage) {
         pMaxNumTx = par("MAX_NUMTX");
         pLimNumCellsUsedHigh = par("upperCellUsageLimit");
         pLimNumCellsUsedLow = par("lowerCellUsageLimit");
-        pRelocatePdrThres = par("RELOCATE_PDRTHRES");
+        pRelocatePdrThres = par("relocatePdrThresh");
         pCellListRedundancy = par("cellListRedundancy").intValue();
         pNumMinimalCells = par("numMinCells").intValue();
         disable = par("disable").boolValue();
         pHousekeepingPeriod = par("housekeepingPeriod").intValue();
         pHousekeepingDisabled = par("disableHousekeeping").boolValue();
         internalEvent = new cMessage("SF internal event", UNDEFINED);
-        rplParentChangedSignal = registerSignal("rplParentChanged");
     } else if (stage == 5) {
         interfaceModule = dynamic_cast<InterfaceTable *>(getParentModule()->getParentModule()->getParentModule()->getParentModule()->getSubmodule("interfaceTable", 0));
         pNodeId = interfaceModule->getInterface(1)->getMacAddress().getInt();
@@ -86,7 +85,7 @@ void TschMSF::initialize(int stage) {
         showTxCellCount = par("showTxCellCount").boolValue();
 
         /** Schedule minimal cells for broadcast control traffic [RFC8180, 4.1] */
-        scheduleMinimalCells();
+        scheduleMinimalCells(pNumMinimalCells, pSlotframeLength);
         /** And an auto RX cell for communication with neighbors [IETF MSF draft, 3] */
         scheduleAutoRxCell(interfaceModule->getInterface(1)->getMacAddress().formInterfaceIdentifier());
 
@@ -350,6 +349,11 @@ void TschMSF::handleMessage(cMessage* msg) {
             handleHousekeeping(msg);
             return;
         }
+        case SEND_6P_DELAYED: {
+            auto ctrlInfo = check_and_cast<SfControlInfo*> (msg->getControlInfo());
+            send6topRequestDelayed(ctrlInfo);
+            break;
+        }
         case DELAY_TEST: {
             long *rankPtr = (long*) msg->getContextPointer();
             EV_DETAIL << "Received DELAY_TEST self-msg, rank - " << *rankPtr << endl;
@@ -365,7 +369,38 @@ void TschMSF::handleMessage(cMessage* msg) {
     delete msg;
 }
 
-void TschMSF::scheduleMinimalCells() {
+void TschMSF::send6topRequestDelayed(SfControlInfo *ctrlInfo) {
+    auto sixTopCmd = ctrlInfo->get6pCmd();
+    auto nodeId = ctrlInfo->getNodeId();
+    auto cellOp = ctrlInfo->getCellOptions();
+    auto numCells = ctrlInfo->getNumCells();
+
+    switch (sixTopCmd) {
+        case CMD_ADD: {
+            addCells(nodeId, numCells);
+            break;
+        }
+        case CMD_DELETE: {
+            deleteCells(nodeId, numCells);
+            break;
+        }
+        case CMD_CLEAR: {
+            pTsch6p->sendClearRequest(nodeId, pTimeout);
+            break;
+        }
+        case CMD_RELOCATE: {
+            EV_WARN << "Delayed 6P relocate commands are not supported, aborting" << endl;
+            break;
+        }
+        default:
+            std::string errMsg = "Cannot send out delayed 6P request, unknown 6P command type - "
+                    + std::to_string(sixTopCmd);
+            throw cRuntimeError(errMsg.c_str());
+    }
+}
+
+
+void TschMSF::scheduleMinimalCells(int numMinimalCells, int slotframeLength) {
     EV_DETAIL << "Scheduling minimal cells for broadcast messages: " << endl;
     auto ctrlMsg = new tsch6topCtrlMsg();
     auto macBroadcast = inet::MacAddress::BROADCAST_ADDRESS.getInt();
@@ -375,10 +410,10 @@ void TschMSF::scheduleMinimalCells() {
 
     std::vector<cellLocation_t> cellList = {};
 
-    int minCellPeriod = floor(pSlotframeLength / pNumMinimalCells);
+    int minCellPeriod = floor(slotframeLength / numMinimalCells);
     EV_DETAIL << "Min cells period - " << minCellPeriod << endl;
 
-    for (offset_t i = 0; i < pNumMinimalCells; i++)
+    for (offset_t i = 0; i < numMinimalCells; i++)
         cellList.push_back({i * minCellPeriod, 0});
 
     ctrlMsg->setNewCells(cellList);
@@ -391,6 +426,7 @@ void TschMSF::scheduleMinimalCells() {
     pTsch6p->updateSchedule(*ctrlMsg);
     delete ctrlMsg;
 }
+
 
 
 void TschMSF::removeAutoTxCell(uint64_t neighbor) {
