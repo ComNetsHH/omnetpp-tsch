@@ -265,7 +265,6 @@ class TschMSF: public TschSF, public cListener {
 
     int numHosts; // DELAY_TEST: Number of hosts in the simulation
 
-    bool pAutoCellOnDemand;
     bool hasOverlapping;
     int pHousekeepingPeriod;
     bool pHousekeepingDisabled;
@@ -274,7 +273,6 @@ class TschMSF: public TschSF, public cListener {
 
     cMessage *internalEvent;
 
-    int totalElapsed; // cell usage estimation intervals
     int pSlotframeLength;
     int pCellListRedundancy;
     int pNumChannels;
@@ -339,11 +337,6 @@ class TschMSF: public TschSF, public cListener {
 
     cellLocation_t autoRxCell;
 
-    /**
-     * Emitted each time the schedule setup with a neighbor is complete,
-     * i.e. all cells have been allocated in both directions.
-     */
-    simsignal_t s_InitialScheduleComplete;
     simsignal_t rplParentChangedSignal;
 
     int rplRank;
@@ -374,14 +367,9 @@ class TschMSF: public TschSF, public cListener {
 
     void clearScheduleWithNode(uint64_t sender);
 
-    bool checkOverlapping();
-
-    void checkDedicatedCellScheduled(uint64_t neighbor);
-
-    void clearReservedTimeout(uint64_t destId);
-
     void scheduleMinimalCells();
     uint64_t checkInTransaction();
+    bool checkOverlapping();
 
     /**
      * @return    true if @p slotOffset is already reserved,

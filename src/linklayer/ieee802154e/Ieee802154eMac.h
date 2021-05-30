@@ -37,6 +37,8 @@
 #include "inet/linklayer/common/MacAddress.h"
 #include "inet/linklayer/contract/IMacProtocol.h"
 #include "inet/physicallayer/contract/packetlevel/IRadio.h"
+#include "inet/physicallayer/common/packetlevel/MediumLimitCache.h"
+#include "inet/networklayer/common/InterfaceTable.h"
 #include "TschSlotframe.h"
 #include "Ieee802154eASN.h"
 #include "TschHopping.h"
@@ -99,6 +101,7 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
         , ackMessage(nullptr)
         , SeqNrParent()
         , SeqNrChild()
+        , pArtificialPacketDrop(false)
     {
     }
 
@@ -144,6 +147,9 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
     virtual void handleCrashOperation(inet::LifecycleOperation *operation) override {}    //TODO implementation
 
 
+    // Utility
+    list<uint64_t> getNeighborsInRange(); // get list of neighbors based on maximum communication range
+
     vector<tuple<int, int>> getQueueSizes(MacAddress neighbor, vector<int> virtualLinkIds = {-1, 0});
 
     /**
@@ -154,6 +160,9 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
      * @return queue utilization
      */
     double getQueueUtilization(MacAddress neighbor);
+
+    void enableArtificialPacketDrop() { this->pArtificialPacketDrop = true; }
+    void disableArtificialPacketDrop() { this->pArtificialPacketDrop = false; }
 
   protected:
     /** @name Different tracked statistics.*/
@@ -234,7 +243,8 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
         EV_TIMER_CCA,
         EV_TIMER_SLOT,
         EV_TIMER_HOPPING,
-        EV_TIMER_SLOTEND
+        EV_TIMER_SLOTEND,
+        MAC_ENABLE_DROPS // TEST EVENT, not part of the normal MAC operation, enable packet drops after a timeout
     };
 
     /** @brief Types for frames sent by the CSMA.*/
@@ -381,6 +391,9 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
     TschLink *currentLink;
     int currentChannel;
 
+    bool pArtificialPacketDrop;
+    double pPacketDropThreshold;
+
   protected:
     /** @brief Generate new interface address*/
     virtual void configureInterfaceEntry() override;
@@ -449,6 +462,10 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
 
     //sequence numbers for receiving
     std::map<inet::MacAddress, std::map<int, unsigned long>> SeqNrChild;    //child -> sequence number
+
+    // Util
+    list<MacAddress> neighbors; // list of neighbors MAC addresses
+    bool artificialPacketDrop();
 
   private:
     /** @brief Copy constructor is not allowed.

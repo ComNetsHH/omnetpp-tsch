@@ -25,6 +25,7 @@
 #define __WAIC_TSCH6TISCHCOMPONENTS_H_
 
 #include "WaicCellComponents.h"
+#include "inet/linklayer/common/MacAddress.h"
 #include <bitset>
 
 /** To print enum 'key' as string */
@@ -158,6 +159,14 @@ inline std::ostream& operator<<(std::ostream& os, const std::vector<std::tuple<c
         os << std::get<0>(link) << " " << printLinkOptions(std::get<1>(link)) << std::endl;
     return os;
 }
+
+inline std::ostream& operator<<(std::ostream& os, const std::list<uint64_t> macAddrList)
+{
+    for (auto const &addr: macAddrList)
+        os << inet::MacAddress(addr) << ", ";
+    return os;
+}
+
 
 /**
  * 6p Return Code Identifiers

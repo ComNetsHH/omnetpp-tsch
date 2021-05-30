@@ -45,7 +45,8 @@ simple TschMSF like TschSF
     	bool showTxCellCount = default(false); // instead of all TX cells locations, show only their count
         bool showQueueUtilization = default(false); // displays queue utilization for preferred parent (if available)
         bool allowMinimalCellsOverride = default(false); 
-         	 
+        
+     	bool handleRankUpdates = default(false); // TEST parameter, only needed for delay-testing scenarios 
 
 		double startTime @unit("s") = default(uniform(0s, 10s));
 }
