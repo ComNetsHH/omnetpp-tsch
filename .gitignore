@@ -32,6 +32,7 @@ precompiled_*.h.*
 /tests/*/work/
 /tests/*/*/work/
 /tests/*/results*/
+**/results
 *.log
 *.sim
 *.pyc
@@ -84,3 +85,4 @@ backups
 xxx
 /tmp/
 **/.DS_STORE
+/.computed/
