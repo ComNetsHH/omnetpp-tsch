@@ -337,8 +337,6 @@ class TschMSF: public TschSF, public cListener {
 
     cellLocation_t autoRxCell;
 
-    simsignal_t rplParentChangedSignal;
-
     int rplRank;
 
     enum msfSelfMsg_t {
@@ -347,6 +345,7 @@ class TschMSF: public TschSF, public cListener {
         DO_START,
         HOUSEKEEPING,
         DELAY_TEST,
+        SEND_DELAYED,
         UNDEFINED
     };
 
