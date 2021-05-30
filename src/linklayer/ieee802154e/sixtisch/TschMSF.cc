@@ -357,11 +357,6 @@ void TschMSF::handleMessage(cMessage* msg) {
             send6topRequestDelayed(ctrlInfo);
             break;
         }
-        case SEND_6P_DELAYED: {
-            auto ctrlInfo = check_and_cast<SfControlInfo*> (msg->getControlInfo());
-            send6topRequestDelayed(ctrlInfo);
-            break;
-        }
         case DELAY_TEST: {
             long *rankPtr = (long*) msg->getContextPointer();
             EV_DETAIL << "Received DELAY_TEST self-msg, rank - " << *rankPtr << endl;

@@ -410,8 +410,6 @@ class TschMSF: public TschSF, public cListener {
      */
     void clearScheduleWithNode(uint64_t sender);
 
-    void send6topRequestDelayed(SfControlInfo *ctrlInfo);
-
     /**
      * Schedule minimal cells (TX RX SHARED) for broadcast and control messages
      *
