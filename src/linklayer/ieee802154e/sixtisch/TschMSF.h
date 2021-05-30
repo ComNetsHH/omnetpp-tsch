@@ -26,7 +26,7 @@
 
 #include "Tsch6topSublayer.h"
 #include "TschBlacklistManager.h"
-#include "RplDefs.h"
+//#include "RplDefs.h"
 #include "inet/networklayer/common/InterfaceTable.h"
 
 
@@ -34,6 +34,13 @@ class TschMSF: public TschSF, public cListener {
     public:
 
     class SfControlInfo : public cObject {
+
+        private:
+            int numCells;
+            int rtxCtn;
+            tsch6pCmd_t cmd;
+            std::vector<cellLocation_t> cellList;
+
         public:
             uint64_t reservedDestId;
             uint8_t cellOptions;
@@ -58,6 +65,9 @@ class TschMSF: public TschSF, public cListener {
             tsch6pCmd_t get6pCmd() { return this->cmd; }
             void set6pCmd (tsch6pCmd_t cmd) { this->cmd = cmd; }
 
+            std::vector<cellLocation_t> getCellList() { return this->cellList; };
+            void setCellList(std::vector<cellLocation_t> cellList) { this->cellList = cellList; };
+
             int getRtxCtn() { return this->rtxCtn; }
             void setRtxCtn (int rtxCtn) { this->rtxCtn = rtxCtn; }
 
@@ -79,17 +89,12 @@ class TschMSF: public TschSF, public cListener {
                         << ci.getNumCells() << " cells, retries - " << ci.getRtxCtn();
                 return os;
             }
-
-        private:
-            int numCells;
-            int rtxCtn;
-            tsch6pCmd_t cmd;
     };
 
-    virtual int numInitStages() const{return 6;}
-    void initialize(int stage);
-    void finish();
-    void finish(cComponent *component, simsignal_t signalID) { cIListener::finish(component, signalID); }
+    virtual int numInitStages() const override { return 6; }
+    void initialize(int stage) override;
+    void finish() override;
+    void finish(cComponent *component, simsignal_t signalID) override { cIListener::finish(component, signalID); }
     TschMSF();
     ~TschMSF();
 
@@ -125,12 +130,12 @@ class TschMSF: public TschSF, public cListener {
      *        (otherwise this SF object will be sending while other nodes are
      *        still unable to react correctly)
      */
-    void start();
+    void start() override;
 
     /**
      * @return    the Scheduling Function Identifier (SFID) of this SF.
      */
-    tsch6pSFID_t getSFID();
+    tsch6pSFID_t getSFID() override;
 
     /**
      * @brief Create a cellList to be proposed to the neighbor at @p destId (i.e.
@@ -150,7 +155,7 @@ class TschMSF: public TschSF, public cListener {
      *                       -ENOSPC on failure, i.e. if no suitable cell could be found
      *                       -EINVAL if cellList is not empty or destId is unknown
      */
-    int createCellList(uint64_t destId, std::vector<cellLocation_t> &cellList, int numCells);
+    int createCellList(uint64_t destId, std::vector<cellLocation_t> &cellList, int numCells) override;
 
     /**
      * @brief Pick cells from cellList that was proposed by the neighbor at @p destId
@@ -175,7 +180,7 @@ class TschMSF: public TschSF, public cListener {
      *                       -EINVAL if cellList is empty or destId is unknown
      */
     int pickCells(uint64_t destId, std::vector<cellLocation_t> &cellList,
-                  int numCells, bool isRX, bool isTX, bool isSHARED);
+                  int numCells, bool isRX, bool isTX, bool isSHARED) override;
 
     /**
      * @brief React to a 6P response.
@@ -186,10 +191,10 @@ class TschMSF: public TschSF, public cListener {
      * @param cellList       The cellList contained in the response (if any)
      */
     void handleResponse(uint64_t sender, tsch6pReturn_t code, int numCells = -1,
-                        std::vector<cellLocation_t> *cellList = NULL);
+                        std::vector<cellLocation_t> *cellList = NULL) override;
 
     void handleResponse(uint64_t sender, tsch6pReturn_t code, int numCells = -1,
-                            std::vector<cellLocation_t> cellList = {});
+                            std::vector<cellLocation_t> cellList = {}) override;
 
     void handleSuccessResponse(uint64_t sender, tsch6pCmd_t lastKnownCmd, int numCells, std::vector<cellLocation_t> cellList);
 
@@ -203,7 +208,7 @@ class TschMSF: public TschSF, public cListener {
      *                       It is the task of the SF to explicitly free the data
      *                       behind the pointer once it's done processing it.
      */
-    void handlePiggybackedData(uint64_t sender, void* data) {};
+    void handlePiggybackedData(uint64_t sender, void* data) override {} ;
 
     /**
      * @brief Handle an update from the @ref TschSpectrumSensing module.
@@ -219,25 +224,40 @@ class TschMSF: public TschSF, public cListener {
      * @brief Handle the inconsistency which was uncovered by @p seqnum
      *        in the schedule maintained with @p destId
      */
-    void handleInconsistency(uint64_t destId, uint8_t seqNum);
+    void handleInconsistency(uint64_t destId, uint8_t seqNum) override;
 
     /**
      * @return The 6P Timeout value defined by this Scheduling Function in ms
      */
-    int getTimeout();
+    int getTimeout() override;
 
-    void handleMessage(cMessage* msg);
+    void handleMessage(cMessage* msg) override;
     void handleDoStart(cMessage* msg);
     void handleHousekeeping(cMessage* msg);
     void handleMaxCellsReached(cMessage* msg);
 
     /* unimplemented on purpose */
-    void recordPDR(cMessage* msg) {}
+    void recordPDR(cMessage* msg) override {}
 
-    void receiveSignal(cComponent *src, simsignal_t id, cObject *value, cObject *details);
-    void receiveSignal(cComponent *src, simsignal_t id, long value, cObject *details);
+    void receiveSignal(cComponent *src, simsignal_t id, cObject *value, cObject *details) override;
+    void receiveSignal(cComponent *src, simsignal_t id, long value, cObject *details) override;
 
+    /**
+     * Process RPL preferred parent updates
+     *
+     * Whenever a new preferred parent is selected, we have to schedule dedicated TX cell to it
+     *
+     * @param newParentId MAC address of the new parent
+     */
     void handleParentChangedSignal(uint64_t newParentId);
+
+    /**
+     * Process packet enqueue event coming from the MAC layer.
+     * Ensures there's a TX cell to this destination
+     * by adding an auto cell if there's no dedicated / auto cells present.
+     *
+     * @param destId MAC address of the destination for which there's a packet enqueued
+     */
     void handlePacketEnqueued(uint64_t destId);
 
     /** DELAY_TEST: Add number of dedicated TX cells according to node's own rank
@@ -276,6 +296,8 @@ class TschMSF: public TschSF, public cListener {
     int pSlotframeLength;
     int pCellListRedundancy;
     int pNumChannels;
+    int pCellIncrement; // see .ned parameter "cellBandwidthIncrement"
+    bool pSend6pDelayed; // see .ned parameter
     offset_t pNumMinimalCells; // number of minimal cells being scheduled for ICMPv6, RPL broadcast messages
 
     int pMaxNumCells;
@@ -299,18 +321,6 @@ class TschMSF: public TschSF, public cListener {
     TschSlotframe *schedule;
     cModule *rpl;
     cModule *hostNode; // reference to this host node's module
-
-    /**
-     * Set to True at index nodeId after @ref initNumCells cells have been
-     * allocated successfully for link with nodeId
-     */
-    std::map<uint64_t, bool> initialScheduleComplete;
-
-
-    /**
-     * Stores status and retransmit counters of failed 6P transactions per neighbor
-     */
-    std::map<uint64_t, SfControlInfo*> pendingTransactions;
 
     /**
      * TimeOffsets that have been suggested to a neighbor in an unfinished ADD
@@ -351,22 +361,63 @@ class TschMSF: public TschSF, public cListener {
 
     /**
      * @brief Create & send ADD request for @param numCells cells with option @param cellOptions
+     *
+     * @param delay (optional) additional timeout before sending out the request message
      */
-    void addCells(uint64_t nodeId, int numCells, uint8_t cellOptions);
-    void addCells(uint64_t nodeId, int numCells) { addCells(nodeId, numCells, MAC_LINKOPTIONS_TX); }
+    void addCells(uint64_t nodeId, int numCells, uint8_t cellOptions, int delay);
+    void addCells(uint64_t nodeId, int numCells, uint8_t cellOptions) { addCells(nodeId, numCells, cellOptions, 0); };
+    void addCells(uint64_t nodeId, int numCells) { addCells(nodeId, numCells, MAC_LINKOPTIONS_TX, 0); }
 
     void deleteCells(uint64_t nodeId, int numCells);
     void scheduleAutoCell(uint64_t neighbor);
     void scheduleAutoRxCell(InterfaceToken euiAddr);
     void removeAutoTxCell(uint64_t neighbor);
-//    void relocateCell(cellLocation_t cell, double cellPdr, double maxPdr);
+
+    /**
+     * Sends out 6P request according to the details of SfControlInfo object.
+     * This function serves as a handler for self-msg event for sending 6P messages with delay
+     *
+     * @param ctrlInfo control info object containig all the details about the 6P request to be sent
+     */
+    void send6topRequestDelayed(SfControlInfo *ctrlInfo);
+
+    /**
+     * Randomly relocate all cells scheduled with specified neighbor
+     *
+     * @param neighbor MAC address of the neighbour to relocate cells with
+     */
     void relocateCells(uint64_t neighbor);
+
+    /**
+     * Relocate single cell scheduled with the neighbor at specified location
+     *
+     * @param neighbor MAC address of the neighbor to relocate cells with
+     * @param cell location of cell to be relocated
+     */
     void relocateCells(uint64_t neighbor, cellLocation_t cell);
+
+    /**
+     * Relocate multiple cells scheduled with the neighbor
+     *
+     * @param neighbor MAC address of the neighbor to relocate cells with
+     */
     void relocateCells(uint64_t neighbor, std::vector<cellLocation_t> relocCells);
 
+    /**
+     * Remove cells from the schedule as well as corresponding cell statsistics associated with neighbour
+     *
+     * @param sender MAC address of the neighbour to clear schedule with
+     */
     void clearScheduleWithNode(uint64_t sender);
 
-    void scheduleMinimalCells();
+    /**
+     * Schedule minimal cells (TX RX SHARED) for broadcast and control messages
+     *
+     * @param numMinimalCells number of cells to schedule evenly across the slotframe length
+     * @param slotframeLength length of the slotframe in timeslots
+     */
+    void scheduleMinimalCells(int numMinimalCells, int slotframeLength);
+
     uint64_t checkInTransaction();
     bool checkOverlapping();
 

@@ -4,7 +4,6 @@
 	<comment></comment>
 	<projects>
 		<project>inet4</project>
-		<project>omnetpp-rpl</project>
 	</projects>
 	<buildSpec>
 		<buildCommand>
