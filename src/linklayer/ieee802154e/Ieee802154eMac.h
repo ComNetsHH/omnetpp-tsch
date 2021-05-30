@@ -37,14 +37,19 @@
 #include "inet/linklayer/common/MacAddress.h"
 #include "inet/linklayer/contract/IMacProtocol.h"
 #include "inet/physicallayer/contract/packetlevel/IRadio.h"
+#include "inet/physicallayer/common/packetlevel/MediumLimitCache.h"
+#include "inet/networklayer/common/InterfaceTable.h"
 #include "TschSlotframe.h"
 #include "Ieee802154eASN.h"
 #include "TschHopping.h"
 #include "TschNeighbor.h"
 #include "inet/common/Units.h"
+#include <vector>
+#include <tuple>
 #include "sixtisch/Tsch6tischComponents.h"
 
 using namespace inet;
+using namespace std;
 
 namespace tsch {
 
@@ -96,6 +101,7 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
         , ackMessage(nullptr)
         , SeqNrParent()
         , SeqNrChild()
+        , pArtificialPacketDrop(false)
     {
     }
 
@@ -139,6 +145,24 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
     virtual void handleStartOperation(inet::LifecycleOperation *operation) override {}    //TODO implementation
     virtual void handleStopOperation(inet::LifecycleOperation *operation) override {}    //TODO implementation
     virtual void handleCrashOperation(inet::LifecycleOperation *operation) override {}    //TODO implementation
+
+
+    // Utility
+    list<uint64_t> getNeighborsInRange(); // get list of neighbors based on maximum communication range
+
+    vector<tuple<int, int>> getQueueSizes(MacAddress neighbor, vector<int> virtualLinkIds = {-1, 0});
+
+    /**
+     * Compute queue utilization as number of packets in queue / queue size
+     *
+     * @param neighbor neighbor MAC address to compute the queue size for
+     *
+     * @return queue utilization
+     */
+    double getQueueUtilization(MacAddress neighbor);
+
+    void enableArtificialPacketDrop() { this->pArtificialPacketDrop = true; }
+    void disableArtificialPacketDrop() { this->pArtificialPacketDrop = false; }
 
   protected:
     /** @name Different tracked statistics.*/
@@ -219,7 +243,8 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
         EV_TIMER_CCA,
         EV_TIMER_SLOT,
         EV_TIMER_HOPPING,
-        EV_TIMER_SLOTEND
+        EV_TIMER_SLOTEND,
+        MAC_ENABLE_DROPS // TEST EVENT, not part of the normal MAC operation, enable packet drops after a timeout
     };
 
     /** @brief Types for frames sent by the CSMA.*/
@@ -366,6 +391,9 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
     TschLink *currentLink;
     int currentChannel;
 
+    bool pArtificialPacketDrop;
+    double pPacketDropThreshold;
+
   protected:
     /** @brief Generate new interface address*/
     virtual void configureInterfaceEntry() override;
@@ -406,6 +434,21 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
     omnetpp::simtime_t scheduleSlot();
 
     int getVirtualLinkId(TschLink* link);
+
+    /**
+     * --Yevhenii
+     *
+     * Custom functions to handle cell overlapping in time.
+     *
+     * Select current active link by iterating through all links / cells
+     * and applying the following "priorities", rather than selecting the first one found:
+     *  1. Dedicated TX link with non-empty queue (if @param prioAppData is true)
+     *  2. Shared TX link with non-empty queue
+     *  3. Random RX link
+     *
+     *  @param links list of all links scheduled with neigbhors
+     *  @return link selected to be active for current ASN
+     */
     TschLink* selectActiveLink(std::vector<TschLink*> links);
     TschLink* selectActiveLink(std::vector<TschLink*> links, bool prioAppData);
 
@@ -419,6 +462,10 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
 
     //sequence numbers for receiving
     std::map<inet::MacAddress, std::map<int, unsigned long>> SeqNrChild;    //child -> sequence number
+
+    // Util
+    list<MacAddress> neighbors; // list of neighbors MAC addresses
+    bool artificialPacketDrop();
 
   private:
     /** @brief Copy constructor is not allowed.

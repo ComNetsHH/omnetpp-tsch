@@ -50,6 +50,7 @@
 #include "../../common/VirtualLinkTag_m.h"
 #include "sixtisch/TschSF.h"
 
+
 namespace tsch {
 
 using namespace inet::physicallayer;
@@ -96,6 +97,8 @@ void Ieee802154eMac::initialize(int stage) {
         currentLink = nullptr;
         currentChannel = 0;
 
+        // util parameter for artificial packet drop scenarios
+        pPacketDropThreshold = par("packetDropThreshold").doubleValue();
 
         //init parameters for backoff method
         std::string backoffMethodStr = par("backoffMethod").stdstringValue();
@@ -171,6 +174,17 @@ void Ieee802154eMac::initialize(int stage) {
         EV_DETAIL << "Finished tsch init stage 1." << endl;
 
         pktEnqueuedSignal = registerSignal("pktEnqueued");
+    } else if (stage == INITSTAGE_LAST) {
+        auto nbrs = this->getNeighborsInRange();
+        for (auto nbrId : nbrs)
+            neighbors.push_back(MacAddress(nbrId));
+
+        WATCH_LIST(neighbors);
+        WATCH(pArtificialPacketDrop);
+
+        auto timeoutVal = par("lossyLinkTimeout").doubleValue();
+        if (timeoutVal)
+            scheduleAt(simTime() + SimTime(timeoutVal, SIMTIME_S), new cMessage("Start losing packets", MAC_ENABLE_DROPS));
     }
 }
 
@@ -362,6 +376,20 @@ TschLink* Ieee802154eMac::selectActiveLink(std::vector<TschLink*> links) {
     return selectActiveLink(links, false);
 }
 
+vector<tuple<int, int>> Ieee802154eMac::getQueueSizes(MacAddress nbrAddr, vector<int> virtuaLinkIds)
+{
+    vector<tuple<int, int>> queueSizes;
+
+    for (auto linkId : virtuaLinkIds)
+        queueSizes.emplace_back(linkId, neighbor->checkVirtualQueueSizeAt(nbrAddr, linkId));
+
+    return queueSizes;
+}
+
+double Ieee802154eMac::getQueueUtilization(MacAddress nbrAddr) {
+    return neighbor->checkQueueSizeAt(nbrAddr) / (double) neighbor->getQueueLength();
+}
+
 TschLink* Ieee802154eMac::selectActiveLink(std::vector<TschLink*> links, bool prioAppData) {
     if (links.size() == 1)
         return links.back();
@@ -379,18 +407,28 @@ TschLink* Ieee802154eMac::selectActiveLink(std::vector<TschLink*> links, bool pr
         }
     }
 
-    // Next look for ANY TX link (auto, shared)
+    // Next look for any UNICAST TX link (auto, shared)
+    for (auto link : links) {
+        if (link->isTx() && link->getAddr() != MacAddress::BROADCAST_ADDRESS
+                && neighbor->checkVirtualQueueSizeAt(link->getAddr(), getVirtualLinkId(link)))
+        {
+            EV_DETAIL << "Found unicast TX link with non-empty queue: " << link << endl;
+            return link;
+        }
+    }
+
+    // If no unicast link with packets found, check shared broadcast links
     for (auto link : links) {
         if (link->isTx() && neighbor->checkVirtualQueueSizeAt(link->getAddr(), getVirtualLinkId(link)))
         {
-            EV_DETAIL << "Found shared TX link with non-empty queue: " << link << endl;
+            EV_DETAIL << "Found broadcast TX link with non-empty queue: " << link << endl;
             return link;
         }
     }
 
     EV_DETAIL << "No active TX link detected, choosing RX one" << endl;
 
-    // Else just pick remainig RX/AUTO link randomly
+    // Else just pick remaining RX/AUTO link randomly
     std::vector<TschLink*> rxLinks = {};
     for (auto link : links)
         if (!link->isTx())
@@ -400,7 +438,7 @@ TschLink* Ieee802154eMac::selectActiveLink(std::vector<TschLink*> links, bool pr
         return nullptr;
 
     auto activeLink = rxLinks[intrand(rxLinks.size())];
-    EV_DETAIL << "Selected active link: " << endl;
+    EV_DETAIL << "Selected active link: " << activeLink << endl;
 
     return activeLink;
 }
@@ -660,6 +698,61 @@ void Ieee802154eMac::updateStatusWaitAck(t_mac_event event, cMessage *msg) {
     }
 }
 
+list<uint64_t> Ieee802154eMac::getNeighborsInRange() {
+    list<uint64_t> resultingList;
+
+    auto nodeId = this->interfaceEntry->getMacAddress().getInt(); // our own MAC
+    auto radio = this->getRadio();
+    auto medium = dynamic_cast<const physicallayer::RadioMedium*>(radio->getMedium());
+    auto limitcache = dynamic_cast<const physicallayer::MediumLimitCache*>(medium->getMediumLimitCache());
+    auto range = limitcache->getMaxCommunicationRange(radio).get();
+    auto myCoords = radio->getAntenna()->getMobility()->getCurrentPosition();
+
+
+    // we extract the topology here and filter for nodes that have the property @6tisch set.
+    // The property has to be set within the top-level ned-file (contains your network) e.g. like this:
+    //
+    // host[numHosts]: WirelessHost {
+    //     parameters:
+    //         @6tisch;
+    // }
+    //
+    cTopology topo;
+    topo.extractByProperty("6tisch");
+
+    for (int i = 0; i < topo.getNumNodes(); i++) {
+        auto host = topo.getNode(i)->getModule();
+        auto mobilityModule = dynamic_cast<IMobility *>(host->getSubmodule("mobility"));
+        auto interfaceModule = dynamic_cast<InterfaceTable *>(host->getSubmodule("interfaceTable"));
+        auto coords = mobilityModule->getCurrentPosition();
+        inet::MacAddress addr;
+
+        // look for a WirelessInterface and get it's address
+        // TODO currently takes first WirelessInterface, does not filter for interface type
+        if (interfaceModule->getNumInterfaces() > 0) {
+            for (int y = 0; y < interfaceModule->getNumInterfaces(); y++) {
+                if (strcmp(interfaceModule->getInterface(y)->getNedTypeName(), "inet.linklayer.common.WirelessInterface") == 0) {
+                    addr = interfaceModule->getInterface(y)->getMacAddress();
+                    break;
+                }
+            }
+        }
+
+        // we found no mac address to use or we found ourself
+        if (addr.isUnspecified() || addr.getInt() == nodeId) {
+            continue;
+        }
+
+        // verify distance to ourself
+        if (myCoords.distance(coords) <= range) {
+            resultingList.push_back(addr.getInt());
+            EV_DETAIL << "node " << addr.str() << " (" << coords.str() << ") is a neighbor of " << MacAddress(nodeId).str() << " (" << myCoords.str() << ")" << endl;
+        }
+    }
+
+    return resultingList;
+}
+
 void Ieee802154eMac::manageFailedTX() {
     neighbor->failedTX();
     if ((int) macMaxFrameRetries < (neighbor->getCurrentTschCSMA()->getNB())) {
@@ -908,6 +1001,14 @@ void Ieee802154eMac::startTimer(t_mac_timer timer) {
  */
 void Ieee802154eMac::handleSelfMessage(cMessage *msg) {
     EV_DETAIL << "timer routine." << endl;
+
+    // TEST part, for artificial packet drops
+    if (msg->getKind() == MAC_ENABLE_DROPS) {
+        pArtificialPacketDrop = true;
+        delete msg;
+        return;
+    }
+
     if (msg == slotTimer)
         executeMac(EV_TIMER_SLOT, msg);
     else if (msg == ccaTimer)
@@ -926,12 +1027,25 @@ void Ieee802154eMac::handleSelfMessage(cMessage *msg) {
         EV << "TSCH Error: unknown timer fired:" << msg << endl;
 }
 
+
+bool Ieee802154eMac::artificialPacketDrop() {
+    if (pArtificialPacketDrop) {
+        auto dice = uniform(0, 1);
+        EV_DETAIL << "Deciding whether to drop packet, dice = " << dice
+            << ", drop threshold = " << pPacketDropThreshold << endl;
+        return dice > pPacketDropThreshold;
+
+    }
+
+    return false;
+}
+
 /**
  * Compares the address of this Host with the destination address in
  * frame. Generates the corresponding event.
  */
 void Ieee802154eMac::handleLowerPacket(Packet *packet) {
-    if (packet->hasBitError()) {
+    if (packet->hasBitError() || artificialPacketDrop()) {
         EV << "Received " << packet
                   << " contains bit errors or collision, dropping it\n";
         PacketDropDetails details;

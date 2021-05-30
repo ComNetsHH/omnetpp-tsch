@@ -95,6 +95,12 @@ simple Ieee802154eMac extends MacProtocolBase like IMacProtocol
         
         // See header explanation for pPrioAppData
         bool prioritizeApplicationData = default(false);
+        
+        // TEST parameters for aritifical packet drop scenarios
+        // generating random number (0, 1) > this value will result in packet drop
+        double packetDropThreshold = default(0.7);  
+        // when MAC starts to apply artifical packet drops
+        double lossyLinkTimeout @unit(s) = default(0s);
 
         @class(Ieee802154eMac);
         @signal[linkBroken](type=inet::Packet);
