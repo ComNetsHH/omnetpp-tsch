@@ -22,7 +22,7 @@
 #include "TschMSF.h"
 
 #include "../Ieee802154eMac.h"
-#include "Rpl.h"
+//#include "Rpl.h"
 #include "Tsch6tischComponents.h"
 #include <omnetpp.h>
 #include <random>
@@ -51,13 +51,15 @@ void TschMSF::initialize(int stage) {
         pTschLinkInfo = (TschLinkInfo*) getParentModule()->getSubmodule("linkinfo");
         pTimeout = par("timeout").intValue();
         pMaxNumCells = par("maxNumCells");
-        pMaxNumTx = par("MAX_NUMTX");
+        pMaxNumTx = par("maxNumTx");
         pLimNumCellsUsedHigh = par("upperCellUsageLimit");
         pLimNumCellsUsedLow = par("lowerCellUsageLimit");
         pRelocatePdrThres = par("relocatePdrThresh");
         pCellListRedundancy = par("cellListRedundancy").intValue();
         pNumMinimalCells = par("numMinCells").intValue();
         disable = par("disable").boolValue();
+        pCellIncrement = par("cellBandwidthIncrement").intValue();
+        pSend6pDelayed = par("send6pDelayed").boolValue();
         pHousekeepingPeriod = par("housekeepingPeriod").intValue();
         pHousekeepingDisabled = par("disableHousekeeping").boolValue();
         internalEvent = new cMessage("SF internal event", UNDEFINED);
@@ -86,6 +88,7 @@ void TschMSF::initialize(int stage) {
 
         /** Schedule minimal cells for broadcast control traffic [RFC8180, 4.1] */
         scheduleMinimalCells(pNumMinimalCells, pSlotframeLength);
+
         /** And an auto RX cell for communication with neighbors [IETF MSF draft, 3] */
         scheduleAutoRxCell(interfaceModule->getInterface(1)->getMacAddress().formInterfaceIdentifier());
 
@@ -213,7 +216,7 @@ void TschMSF::handleMaxCellsReached(cMessage* msg) {
     EV_DETAIL << printCellUsage(neighborMac->str(), usage) << endl;
 
     if (usage >= pLimNumCellsUsedHigh)
-        addCells(neighborId, par("cellBandwidthIncrement").intValue());
+        addCells(neighborId, pCellIncrement, MAC_LINKOPTIONS_TX, pSend6pDelayed ? uniform(1, 5) : 0);
     if (usage <= pLimNumCellsUsedLow)
         deleteCells(neighborId, 1);
 
@@ -227,9 +230,9 @@ void TschMSF::handleMaxCellsReached(cMessage* msg) {
 void TschMSF::handleDoStart(cMessage* msg) {
     hasStarted = true;
     EV_DETAIL << "MSF has started" << endl;
-//
-//    if (!pHousekeepingDisabled)
-//        scheduleAt(simTime() + SimTime(par("housekeepingStart"), SIMTIME_S), new tsch6topCtrlMsg("", HOUSEKEEPING));
+
+    if (!pHousekeepingDisabled)
+        scheduleAt(simTime() + SimTime(par("housekeepingStart"), SIMTIME_S), new tsch6topCtrlMsg("", HOUSEKEEPING));
 
     /** Get all nodes that are within communication range of @p nodeId.
     *   Note that this only works if all nodes have been initialized (i.e.
@@ -347,7 +350,12 @@ void TschMSF::handleMessage(cMessage* msg) {
         }
         case HOUSEKEEPING: {
             handleHousekeeping(msg);
-            return;
+            break;
+        }
+        case SEND_6P_DELAYED: {
+            auto ctrlInfo = check_and_cast<SfControlInfo*> (msg->getControlInfo());
+            send6topRequestDelayed(ctrlInfo);
+            break;
         }
         case SEND_6P_DELAYED: {
             auto ctrlInfo = check_and_cast<SfControlInfo*> (msg->getControlInfo());
@@ -457,13 +465,11 @@ std::vector<cellLocation_t> TschMSF::pickRandomly(std::vector<cellLocation_t> in
     if ((int) inputVec.size() < numRequested)
         return {};
 
-    // shuffle the array
     std::random_device rd;
     std::mt19937 e{rd()};
 
     std::shuffle(inputVec.begin(), inputVec.end(), e);
 
-    // copy the picked ones
     std::vector<cellLocation_t> picked = {};
     for (auto i = 0; i < numRequested; i++)
         picked.push_back(inputVec[i]);
@@ -534,8 +540,9 @@ int TschMSF::createCellList(uint64_t destId, std::vector<cellLocation_t> &cellLi
 
     // Select only required number of cells from cell list
     cellList = pickRandomly(cellList, numCells);
-    EV_DETAIL << "After picking required number of cells: " << cellList << endl;
-    // Block selected cells' slot offsets until 6P transaction finishes
+    EV_DETAIL << "After picking required number of cells (" << numCells << "): " << cellList << endl;
+
+    // Block selected slot offsets until 6P transaction finishes
     for (auto c : cellList)
         reservedTimeOffsets[destId].push_back(c.timeOffset);
 
@@ -640,22 +647,24 @@ void TschMSF::refreshDisplay() const {
 
 }
 
-void TschMSF::handleSuccessResponse(uint64_t sender, tsch6pCmd_t cmd, int numCells, std::vector<cellLocation_t> cellList)
+void TschMSF::handleSuccessResponse(uint64_t sender, tsch6pCmd_t cmd, int numCells,
+        std::vector<cellLocation_t> cellList)
 {
     if (pTschLinkInfo->getLastKnownType(sender) != MSG_RESPONSE)
         return;
 
     switch (cmd) {
         case CMD_ADD: {
-            // No cells were added
+            // No cells were added if 6P SUCCESS responds with an empty CELL_LIST
             if (!cellList.size()) {
-                EV_DETAIL << "Seems 6P ADD to " << MacAddress(sender) << " failed" << endl;
+                EV_DETAIL << "Seems ADD to " << MacAddress(sender) << " failed" << endl;
                 return;
             }
 
+            // if we successfully scheduled dedicated TX we don't need an auto, shared TX cell anymore
             removeAutoTxCell(sender);
 
-            EV_DETAIL << "Seems ADD succeeded with cells: " << cellList << ",\nerasing entry from pending transactions" << endl;
+            EV_DETAIL << "6P ADD succeeded, " << cellList << " added" << endl;
             break;
         }
         case CMD_DELETE: {
@@ -685,12 +694,8 @@ void TschMSF::clearScheduleWithNode(uint64_t sender)
 {
     auto ctrlMsg = new tsch6topCtrlMsg();
     ctrlMsg->setDestId(sender);
-    std::vector<cellLocation_t> deletable = {};
+    std::vector<cellLocation_t> deletable = pTschLinkInfo->getCellLocations(sender);
     EV_DETAIL << "Clearing schedule with " << MacAddress(sender) << endl;
-
-    // Clearing cells scheduled with sender from local schedule
-    for (auto &cell : pTschLinkInfo->getCells(sender))
-        deletable.push_back(std::get<0>(cell));
 
     if (deletable.size()) {
         EV_DETAIL << "Found cells to delete: " << deletable << endl;
@@ -701,7 +706,7 @@ void TschMSF::clearScheduleWithNode(uint64_t sender)
 }
 
 
-// Hacky function to free cells reserved to @param sender when LL ACK is received by 6P layer
+/** Hacky way to free cells reserved to @param sender when link-layer ACK is received from it */
 void TschMSF::handleResponse(uint64_t sender, tsch6pReturn_t code, int numCells, std::vector<cellLocation_t> *cellList)
 {
     reservedTimeOffsets[sender].clear();
@@ -748,13 +753,26 @@ int TschMSF::getTimeout() {
     return pTimeout;
 }
 
-void TschMSF::addCells(uint64_t nodeId, int numCells, uint8_t cellOptions) {
+void TschMSF::addCells(uint64_t nodeId, int numCells, uint8_t cellOptions, int delay) {
     if (numCells < 1) {
         EV_WARN << "Invalid number of cells requested - " << numCells << endl;
         return;
     }
 
     EV_DETAIL << "Trying to add " << numCells << " cell(s) to " << MacAddress(nodeId) << endl;
+
+    if (delay > 0) {
+        auto selfMsg = new cMessage("SEND_6P_DELAYED", SEND_6P_DELAYED);
+        auto ctrlInfo = new SfControlInfo(nodeId);
+        ctrlInfo->set6pCmd(CMD_ADD);
+        ctrlInfo->setNumCells(numCells);
+        ctrlInfo->setCellOptions(cellOptions);
+
+        selfMsg->setControlInfo(ctrlInfo);
+        scheduleAt(simTime() + SimTime(delay, SIMTIME_S), selfMsg);
+        EV_DETAIL << "6P ADD will be sent out after " << delay << " seconds timeout" << endl;
+        return;
+    }
 
     if (pTschLinkInfo->inTransaction(nodeId)) {
         EV_WARN << "Can't add cells, currently in another transaction with this node" << endl;
@@ -771,9 +789,6 @@ void TschMSF::addCells(uint64_t nodeId, int numCells, uint8_t cellOptions) {
 }
 
 void TschMSF::deleteCells(uint64_t nodeId, int numCells) {
-    // If on-demand scheduling of auto cells enabled (IETF MSF draft, 3, p.5)
-    // we should remove auto cells if they're not needed
-    // legacy option is to prohibit auto cell removal at all, to be factored out after verifying CLSF functionality
     std::vector<cellLocation_t> dedicated = pTschLinkInfo->getDedicatedCells(nodeId);
 
     if (!dedicated.size()) {
@@ -881,10 +896,9 @@ void TschMSF::handlePacketEnqueued(uint64_t dest) {
     auto txCells = pTschLinkInfo->getCellsByType(dest, MAC_LINKOPTIONS_TX);
     EV_DETAIL << "Received MAC notification for a packet enqueued to "
             << MacAddress(dest) << ", cells scheduled to this neighbor:" << txCells << endl;
-    if (!txCells.size() && par("autoCellOnDemand").boolValue()) {
-        EV_DETAIL << "No TX cell found, scheduling auto cell" << endl;
+
+    if (!txCells.size())
         scheduleAutoCell(dest);
-    }
 }
 
 
@@ -943,11 +957,6 @@ void TschMSF::receiveSignal(cComponent *src, simsignal_t id, long value, cObject
 
     if (std::strcmp(signalName.c_str(), "pktEnqueued") == 0) {
         handlePacketEnqueued(value);
-        return;
-    }
-
-    if (std::strcmp(signalName.c_str(), "oneHopChildJoined") == 0) {
-        oneHopRplChildren.push_back(value);
         return;
     }
 
