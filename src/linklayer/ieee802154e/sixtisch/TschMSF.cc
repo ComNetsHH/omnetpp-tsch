@@ -155,6 +155,15 @@ void TschMSF::scheduleAutoCell(uint64_t neighbor) {
     cellList.push_back({slotOffset, nbruid % pNumChannels});
     ctrlMsg->setNewCells(cellList);
 
+    // Check if auto cell overlaps with a minimal cell
+    auto overlappingMinCells = pTschLinkInfo->getMinimalCells(slotOffset);
+    if (overlappingMinCells.size()) {
+        EV_DETAIL << "Auto TX cell to " << MacAddress(neighbor)
+                << " conflicts with minimal cell at " << std::to_string(slotOffset)
+                << " slotOffset, deleting minimal cell to avoid contention" << endl;
+        ctrlMsg->setDeleteCells(overlappingMinCells);
+    }
+
     EV_DETAIL << "Scheduling auto TX cell at " << cellList << " to neighbor - " << MacAddress(neighbor) << endl;
 
     pTschLinkInfo->addLink(neighbor, false, 0, 0);

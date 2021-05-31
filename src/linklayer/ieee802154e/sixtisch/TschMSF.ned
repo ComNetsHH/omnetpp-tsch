@@ -15,7 +15,6 @@ simple TschMSF like TschSF
         
         int numMinCells = default(5); // number of minimal cells (broadcast / control traffic) to schedule
         double upperCellUsageLimit = default(0.75);
-
         double lowerCellUsageLimit = default(0.25);
         int housekeepingPeriod @unit("s") = default(60s); // how often should we check cell PDR 	 
         double relocatePdrThresh = default(0.50); // if cell exhibits PDR worse than this, relocate it!
@@ -36,7 +35,7 @@ simple TschMSF like TschSF
         
      	bool handleRankUpdates = default(false); // TEST parameter, only needed for delay-testing scenarios 
 
-		double startTime @unit("s") = default(uniform(0s, 10s));
+		double startTime @unit("s") = default(uniform(3s, 4s));
 		
 		// custom parameter to add random delay before 6P requests to minimize
 		// probability of simulatenous transactions in both directions between two nodes

@@ -44,7 +44,6 @@ network SimpleWaic
             parameters:
                 @display("p=28.006989,6.9781723;is=s");
         }
-
         sink[numSinks]: WirelessHost {
             parameters:
                 @6tisch;
@@ -55,5 +54,4 @@ network SimpleWaic
                 @6tisch;
                 @display("r=,,#707070;p=17.63403,16.219536");
         }
-
 }

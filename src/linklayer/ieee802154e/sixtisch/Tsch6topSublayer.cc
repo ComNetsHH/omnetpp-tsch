@@ -901,7 +901,8 @@ Packet* Tsch6topSublayer::handleTransactionTimeout(tschLinkInfoTimeoutMsg* tom) 
     auto lastCmd = pTschLinkInfo->getLastKnownCommand(destId);
     auto lastType = pTschLinkInfo->getLastKnownType(destId);
 
-    EV_DETAIL << "Timeout fired for " << lastCmd << " " << lastType << " addressed to " << destId << endl;
+    EV_DETAIL << "Timeout fired for " << lastCmd << " "
+            << lastType << " addressed to " << MacAddress(destId) << endl;
 
     if (!pTschLinkInfo->linkInfoExists(destId))
         EV_WARN << "Received timeout for link that doesn't exist, something went very wrong" << endl;
