@@ -898,9 +898,22 @@ void TschMSF::handleParentChangedSignal(uint64_t newParentId) {
 
 void TschMSF::handlePacketEnqueued(uint64_t dest) {
     auto txCells = pTschLinkInfo->getCellsByType(dest, MAC_LINKOPTIONS_TX);
+
     EV_DETAIL << "Received MAC notification for a packet enqueued to "
             << MacAddress(dest) << ", cells scheduled to this neighbor:" << txCells << endl;
 
+    // Heuristic, checking if there's a dedicated cell to preferred parent whenever a packet is enqueued
+    if (rplParentId == dest) {
+        auto dedicatedCells = pTschLinkInfo->getDedicatedCells(dest);
+
+        if (!dedicatedCells.size() && !pTschLinkInfo->inTransaction(dest)) {
+            EV_DETAIL << "No dedicated TX cell found to preferred parent, and " <<
+                    "we are currently not in transaction with him, attempting to add one TX cell" << endl;
+            addCells(dest, 1);
+        }
+    }
+
+    // If the node's just a neighbor, schedule an auto cell if there's no cell at all
     if (!txCells.size())
         scheduleAutoCell(dest);
 }

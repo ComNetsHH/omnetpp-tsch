@@ -33,9 +33,9 @@ simple TschMSF like TschSF
         bool showQueueUtilization = default(false); // displays queue utilization for preferred parent (if available)
         bool allowMinimalCellsOverride = default(false); 
         
-     	bool handleRankUpdates = default(false); // TEST parameter, only needed for delay-testing scenarios 
+     	bool handleRankUpdates = default(false); // TEST parameter, only needed for sophisticated delay-testing scenarios 
 
-		double startTime @unit("s") = default(uniform(3s, 4s));
+		double startTime @unit("s") = default(uniform(1s, 2s));
 		
 		// custom parameter to add random delay before 6P requests to minimize
 		// probability of simulatenous transactions in both directions between two nodes
