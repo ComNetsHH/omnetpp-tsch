@@ -62,6 +62,19 @@ namespace tsch {
 class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
 {
   public:
+
+    class MacGenericInfo : cObject {
+        private:
+            uint64_t nodeId;
+
+        public:
+            MacGenericInfo() {}
+            MacGenericInfo(uint64_t nodeId) { this->nodeId = nodeId; }
+
+            uint64_t getNodeId() { return this->nodeId; }
+            void setNodeId(uint64_t nodeId) { this->nodeId = nodeId; }
+    };
+
     Ieee802154eMac()
         : MacProtocolBase()
         , nbTxFrames(0)

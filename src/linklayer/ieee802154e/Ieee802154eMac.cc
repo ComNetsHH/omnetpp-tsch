@@ -355,7 +355,8 @@ void Ieee802154eMac::handleUpperPacket(Packet *packet) {
                      << "\n";
     if (neighbor->add2Queue(packet, dest, linkId)) {
         EV_DETAIL << "Added packet to queue" << endl;
-        emit(pktEnqueuedSignal, (long) dest.getInt());
+        auto ctrlInfo = new MacGenericInfo(dest.getInt());
+        emit(pktEnqueuedSignal, 0, (cObject*) ctrlInfo);
     } else {
         EV_DETAIL << "Packet is dropped due to Queue Overflow" << endl;
         PacketDropDetails details;

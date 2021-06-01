@@ -240,6 +240,7 @@ class TschMSF: public TschSF, public cListener {
     void recordPDR(cMessage* msg) override {}
 
     void receiveSignal(cComponent *src, simsignal_t id, cObject *value, cObject *details) override;
+    void receiveSignal(cComponent *src, simsignal_t id, unsigned long value, cObject *details) override;
     void receiveSignal(cComponent *src, simsignal_t id, long value, cObject *details) override;
 
     /**

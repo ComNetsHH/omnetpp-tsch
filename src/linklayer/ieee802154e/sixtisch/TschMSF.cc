@@ -23,7 +23,9 @@
 
 #include "../Ieee802154eMac.h"
 //#include "Rpl.h"
+#include "RplDefs.h"
 #include "Tsch6tischComponents.h"
+#include "../Ieee802154eMac.h"
 #include <omnetpp.h>
 #include <random>
 #include <algorithm>
@@ -79,9 +81,6 @@ void TschMSF::initialize(int stage) {
 
         hostNode = getModuleByPath("^.^.^.^.");
         numHosts = hostNode->getParentModule()->par("numHosts").intValue();
-
-        EV_DETAIL << "Found a total of " << numHosts << " in the network" << endl;
-
         showTxCells = par("showDedicatedTxCells").boolValue();
         showQueueUtilization = par("showQueueUtilization").boolValue();
         showTxCellCount = par("showTxCellCount").boolValue();
@@ -945,6 +944,18 @@ void TschMSF::handleRplRankUpdate(long rank, int numHosts) {
     addCells(rplParentId, numCellsRequired);
 }
 
+void TschMSF::receiveSignal(cComponent *src, simsignal_t id, unsigned long value, cObject *details)
+{
+    Enter_Method_Silent();
+    if (!hasStarted)
+        return;
+
+    std::string signalName = getSignalName(id);
+    EV_DETAIL << "Got signal - " << signalName << endl;
+
+
+}
+
 void TschMSF::receiveSignal(cComponent *src, simsignal_t id, long value, cObject *details)
 {
     Enter_Method_Silent();
@@ -956,7 +967,9 @@ void TschMSF::receiveSignal(cComponent *src, simsignal_t id, long value, cObject
     EV_DETAIL << "Got signal - " << signalName << endl;
 
     if (std::strcmp(signalName.c_str(), "parentChanged") == 0) {
-        handleParentChangedSignal(value);
+        auto rplControlInfo = (RplGenericControlInfo*) details;
+
+        handleParentChangedSignal(rplControlInfo->getNodeId());
         return;
     }
 
@@ -973,7 +986,8 @@ void TschMSF::receiveSignal(cComponent *src, simsignal_t id, long value, cObject
     }
 
     if (std::strcmp(signalName.c_str(), "pktEnqueued") == 0) {
-        handlePacketEnqueued(value);
+        auto macCtrlInfo = (Ieee802154eMac::MacGenericInfo*) details;
+        handlePacketEnqueued(macCtrlInfo->getNodeId());
         return;
     }
 
