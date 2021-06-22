@@ -63,7 +63,7 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
 {
   public:
 
-    class MacGenericInfo : cObject {
+    class MacGenericInfo : public cObject {
         private:
             uint64_t nodeId;
 
