@@ -261,15 +261,6 @@ class TschMSF: public TschSF, public cListener {
      */
     void handlePacketEnqueued(uint64_t destId);
 
-    /** DELAY_TEST: Add number of dedicated TX cells according to node's own rank
-     * as well as the number of nodes in the network. Here a simple linear topology is assumed,
-     * where number of node's descendants can be deduced based on the rank and # of hosts in the simulation
-     *
-     * @param rank Rpl rank of this node
-     * @param numHosts number of hosts in the entire simulation
-     * */
-    void handleRplRankUpdate(long rank, int numHosts);
-
    protected:
     virtual void refreshDisplay() const override;
 
@@ -355,7 +346,6 @@ class TschMSF: public TschSF, public cListener {
         REACHED_MAXNUMCELLS,
         DO_START,
         HOUSEKEEPING,
-        DELAY_TEST,
         SEND_6P_DELAYED,
         UNDEFINED
     };

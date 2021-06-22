@@ -365,16 +365,6 @@ void TschMSF::handleMessage(cMessage* msg) {
             send6topRequestDelayed(ctrlInfo);
             break;
         }
-        case DELAY_TEST: {
-            long *rankPtr = (long*) msg->getContextPointer();
-            EV_DETAIL << "Received DELAY_TEST self-msg, rank - " << *rankPtr << endl;
-
-//            handleRplRankUpdate(*rankPtr, numHosts);
-
-            handleRplRankUpdate(rplRank, numHosts);
-
-            break;
-        }
         default: EV_ERROR << "Unknown message received: " << msg << endl;
     }
     delete msg;
@@ -892,7 +882,7 @@ void TschMSF::handleParentChangedSignal(uint64_t newParentId) {
     rplParentId = newParentId;
 
     /** and schedule the same amount of cells (or at least 1) with the new parent */
-    addCells(newParentId, (int) txCells.size() > 0 ? txCells.size() : 1);
+    addCells(newParentId, (int) txCells.size() > 0 ? (int) txCells.size() : 1);
 }
 
 void TschMSF::handlePacketEnqueued(uint64_t dest) {
@@ -915,33 +905,6 @@ void TschMSF::handlePacketEnqueued(uint64_t dest) {
     // If the node's just a neighbor, schedule an auto cell if there's no cell at all
     if (!txCells.size())
         scheduleAutoCell(dest);
-}
-
-
-void TschMSF::handleRplRankUpdate(long rank, int numHosts) {
-    EV_DETAIL << "Trying to schedule TX cells according to our rank - "
-            << rank << " and total number of hosts - " << numHosts << endl;
-
-    if (!rplParentId) {
-        EV_WARN << "RPL parent MAC unknown, aborting" << endl;
-        return;
-    }
-
-    auto currentTxCells = pTschLinkInfo->getDedicatedCells(rplParentId);
-    EV_DETAIL << "Found " << currentTxCells.size() << " cells already scheduled with PP: "
-            << currentTxCells << endl;
-
-    auto numCellsRequired = numHosts + 3 - ((int) rank) - ((int) currentTxCells.size());
-    EV_DETAIL << "Num cells required to schedule - " << numCellsRequired << endl;
-    /**
-     * "numHosts - rank + 3" corresponds to the number of cells required to handle traffic
-     * from the descendant nodes (numHosts - rank) as well as the node itself (+1).
-     * Additional +1 to account for the fact, that node closest to the sink are of rank 2 rather than 1.
-     * And another +1 to have service rate > arrival rate for stability condition.
-     *
-     * Each node is assumed to be M/M/1 system with incoming rate of 1 packet per slotframe
-     */
-    addCells(rplParentId, numCellsRequired);
 }
 
 void TschMSF::receiveSignal(cComponent *src, simsignal_t id, unsigned long value, cObject *details)
@@ -968,20 +931,7 @@ void TschMSF::receiveSignal(cComponent *src, simsignal_t id, long value, cObject
 
     if (std::strcmp(signalName.c_str(), "parentChanged") == 0) {
         auto rplControlInfo = (RplGenericControlInfo*) details;
-
         handleParentChangedSignal(rplControlInfo->getNodeId());
-        return;
-    }
-
-    if (std::strcmp(signalName.c_str(), "rankUpdated") == 0 && par("handleRankUpdates")) {
-        auto selfMsg = new cMessage("", DELAY_TEST);
-        long updatedRank = value;
-        rplRank = value;
-        EV_DETAIL << "Set RPL rank inside SF to " << rplRank << endl;
-        selfMsg->setContextPointer((long*) &updatedRank);
-        // FIXME: Magic numbers
-        scheduleAt(simTime() + SimTime(20, SIMTIME_S), selfMsg);
-//        handleRplRankUpdate(value, numHosts);
         return;
     }
 
