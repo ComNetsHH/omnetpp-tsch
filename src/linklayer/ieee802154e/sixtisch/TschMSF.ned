@@ -33,7 +33,7 @@ simple TschMSF like TschSF
         bool showQueueUtilization = default(false); // displays queue utilization for preferred parent (if available)
         bool allowMinimalCellsOverride = default(false); 
         
-     	bool handleRankUpdates = default(false); // TEST parameter, only needed for sophisticated delay-testing scenarios 
+     	bool handleRankUpdates = default(false); // TEST parameter, only needed for delay-testing scenarios 
 
 		double startTime @unit("s") = default(uniform(1s, 2s));
 		
@@ -41,8 +41,7 @@ simple TschMSF like TschSF
 		// probability of simulatenous transactions in both directions between two nodes
 		bool send6pDelayed = default(false);  
 		
-		// Module parameters required by the interface but is actually unused
-		
+		// Module parameters required by the interface but are actually unused
 		int initNumcells = default(6);
 		int maxRetryBackoff @unit(ms) = default(60000ms);
 }
