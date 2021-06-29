@@ -150,14 +150,9 @@ void Ieee802154eMac::initialize(int stage) {
         }
         radio->setRadioMode(IRadio::RADIO_MODE_SLEEP);
 
-        hopping = dynamic_cast<TschHopping*>(getModuleByPath(
-                "^.channelHopping"));
-
-        // get our slotframe
+        hopping = dynamic_cast<TschHopping*>(getModuleByPath("^.channelHopping"));
         schedule = dynamic_cast<TschSlotframe*>(getModuleByPath("^.schedule"));
-
         neighbor = dynamic_cast<TschNeighbor*>(getModuleByPath("^.neighbor"));
-
 
         // Use XML schedule only if SF is disabled
         auto sf = getModuleByPath("^.sixtischInterface.sf");
@@ -174,6 +169,7 @@ void Ieee802154eMac::initialize(int stage) {
         EV_DETAIL << "Finished tsch init stage 1." << endl;
 
         pktEnqueuedSignal = registerSignal("pktEnqueued");
+        pktRecFromUpperSignal = registerSignal("pktReceviedFromUpperLayer");
     } else if (stage == INITSTAGE_LAST) {
         auto nbrs = this->getNeighborsInRange();
         for (auto nbrId : nbrs)
@@ -351,12 +347,14 @@ void Ieee802154eMac::handleUpperPacket(Packet *packet) {
     packet->insertAtFront(macPkt);
     // TODO we are using protocol ieee802154 for now
     packet->getTag<PacketProtocolTag>()->setProtocol(&Protocol::ieee802154);
-    EV_DETAIL << "Pkt encapsulated, length: " << macPkt->getChunkLength()
-                     << "\n";
+    EV_DETAIL << "Pkt encapsulated, length: " << macPkt->getChunkLength() << endl;
+
+    // Notify scheduling function (MSF) to ensure there's a cell available for transmission
+    auto ctrlInfo = new MacGenericInfo(dest.getInt());
+    emit(pktRecFromUpperSignal, 0, (cObject*) ctrlInfo);
+
     if (neighbor->add2Queue(packet, dest, linkId)) {
         EV_DETAIL << "Added packet to queue" << endl;
-        auto ctrlInfo = new MacGenericInfo(dest.getInt());
-        emit(pktEnqueuedSignal, 0, (cObject*) ctrlInfo);
     } else {
         EV_DETAIL << "Packet is dropped due to Queue Overflow" << endl;
         PacketDropDetails details;

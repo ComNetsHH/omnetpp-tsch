@@ -15,6 +15,7 @@ precompiled_*.h.*
 
 # output and result files
 **/*.anf
+**/*.json
 .settings/
 /doc/doxy/
 /doc/neddoc/

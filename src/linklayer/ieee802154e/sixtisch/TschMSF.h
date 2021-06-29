@@ -292,6 +292,8 @@ class TschMSF: public TschSF, public cListener {
     bool pSend6pDelayed; // see .ned parameter
     offset_t pNumMinimalCells; // number of minimal cells being scheduled for ICMPv6, RPL broadcast messages
 
+    bool isSink;
+
     int pMaxNumCells;
     int pMaxNumTx;
     int tsch6pRtxThresh;
@@ -346,7 +348,7 @@ class TschMSF: public TschSF, public cListener {
         REACHED_MAXNUMCELLS,
         DO_START,
         HOUSEKEEPING,
-        SEND_6P_DELAYED,
+        SEND_6P_REQ,
         UNDEFINED
     };
 
@@ -366,11 +368,11 @@ class TschMSF: public TschSF, public cListener {
 
     /**
      * Sends out 6P request according to the details of SfControlInfo object.
-     * This function serves as a handler for self-msg event for sending 6P messages with delay
+     * This function serves as a handler for self-msg event for sending 6P messages with random delay.
      *
      * @param ctrlInfo control info object containig all the details about the 6P request to be sent
      */
-    void send6topRequestDelayed(SfControlInfo *ctrlInfo);
+    void send6topRequest(SfControlInfo *ctrlInfo);
 
     /**
      * Randomly relocate all cells scheduled with specified neighbor

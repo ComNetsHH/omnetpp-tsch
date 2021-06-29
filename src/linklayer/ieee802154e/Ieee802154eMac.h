@@ -159,6 +159,7 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
     virtual void handleStopOperation(inet::LifecycleOperation *operation) override {}    //TODO implementation
     virtual void handleCrashOperation(inet::LifecycleOperation *operation) override {}    //TODO implementation
 
+    simsignal_t pktRecFromUpperSignal; // emitted when packet is received from upper layers
 
     // Utility
     list<uint64_t> getNeighborsInRange(); // get list of neighbors based on maximum communication range

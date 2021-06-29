@@ -237,7 +237,8 @@ void Tsch6topSublayer::sendAddRequest(uint64_t destId, uint8_t cellOptions,
 }
 
 void Tsch6topSublayer::sendAddRequest(uint64_t destId, uint8_t cellOptions,
-                            int numCells, std::vector<cellLocation_t> &cellList, int timeout, double delay)
+                            int numCells, std::vector<cellLocation_t> &cellList,
+                            int timeout, double delay)
 {
     Enter_Method_Silent();
 
@@ -249,11 +250,11 @@ void Tsch6topSublayer::sendAddRequest(uint64_t destId, uint8_t cellOptions,
     /* Calculate simtime at which this transaction will time out. since simtime_t is
        always counted in (fractions of) seconds, we need to convert timeout first */
     simtime_t absoluteTimeout = getAbsoluteTimeout(timeout);
-    EV_DETAIL << "Sending ADD to " << MacAddress(destId) << ", timeout scheduled at: " << absoluteTimeout << endl;
+    EV_DETAIL << "Sending ADD to " << MacAddress(destId) << ", timeout scheduled at: "
+            << absoluteTimeout << endl;
     uint8_t seqNum = prepLinkForRequest(destId, absoluteTimeout);
 
-    auto pkt = createAddRequest(destId, seqNum, cellOptions, numCells,
-                                         cellList, absoluteTimeout);
+    auto pkt = createAddRequest(destId, seqNum, cellOptions, numCells, cellList, absoluteTimeout);
 
     pTschLinkInfo->setLastKnownCommand(destId, CMD_ADD);
     pTschLinkInfo->setLastLinkOption(destId, (uint8_t) cellOptions);
@@ -949,7 +950,7 @@ Packet* Tsch6topSublayer::createAddRequest(uint64_t destId, uint8_t seqNum,
 
     pkt->addTagIfAbsent<PacketProtocolTag>()->setProtocol(&Protocol::wiseRoute);
     auto virtualTag = pkt->addTagIfAbsent<VirtualLinkTagReq>();
-    virtualTag->setVirtualLinkID(-1);
+    virtualTag->setVirtualLinkID(-2);
     return pkt;
 }
 
@@ -988,7 +989,7 @@ Packet* Tsch6topSublayer::createDeleteRequest(uint64_t destId, uint8_t seqNum,
 
     pkt->addTagIfAbsent<PacketProtocolTag>()->setProtocol(&Protocol::wiseRoute);
     auto virtualTag = pkt->addTagIfAbsent<VirtualLinkTagReq>();
-        virtualTag->setVirtualLinkID(-1);
+    virtualTag->setVirtualLinkID(-2);
     return pkt;
 }
 
@@ -1031,7 +1032,7 @@ Packet* Tsch6topSublayer::createRelocationRequest(uint64_t destId, uint8_t seqNu
 
     pkt->addTagIfAbsent<PacketProtocolTag>()->setProtocol(&Protocol::wiseRoute);
     auto virtualTag = pkt->addTagIfAbsent<VirtualLinkTagReq>();
-        virtualTag->setVirtualLinkID(-1);
+        virtualTag->setVirtualLinkID(-2);
     return pkt;
 }
 
@@ -1058,7 +1059,7 @@ Packet* Tsch6topSublayer::createClearRequest(uint64_t destId, uint8_t seqNum) {
 
     pkt->addTagIfAbsent<PacketProtocolTag>()->setProtocol(&Protocol::wiseRoute);
     auto virtualTag = pkt->addTagIfAbsent<VirtualLinkTagReq>();
-        virtualTag->setVirtualLinkID(-1);
+        virtualTag->setVirtualLinkID(-2);
     return pkt;
 }
 
@@ -1092,7 +1093,7 @@ Packet* Tsch6topSublayer::createSignalRequest(uint64_t destId, uint8_t seqNum,
 
     pkt->addTagIfAbsent<PacketProtocolTag>()->setProtocol(&Protocol::wiseRoute);
     auto virtualTag = pkt->addTagIfAbsent<VirtualLinkTagReq>();
-        virtualTag->setVirtualLinkID(-1);
+        virtualTag->setVirtualLinkID(-2);
     return pkt;
 }
 
@@ -1125,7 +1126,7 @@ Packet* Tsch6topSublayer::createSuccessResponse(uint64_t destId, uint8_t seqNum,
 
     pkt->addTagIfAbsent<PacketProtocolTag>()->setProtocol(&Protocol::wiseRoute);
     auto virtualTag = pkt->addTagIfAbsent<VirtualLinkTagReq>();
-        virtualTag->setVirtualLinkID(-1);
+        virtualTag->setVirtualLinkID(-2);
     return pkt;
 }
 
@@ -1158,7 +1159,7 @@ Packet* Tsch6topSublayer::createErrorResponse(uint64_t destId, uint8_t seqNum,
 
     pkt->addTagIfAbsent<PacketProtocolTag>()->setProtocol(&Protocol::wiseRoute);
     auto virtualTag = pkt->addTagIfAbsent<VirtualLinkTagReq>();
-        virtualTag->setVirtualLinkID(-1);
+        virtualTag->setVirtualLinkID(-2);
     return pkt;
 }
 
@@ -1186,7 +1187,7 @@ Packet* Tsch6topSublayer::createSeqNumErrorResponse(uint64_t destId,
 
     pkt->addTagIfAbsent<PacketProtocolTag>()->setProtocol(&Protocol::wiseRoute);
     auto virtualTag = pkt->addTagIfAbsent<VirtualLinkTagReq>();
-        virtualTag->setVirtualLinkID(-1);
+        virtualTag->setVirtualLinkID(-2);
     return pkt;
 }
 
@@ -1220,7 +1221,7 @@ Packet* Tsch6topSublayer::createClearResponse(uint64_t destId, uint8_t seqNum,
 
     pkt->addTagIfAbsent<PacketProtocolTag>()->setProtocol(&Protocol::wiseRoute);
     auto virtualTag = pkt->addTagIfAbsent<VirtualLinkTagReq>();
-        virtualTag->setVirtualLinkID(-1);
+        virtualTag->setVirtualLinkID(-2);
     return pkt;
 }
 

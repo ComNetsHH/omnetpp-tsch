@@ -29,7 +29,7 @@ simple TschMSF like TschSF
         bool autoCellOnDemand = default(true); // WARNING: may lead to cell collisions (adding AUTO cell on top of dedicated cell)  
         bool disableHousekeeping = default(false);
         bool showDedicatedTxCells = default(true); // show scheduled TX cells coordinates above node pictorgram
-    	bool showTxCellCount = default(false); // instead of all TX cells locations, show only their count
+    	bool showTxCellCount = default(false); // instead of displaying TX cells coordinates, show their count only
         bool showQueueUtilization = default(false); // displays queue utilization for preferred parent (if available)
         bool allowMinimalCellsOverride = default(false); 
         

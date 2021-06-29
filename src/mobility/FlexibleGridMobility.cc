@@ -44,7 +44,6 @@ void FlexibleGridMobility::setInitialPosition()
     int col = index % columns;
     lastPosition.x = constraintAreaMin.x + marginX + col * separationX;
     lastPosition.y = constraintAreaMin.y + marginY + row * separationY;
-    std::cout << "Node " << index << "(" << lastPosition.x << ", " << lastPosition.y << ")" << endl;
     lastPosition.z = par("initialZ");
     recordScalar("x", lastPosition.x);
     recordScalar("y", lastPosition.y);
