@@ -498,18 +498,18 @@ void TschNeighbor::clearQueue(){
 }
 
 void TschNeighbor::refreshDisplay() const {
-    int queueSize = 0;
-    for (auto itrOuter = this->macToQueueMap.begin(); itrOuter != this->macToQueueMap.end(); ++itrOuter) {
-        for(auto itrInner = itrOuter->second->begin(); itrInner != itrOuter->second->end(); ++itrInner) {
-                queueSize += (int)itrInner->second->size();
-        }
-    }    std::ostringstream out;
-    out << queueSize;
-    if(queueSize > 0){
-        hostNode->getDisplayString().setTagArg("t", 2, "#fc2803");
-    }else{
-        hostNode->getDisplayString().setTagArg("t", 2, "#035bfc");
-    }
-    hostNode->getDisplayString().setTagArg("t", 0, out.str().c_str());
+//    int queueSize = 0;
+//    for (auto itrOuter = this->macToQueueMap.begin(); itrOuter != this->macToQueueMap.end(); ++itrOuter) {
+//        for(auto itrInner = itrOuter->second->begin(); itrInner != itrOuter->second->end(); ++itrInner) {
+//                queueSize += (int)itrInner->second->size();
+//        }
+//    }    std::ostringstream out;
+//    out << queueSize;
+//    if(queueSize > 0){
+//        hostNode->getDisplayString().setTagArg("t", 2, "#fc2803");
+//    }else{
+//        hostNode->getDisplayString().setTagArg("t", 2, "#035bfc");
+//    }
+//    hostNode->getDisplayString().setTagArg("t", 0, out.str().c_str());
 }
 }
