@@ -96,6 +96,9 @@ void Tsch6topSublayer::initialize(int stage) {
 
         s_6pMsgSent = registerSignal("sixp_msg_sent");
 
+        numConcurrentTransactionErrors = 0;
+        numTimeouts = 0;
+
         // TODO: just set to sim-time-limit?
 
         int ttl = getParentModule()->getSubmodule("sf")->par("timeout");
@@ -139,6 +142,11 @@ void Tsch6topSublayer::initialize(int stage) {
         scheduleAt(simTime()+pSFStarttime, msg);
     }
 };
+
+void Tsch6topSublayer::finish() {
+    recordScalar("numTimeouts", numTimeouts);
+    recordScalar("numConcurrentTransactionErrors", numConcurrentTransactionErrors);
+}
 
 Packet* Tsch6topSublayer::handleExternalMessage(cMessage* msg) {
     Packet* response = NULL;
@@ -394,8 +402,17 @@ Packet* Tsch6topSublayer::handle6PMsg(Packet* pkt) {
         /* packet is for us and valid, handle it */
         tsch6pMsg_t msgType = (tsch6pMsg_t) hdr->getType();
 
-        response = msgType == MSG_REQUEST ? handleRequestMsg(pkt, hdr, data)
-                : msgType == MSG_RESPONSE ? handleResponseMsg(pkt, hdr, data) : NULL;
+        switch (msgType) {
+            case MSG_REQUEST: {
+                response = handleRequestMsg(pkt, hdr, data);
+                break;
+            }
+            case MSG_RESPONSE: {
+                response = handleResponseMsg(pkt, hdr, data);
+                break;
+            }
+            default: EV_WARN << "Unknown 6P message type" << endl;
+        }
     }
 
     return response;
@@ -454,7 +471,7 @@ Packet* Tsch6topSublayer::handleRequestMsg(Packet* pkt,
 
     if (seqNum != 0 && seqNum != (pTschLinkInfo->getLastKnownSeqNum(sender))) {
         /* schedule inconsistency detected (sequence number!) */
-        EV_DETAIL << "Received seqNum - " << unsigned(seqNum) << ", expected - "
+        EV_WARN << "Received seqNum - " << unsigned(seqNum) << ", expected - "
                 << unsigned(pTschLinkInfo->getLastKnownSeqNum(sender)) << endl;
 
         // The Draft mandates that we should send a RC_SEQNUM response but handling
@@ -485,7 +502,9 @@ Packet* Tsch6topSublayer::handleRequestMsg(Packet* pkt,
     }
 
     if (pTschLinkInfo->inTransaction(sender)) {
-        EV_WARN << "Received new MSG_REQUEST during active transaction: ignoring request, sending RC_RESET (noticed late)" << endl;
+        EV_WARN << "Received new MSG_REQUEST during active transaction: "
+                << "ignoring request, sending RC_RESET (noticed late)" << endl;
+
         return createErrorResponse(sender, seqNum, RC_RESET, data->getTimeout());
     }
 
@@ -846,9 +865,13 @@ void Tsch6topSublayer::receiveSignal(cComponent *source, simsignal_t signalID, c
         }
     }
 
-    if (pendingPatternUpdates.find(destId) == pendingPatternUpdates.end())
-        return;
+    if (pendingPatternUpdates.find(destId) == pendingPatternUpdates.end()) {
+        EV_DETAIL << "We are in test condition #1" << endl;
+//        if (pTschLinkInfo->inTransaction(destId))
+//            pTschLinkInfo->abortTransaction(destId); // EXPERIMENTAL: clear in-transaction flag for TSCH-ACKs on RC_RESET
 
+        return;
+    }
 
     /* txsuccess is for a 6P transmission towards one of our neighbors */
     if (txSuccess && pendingPatternUpdates[destId]->getDestId() != -1
@@ -870,7 +893,7 @@ void Tsch6topSublayer::receiveSignal(cComponent *source, simsignal_t signalID, c
         // sent the response, we're just handling the fact that it was ACKed
         // create dedicated SF fct for that?
         pTschSF->handleResponse(destId, RC_SUCCESS, 0, NULL);
-        pTschLinkInfo->incrementSeqNum(destId);
+//        pTschLinkInfo->incrementSeqNum(destId);
 
         // TODO: wenn reloc: cells in reloccellist aus ptschlinkinfo entfernen
         pTschLinkInfo->addCells(destId, cellsToAdd, cellOptions);
@@ -878,10 +901,19 @@ void Tsch6topSublayer::receiveSignal(cComponent *source, simsignal_t signalID, c
         if (cellsToDelete.size())
             pTschLinkInfo->deleteCells(destId, cellsToDelete, cellOptions);
 
-        /* as far as we're considered, this transaction is complete now. */
-        pTschLinkInfo->abortTransaction(destId);
+//        /* as far as we're considered, this transaction is complete now. */
+//        pTschLinkInfo->abortTransaction(destId);
 
         result = pendingPatternUpdate->dup();
+    }
+
+    if (pTschLinkInfo->inTransaction(destId))
+    {
+        /* as far as we're considered, this transaction is complete now. */
+        // EXPERIMENTAL: moved these 2 lines here to ensure proper seqNum management and transaction termination
+        // when receiving an ACK for empty RC_SUCCESS
+        pTschLinkInfo->incrementSeqNum(destId);
+        pTschLinkInfo->abortTransaction(destId);
     }
 
     // TODO: this gets called in response to SIGNALs as well. might break stuff.
@@ -891,7 +923,7 @@ void Tsch6topSublayer::receiveSignal(cComponent *source, simsignal_t signalID, c
     if (result != nullptr)
         updateSchedule(*result);
 
-    pTschSF->recordPDR(nullptr); // TODO call with meaningfull parameters
+    pTschSF->recordPDR(nullptr); // TODO call with meaningful parameters
 }
 
 Packet* Tsch6topSublayer::handleTransactionTimeout(tschLinkInfoTimeoutMsg* tom) {
@@ -910,6 +942,8 @@ Packet* Tsch6topSublayer::handleTransactionTimeout(tschLinkInfoTimeoutMsg* tom) 
 
     /* Notify SF that it might want to try again */
     pTschSF->handleResponse(destId, RC_RESET, 0, emptyCellList);
+
+    numTimeouts++;
 
     return NULL;
 }

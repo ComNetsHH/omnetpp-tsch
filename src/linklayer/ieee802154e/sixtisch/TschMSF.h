@@ -330,6 +330,8 @@ class TschMSF: public TschSF, public cListener {
     std::map<uint64_t, NbrStatistic> nbrStatistic;
     std::vector<uint64_t> oneHopRplChildren;
     std::map<cellLocation_t, CellStatistic> cellStatistic;
+    int numInconsistenciesDetected;
+    int numLinkResets;
 
     bool hasStarted;
     bool disable;

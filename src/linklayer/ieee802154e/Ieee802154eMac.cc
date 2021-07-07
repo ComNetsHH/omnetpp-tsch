@@ -185,20 +185,20 @@ void Ieee802154eMac::initialize(int stage) {
 }
 
 void Ieee802154eMac::finish() {
-    recordScalar("nbTxFrames", nbTxFrames);
-    recordScalar("nbRxFrames", nbRxFrames);
-    recordScalar("nbDroppedFrames", nbDroppedFrames);
-    recordScalar("nbMissedAcks", nbMissedAcks);
-    recordScalar("nbRecvdAcks", nbRecvdAcks);
-    recordScalar("nbTxAcks", nbTxAcks);
-    recordScalar("nbDuplicates", nbDuplicates);
-    if (nbBackoffs > 0) {
-        recordScalar("meanBackoff", backoffValues / nbBackoffs);
-    } else {
-        recordScalar("meanBackoff", 0);
-    }
-    recordScalar("nbBackoffs", nbBackoffs);
-    recordScalar("backoffDurations", backoffValues);
+//    recordScalar("nbTxFrames", nbTxFrames);
+//    recordScalar("nbRxFrames", nbRxFrames);
+//    recordScalar("nbDroppedFrames", nbDroppedFrames);
+//    recordScalar("nbMissedAcks", nbMissedAcks);
+//    recordScalar("nbRecvdAcks", nbRecvdAcks);
+//    recordScalar("nbTxAcks", nbTxAcks);
+//    recordScalar("nbDuplicates", nbDuplicates);
+//    if (nbBackoffs > 0) {
+//        recordScalar("meanBackoff", backoffValues / nbBackoffs);
+//    } else {
+//        recordScalar("meanBackoff", 0);
+//    }
+//    recordScalar("nbBackoffs", nbBackoffs);
+//    recordScalar("backoffDurations", backoffValues);
 }
 
 Ieee802154eMac::~Ieee802154eMac() {
@@ -649,8 +649,7 @@ void Ieee802154eMac::updateStatusWaitAck(t_mac_event event, cMessage *msg) {
         radio->setRadioMode(IRadio::RADIO_MODE_SLEEP);
         if (rxAckTimer->isScheduled())
             cancelEvent(rxAckTimer);
-        cMessage *mac =
-                neighbor->getCurrentNeighborQueueFirstPacket();
+        cMessage *mac = neighbor->getCurrentNeighborQueueFirstPacket();
         neighbor->removeFirstPacketFromQueue();
         if(neighbor->isDedicated()){
             if(neighbor->getCurrentNeighborQueueSize() == 0){

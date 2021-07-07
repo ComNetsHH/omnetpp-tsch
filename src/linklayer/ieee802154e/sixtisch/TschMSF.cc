@@ -38,6 +38,8 @@ TschMSF::TschMSF() :
     rplParentId(0),
     tsch6pRtxThresh(3),
     numHosts(0),
+    numInconsistenciesDetected(0),
+    numLinkResets(0),
     hasStarted(false),
     pHousekeepingDisabled(false),
     hasOverlapping(false),
@@ -99,6 +101,8 @@ void TschMSF::initialize(int stage) {
         }
 
         isSink = rpl->par("isRoot");
+
+        WATCH(numInconsistenciesDetected);
 
         rpl->subscribe("parentChanged", this);
         rpl->subscribe("rankUpdated", this);
@@ -183,6 +187,8 @@ void TschMSF::finish() {
         recordScalar("numUplinkCells", (int) pTschLinkInfo->getDedicatedCells(rplParentId).size());
         recordScalar("queueUtilization", mac->getQueueUtilization(MacAddress(rplParentId)));
     }
+    recordScalar("numInconsistenciesDetected", numInconsistenciesDetected);
+    recordScalar("numLinkResets", numLinkResets);
 
 //    for (auto const& entry : nbrStatistic)
 //        std::cout << MacAddress(entry.first).str() << " elapsed "
@@ -740,6 +746,7 @@ void TschMSF::handleResponse(uint64_t sender, tsch6pReturn_t code, int numCells,
             clearCellStats(cellList);
             clearScheduleWithNode(sender);
             pTschLinkInfo->resetLink(sender, MSG_RESPONSE);
+            numLinkResets++;
         }
     }
 }
@@ -749,6 +756,7 @@ void TschMSF::handleInconsistency(uint64_t destId, uint8_t seqNum) {
     EV_WARN << "Inconsistency detected" << endl;
     /* Free already reserved cells to avoid race conditions */
     reservedTimeOffsets[destId].clear();
+    numInconsistenciesDetected++;
 
     pTsch6p->sendClearRequest(destId, pTimeout);
 }

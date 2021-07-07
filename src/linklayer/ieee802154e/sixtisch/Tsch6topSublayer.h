@@ -63,6 +63,7 @@ public:
     virtual int numInitStages() const override {return 5;}
 
     virtual void initialize(int) override;
+    virtual void finish() override;
 
     /**
      * @brief Handle messages containing 6top data that are sent over from
@@ -214,6 +215,9 @@ private:
      * This is mandated by the way WAIC works, not by 6P.
      */
     simtime_t TxQueueTTL;
+
+    int numTimeouts;
+    int numConcurrentTransactionErrors;
 
     /** Data to be piggybacked (if any), indexed by destination. */
     std::map<uint64_t, std::vector<tsch6pPiggybackTimeoutMsg*>> piggybackableData;
