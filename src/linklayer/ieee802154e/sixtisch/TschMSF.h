@@ -332,6 +332,7 @@ class TschMSF: public TschSF, public cListener {
     std::map<cellLocation_t, CellStatistic> cellStatistic;
     int numInconsistenciesDetected;
     int numLinkResets;
+    double util; // queue utilization with preferred parent
 
     bool hasStarted;
     bool disable;
@@ -348,6 +349,7 @@ class TschMSF: public TschSF, public cListener {
     enum msfSelfMsg_t {
         CHECK_STATISTICS,
         REACHED_MAXNUMCELLS,
+        QUEUE_ESTIMATION,
         DO_START,
         HOUSEKEEPING,
         SEND_6P_REQ,
@@ -453,6 +455,8 @@ class TschMSF: public TschSF, public cListener {
      */
     std::vector<offset_t> getAvailableSlotsInRange(offset_t start, offset_t end);
     std::vector<offset_t> getAvailableSlotsInRange(int slOffsetEnd);
+
+    void estimateQueueUtilisation();
 };
 
 #endif /*__WAIC_TSCHMSF_H_*/

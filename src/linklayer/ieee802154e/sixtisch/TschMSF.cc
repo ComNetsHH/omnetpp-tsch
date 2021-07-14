@@ -103,6 +103,8 @@ void TschMSF::initialize(int stage) {
         isSink = rpl->par("isRoot");
 
         WATCH(numInconsistenciesDetected);
+        WATCH(util);
+        WATCH(rplParentId);
 
         rpl->subscribe("parentChanged", this);
         rpl->subscribe("rankUpdated", this);
@@ -205,6 +207,9 @@ void TschMSF::start() {
     msg->setKind(DO_START);
 
     scheduleAt(simTime() + SimTime(par("startTime").doubleValue()), msg);
+    scheduleAt(simTime() + par("queueEstimationPeriod"), new cMessage("", QUEUE_ESTIMATION));
+    EV_DETAIL << "Scheduled queue estimation msg at " << simTime() + par("queueEstimationPeriod")
+            << " s" << endl;
 }
 
 std::string TschMSF::printCellUsage(std::string neighborMac, double usage) {
@@ -241,10 +246,10 @@ void TschMSF::handleMaxCellsReached(cMessage* msg) {
 
     EV_DETAIL << printCellUsage(neighborMac->str(), usage) << endl;
 
-    if (usage >= pLimNumCellsUsedHigh)
-        addCells(neighborId, pCellIncrement, MAC_LINKOPTIONS_TX, pSend6pDelayed ? uniform(1, 3) : 0);
-    if (usage <= pLimNumCellsUsedLow)
-        deleteCells(neighborId, 1);
+//    if (usage >= pLimNumCellsUsedHigh)
+//        addCells(neighborId, pCellIncrement, MAC_LINKOPTIONS_TX, pSend6pDelayed ? uniform(1, 3) : 0);
+//    if (usage <= pLimNumCellsUsedLow)
+//        deleteCells(neighborId, 1);
 
     // reset values
     nbrStatistic[neighborId].NumCellsUsed = 0; //intrand(pMaxNumCells >> 1);
@@ -358,6 +363,22 @@ void TschMSF::relocateCells(uint64_t neighbor, std::vector<cellLocation_t> reloc
     pTsch6p->sendRelocationRequest(neighbor, MAC_LINKOPTIONS_TX, relocCells.size(), relocCells, candidateCells, pTimeout);
 }
 
+void TschMSF::estimateQueueUtilisation() {
+    if (!rplParentId)
+        return;
+
+//    util = mac->getQueueUtilization(MacAddress(rplParentId));
+
+    auto currentQueueSize = std::get<1>(mac->getQueueSizes(MacAddress(rplParentId), {0}).back());
+    util = currentQueueSize / 20;
+
+    EV_DETAIL << "Utilisation from MAC = " << util << ", current queue size = "
+            << currentQueueSize << endl;
+
+    if (util > par("queueUtilUpperThresh").doubleValue())
+        addCells(rplParentId, 1);
+}
+
 void TschMSF::handleMessage(cMessage* msg) {
     Enter_Method_Silent();
 
@@ -370,6 +391,15 @@ void TschMSF::handleMessage(cMessage* msg) {
         case REACHED_MAXNUMCELLS: {
             handleMaxCellsReached(msg);
             break;
+        }
+        case QUEUE_ESTIMATION: {
+            estimateQueueUtilisation();
+            auto nextTimestamp = simTime() + par("queueEstimationPeriod");
+            EV_DETAIL << "Next queue estimation event on " << nextTimestamp << endl;
+
+            scheduleAt(nextTimestamp, msg);
+
+            return;
         }
         case DO_START: {
             handleDoStart(msg);
