@@ -389,6 +389,12 @@ double Ieee802154eMac::getQueueUtilization(MacAddress nbrAddr) {
     return neighbor->checkQueueSizeAt(nbrAddr) / (double) neighbor->getQueueLength();
 }
 
+double Ieee802154eMac::getQueueUtilization(MacAddress nbrAddr, int virtualLinkId) {
+    auto numEnqPackets = std::get<1>(getQueueSizes(nbrAddr, {virtualLinkId}).back());
+
+    return numEnqPackets / (double) neighbor->getQueueLength();
+}
+
 TschLink* Ieee802154eMac::selectActiveLink(std::vector<TschLink*> links, bool prioAppData) {
     if (links.size() == 1)
         return links.back();

@@ -7,7 +7,10 @@ simple TschMSF like TschSF
         @class(TschMSF);
         
         @signal[rplParentChanged](type=unsigned long);
-        @statistic[rplParentChanged](title = "Number of rpl parents changed"; source="rplParentChanged"; record=count; interpolationmode=none);
+        @signal[queueUtilization](type=double);
+        
+        @statistic[rplParentChanged](title="Number of rpl parents changed"; source="rplParentChanged"; record=count; interpolationmode=none);
+        @statistic[queueUtilization](title="Queue utilization"; source=queueUtilization; record=mean?, vector?; interpolationmode=none);
         
         // the time after which an active, unfinished transaction expires
         // (needs to be defined by every SF as per the 6P standard)

@@ -173,7 +173,8 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
      *
      * @return queue utilization
      */
-    double getQueueUtilization(MacAddress neighbor);
+    double getQueueUtilization(MacAddress nbrAddr);
+    double getQueueUtilization(MacAddress nbrAddr, int virtualLinkId);
 
     void enableArtificialPacketDrop() { this->pArtificialPacketDrop = true; }
     void disableArtificialPacketDrop() { this->pArtificialPacketDrop = false; }

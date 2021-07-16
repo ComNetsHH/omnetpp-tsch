@@ -68,6 +68,7 @@ void TschMSF::initialize(int stage) {
         pHousekeepingPeriod = par("housekeepingPeriod").intValue();
         pHousekeepingDisabled = par("disableHousekeeping").boolValue();
         internalEvent = new cMessage("SF internal event", UNDEFINED);
+        queueUtilization = registerSignal("queueUtilization");
     } else if (stage == 5) {
         interfaceModule = dynamic_cast<InterfaceTable *>(getParentModule()->getParentModule()->getParentModule()->getParentModule()->getSubmodule("interfaceTable", 0));
         pNodeId = interfaceModule->getInterface(1)->getMacAddress().getInt();
@@ -105,6 +106,7 @@ void TschMSF::initialize(int stage) {
         WATCH(numInconsistenciesDetected);
         WATCH(util);
         WATCH(rplParentId);
+        WATCH(numLinkResets);
 
         rpl->subscribe("parentChanged", this);
         rpl->subscribe("rankUpdated", this);
@@ -187,7 +189,6 @@ void TschMSF::scheduleAutoCell(uint64_t neighbor) {
 void TschMSF::finish() {
     if (rplParentId) {
         recordScalar("numUplinkCells", (int) pTschLinkInfo->getDedicatedCells(rplParentId).size());
-        recordScalar("queueUtilization", mac->getQueueUtilization(MacAddress(rplParentId)));
     }
     recordScalar("numInconsistenciesDetected", numInconsistenciesDetected);
     recordScalar("numLinkResets", numLinkResets);
@@ -208,8 +209,6 @@ void TschMSF::start() {
 
     scheduleAt(simTime() + SimTime(par("startTime").doubleValue()), msg);
     scheduleAt(simTime() + par("queueEstimationPeriod"), new cMessage("", QUEUE_ESTIMATION));
-    EV_DETAIL << "Scheduled queue estimation msg at " << simTime() + par("queueEstimationPeriod")
-            << " s" << endl;
 }
 
 std::string TschMSF::printCellUsage(std::string neighborMac, double usage) {
@@ -363,17 +362,15 @@ void TschMSF::relocateCells(uint64_t neighbor, std::vector<cellLocation_t> reloc
     pTsch6p->sendRelocationRequest(neighbor, MAC_LINKOPTIONS_TX, relocCells.size(), relocCells, candidateCells, pTimeout);
 }
 
-void TschMSF::estimateQueueUtilisation() {
+void TschMSF::estimateQueueUtilization() {
     if (!rplParentId)
         return;
 
 //    util = mac->getQueueUtilization(MacAddress(rplParentId));
 
-    auto currentQueueSize = std::get<1>(mac->getQueueSizes(MacAddress(rplParentId), {0}).back());
-    util = currentQueueSize / 20;
-
-    EV_DETAIL << "Utilisation from MAC = " << util << ", current queue size = "
-            << currentQueueSize << endl;
+//    auto currentQueueSize = std::get<1>(mac->getQueueSizes(MacAddress(rplParentId), {0}).back());
+    util = mac->getQueueUtilization(MacAddress(rplParentId), 0);
+    emit(queueUtilization, util);
 
     if (util > par("queueUtilUpperThresh").doubleValue())
         addCells(rplParentId, 1);
@@ -393,12 +390,10 @@ void TschMSF::handleMessage(cMessage* msg) {
             break;
         }
         case QUEUE_ESTIMATION: {
-            estimateQueueUtilisation();
+            estimateQueueUtilization();
             auto nextTimestamp = simTime() + par("queueEstimationPeriod");
             EV_DETAIL << "Next queue estimation event on " << nextTimestamp << endl;
-
             scheduleAt(nextTimestamp, msg);
-
             return;
         }
         case DO_START: {

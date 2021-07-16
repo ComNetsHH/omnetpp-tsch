@@ -440,6 +440,8 @@ class TschMSF: public TschSF, public cListener {
     void updateNeighborStats(uint64_t neighbor, std::string statType);
     bool slotOffsetAvailable(offset_t slOf);
 
+    simsignal_t queueUtilization;
+
     /**
      * Pick @param numRequested items without duplicates randomly uniformly
      * from @param inputVec collection
@@ -456,7 +458,7 @@ class TschMSF: public TschSF, public cListener {
     std::vector<offset_t> getAvailableSlotsInRange(offset_t start, offset_t end);
     std::vector<offset_t> getAvailableSlotsInRange(int slOffsetEnd);
 
-    void estimateQueueUtilisation();
+    void estimateQueueUtilization();
 };
 
 #endif /*__WAIC_TSCHMSF_H_*/
