@@ -8,17 +8,59 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
 import re
+import sys
+import argparse
+import os
+import time
 
 plt.rcParams.update({'font.size': 16})
 
-def plot_hpq_delays(data):
+app_to_traffic_map = {
+	0: 'Seatbelt',
+	1: 'Smoke',
+	2: 'Humidity'
+}
+
+def plot_hpq_pdr(data, app_to_traffic_map):
+	df = pd.DataFrame(columns=['PDR', 'Traffic', 'Repetition', 'Experiment'])
+
+	for sim_run in data:
+		# results for each application type (smoke / humidity / seatbelts)
+		pkt_rec = 0
+		pkt_sent = 0
+		app_id = -1
+		repetition = data[sim_run]["attributes"]["repetition"]
+		experiment = data[sim_run]["attributes"]["experiment"]
+
+		pdr_map = {
+			x: {"sent": 0, "rec": 0} for x in app_to_traffic_map.keys()
+		}
+
+		# Accumulate all sent / received packets for each app
+		for sca in data[sim_run]["scalars"]:
+			app_id = app_id = int(re.search('app\[(\d+)\]', sca["module"]).group(1))
+
+			if "packetReceived" in sca["name"]:
+				pdr_map[app_id]["rec"] += sca["value"]
+
+			if "packetSent" in sca["name"]:
+				pdr_map[app_id]["sent"] += sca["value"]
+		
+		# Append a row to dataframe with PDR for each app and repetition
+		for app_id in pdr_map:
+			print(f"rep #{repetition}, app[{app_id}].received = {pdr_map[app_id]['rec']}, sent = {pdr_map[app_id]['sent']}")
+			df_row = {
+					'PDR': (pdr_map[app_id]["rec"] / pdr_map[app_id]["sent"]) if pdr_map[app_id]["sent"] > 0 else 0, 
+					'Traffic': app_to_traffic_map[app_id], 
+					'Repetition': repetition,
+					'Experiment': experiment
+				}
+			df = df.append(df_row, ignore_index=True)
+
+	sns.barplot(data=df, x='Traffic', y='PDR', ci=95, hue='Experiment')
+
+def plot_hpq_delays(data, app_to_traffic_map):
 	df = pd.DataFrame(columns=['Delay', 'Traffic', 'Repetition', 'Experiment'])
-	
-	app_to_traffic_map = {
-		0: 'Seatbelt',
-		1: 'Smoke',
-		2: 'Humidity'
-	}
 
 	for sim_run in data:
 		# results for each application type (smoke / humidity / seatbelts)
@@ -37,6 +79,41 @@ def plot_hpq_delays(data):
 			df = df.append(df_row, ignore_index=True)
 
 	sns.barplot(data=df, x='Traffic', y='Delay', ci=95, hue='Experiment')
+
+def plot_hpq_delay_cdf(data, app_to_traffic_map):
+	df = pd.DataFrame(columns=['Delay', 'Traffic', 'Experiment'])
+
+	delays_per_app = {}
+
+	for sim_run in data:
+
+		experiment = data[sim_run]["attributes"]["experiment"]
+
+		# for each config / experiment initialize an entry with app ids as keys and empty list as value
+		# the list is then used to collect all the observed delay samples for this app
+		if experiment not in delays_per_app:
+			delays_per_app[experiment] = {x: [] for x in app_to_traffic_map.keys()}
+
+		for vec in data[sim_run]["vectors"]:
+			app_id = int(re.search('sink\[\d+\].app\[(\d+)\]', vec["module"]).group(1))
+			if app_id not in app_to_traffic_map.keys():
+				continue
+
+			delays_per_app[experiment][app_id].extend(vec["value"])
+
+
+	for exp in delays_per_app: 
+		for app_id in delays_per_app[exp]:
+			for val in delays_per_app[exp][app_id]:
+				row = {
+					'Delay': val, 
+					'Traffic': app_to_traffic_map[app_id], 
+					'Experiment': exp
+				}
+				df = df.append(row, ignore_index=True)
+
+	ax = sns.displot(data=df, x="Delay", hue='Experiment', kind="ecdf")
+	ax.set(xlim=(None, df['Delay'].max() * 0.8))
 
 def plot_inter_arrival_time(data):
 	df = pd.DataFrame(columns=['Interarrival Bin', 'Occurrences', 'Repetition'])
@@ -160,8 +237,34 @@ results_path = "/Users/yevhenii/omnetpp-5.6.2/samples/tsch-master/simulations/wi
 # pkt_arrivals_data = open(results_path + packet_arrivals_filename)
 # res_file = open(results_path + results_filename)
 
-filename = "hpq_delays_50_hosts.json"
-plot_hpq_delays(json.load(open(results_path + filename)))
+# filename = "hpq_delays_50_hosts.json"
+
+
+parser = argparse.ArgumentParser(description='Plot PDR / E2E delay plot for HPQ evaluation.')
+parser.add_argument('result_file', metavar='f', type=str, help='path to the json file with exported simulation results')
+parser.add_argument('-d', '--delay', help='plot end-to-end delay', action='store_true')
+parser.add_argument('-p', '--pdr', help='plot PDR', action='store_true')
+parser.add_argument('-c', '--cdf', help='plot CDF of delay', action='store_true')
+
+args = parser.parse_args()
+
+# abs_path = os.path.abspath()
+
+data = json.load(open(args.result_file))
+
+# print('loaded data: ', data)
+
+if args.delay:
+	print('plotting delay')
+	plot_hpq_delays(data, app_to_traffic_map)
+elif args.pdr:
+	print('plotting PDR')
+	plot_hpq_pdr(data, app_to_traffic_map)
+elif args.cdf:
+	print('plotting delay CDF')
+	start = time.time()
+	plot_hpq_delay_cdf(data, {1: 'Smoke'})
+	print(f'elapsed: {time.time() - start}s')
 
 # data = json.load(res_file)
 

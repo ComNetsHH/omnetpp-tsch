@@ -146,9 +146,18 @@ void TschMSF::scheduleAutoRxCell(InterfaceToken euiAddr) {
 void TschMSF::scheduleAutoCell(uint64_t neighbor) {
     EV_DETAIL << "Scheduling auto cell to " << MacAddress(neighbor) << endl;
 
-    if (pTschLinkInfo->sharedTxScheduled(neighbor)) {
-        EV_DETAIL << "Already scheduled, aborting" << endl;
-        return;
+    // Although this is always supposed to be a single cell,
+    // implementation-wise it's easier to keep it as vector
+    auto sharedCells = pTschLinkInfo->getSharedCellsWith(neighbor);
+
+    if (sharedCells.size()) {
+        auto sharedCellLoc = sharedCells.back();
+        if (schedule->getLinkByCellCoordinates(sharedCellLoc.timeOffset, sharedCellLoc.channelOffset))
+        {
+            EV_DETAIL << "Already scheduled, aborting" << endl;
+            return;
+        }
+        EV_WARN << "Shared auto cell found in TschLinkInfo but missing in schedule!" << endl;
     }
 
     auto ctrlMsg = new tsch6topCtrlMsg();
@@ -169,13 +178,15 @@ void TschMSF::scheduleAutoCell(uint64_t neighbor) {
     cellList.push_back({slotOffset, nbruid % pNumChannels});
     ctrlMsg->setNewCells(cellList);
 
-    // Check if auto cell overlaps with a minimal cell
-    auto overlappingMinCells = pTschLinkInfo->getMinimalCells(slotOffset);
-    if (overlappingMinCells.size()) {
-        EV_DETAIL << "Auto TX cell to " << MacAddress(neighbor)
-                << " conflicts with minimal cell at " << std::to_string(slotOffset)
-                << " slotOffset, deleting minimal cell to avoid contention" << endl;
-        ctrlMsg->setDeleteCells(overlappingMinCells);
+    // Check if auto cell overlaps with a minimal cell and delete the latter to reduce contention
+    if (par("deleteOverlappingMinCells").boolValue()) {
+        auto overlappingMinCells = pTschLinkInfo->getMinimalCells(slotOffset);
+        if (overlappingMinCells.size()) {
+            EV_DETAIL << "Auto TX cell to " << MacAddress(neighbor)
+                    << " conflicts with minimal cell at " << std::to_string(slotOffset)
+                    << " slotOffset, deleting minimal cell to avoid contention" << endl;
+            ctrlMsg->setDeleteCells(overlappingMinCells);
+        }
     }
 
     EV_DETAIL << "Scheduling auto TX cell at " << cellList << " to neighbor - " << MacAddress(neighbor) << endl;
@@ -720,6 +731,7 @@ void TschMSF::handleSuccessResponse(uint64_t sender, tsch6pCmd_t cmd, int numCel
         case CMD_CLEAR: {
             clearCellStats(cellList);
             clearScheduleWithNode(sender);
+            pTschLinkInfo->resetLink(sender, MSG_RESPONSE);
             break;
         }
         default: EV_DETAIL << "Unsupported 6P command" << endl;
@@ -922,9 +934,9 @@ void TschMSF::handleParentChangedSignal(uint64_t newParentId) {
     EV_DETAIL << "Dedicated TX cells currently scheduled with PP: " << txCells << endl;
 
     /** Clear all negotiated cells and state information with now former PP */
-    clearScheduleWithNode(rplParentId);
-    pTschLinkInfo->abortTransaction(rplParentId);
-    reservedTimeOffsets[rplParentId].clear();
+//    clearScheduleWithNode(rplParentId);
+//    pTschLinkInfo->abortTransaction(rplParentId);
+//    reservedTimeOffsets[rplParentId].clear();
     pTsch6p->sendClearRequest(rplParentId, pTimeout);
 
     rplParentId = newParentId;
@@ -939,6 +951,17 @@ void TschMSF::handlePacketEnqueued(uint64_t dest) {
     EV_DETAIL << "Received MAC notification for a packet "
             << MacAddress(dest) << ",\ncells scheduled to this neighbor: " << txCells << endl;
 
+    bool scheduleInconsistency = false;
+
+    for (auto cell : txCells) {
+        if (!schedule->getLinkByCellCoordinates(cell.timeOffset, cell.channelOffset)) {
+            EV_WARN << "TX cell at [ " << cell.timeOffset << ", "
+                    << cell.channelOffset << " ] missing from the schedule!" << endl;
+            scheduleInconsistency = true;
+        }
+    }
+
+
     // Heuristic, checking if there's a dedicated cell to preferred parent whenever a packet is enqueued
     if (rplParentId == dest) {
         auto dedicatedCells = pTschLinkInfo->getDedicatedCells(dest);
@@ -951,7 +974,7 @@ void TschMSF::handlePacketEnqueued(uint64_t dest) {
     }
 
     // If the node's just a neighbor, schedule an auto cell if there's no cell at all
-    if (!txCells.size() && MacAddress(dest) != MacAddress::BROADCAST_ADDRESS)
+    if ((!txCells.size() || scheduleInconsistency) && MacAddress(dest) != MacAddress::BROADCAST_ADDRESS)
         scheduleAutoCell(dest);
 }
 

@@ -199,6 +199,17 @@ bool TschLinkInfo::sharedTxScheduled(uint64_t nodeId) {
     return false;
 }
 
+std::vector<cellLocation_t> TschLinkInfo::getSharedCellsWith(uint64_t nodeId) {
+    std::vector<cellLocation_t> sharedCells = {};
+
+    for (auto link: linkInfo[nodeId].scheduledCells) {
+        auto opts = std::get<1>(link);
+        if (getCellOptions_isSHARED(opts) && getCellOptions_isTX(opts))
+            sharedCells.push_back(std::get<0>(link));
+    }
+    return sharedCells;
+}
+
 std::vector<cellLocation_t> TschLinkInfo::getCellLocations(uint64_t nodeId) {
     Enter_Method_Silent();
 

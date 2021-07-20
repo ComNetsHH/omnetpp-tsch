@@ -126,6 +126,8 @@ class TschSlotframe : public cSimpleModule, protected cListener, public ILifecyc
 
     virtual LinkVector getLinks() const { return links; }
 
+    TschLink* getLinkByCellCoordinates(offset_t slotOf, offset_t chOf);
+
     /**
      * Returns the kth link.
      */

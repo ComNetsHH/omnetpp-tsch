@@ -198,6 +198,7 @@ public:
     void clearCells(uint64_t nodeId);
 
     bool sharedTxScheduled(uint64_t nodeId);
+    std::vector<cellLocation_t> getSharedCellsWith(uint64_t nodeId);
 
     /**
      * @brief Delete the cells specified in @p cellList from the link with

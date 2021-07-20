@@ -105,12 +105,16 @@ simple Ieee802154eMac extends MacProtocolBase like IMacProtocol
         @class(Ieee802154eMac);
         @signal[linkBroken](type=inet::Packet);
         @signal[queueUtilization](type=double);
+        @signal[highPrioQueueOverflow](type=inet::Packet);
+        
         @statistic[linkBroken](title="link break"; source=linkBroken; record=count; interpolationmode=none);
         @statistic[packetDropNotAddressToUs](title="packet drop: not addressed to us"; source=packetDropReasonIsNotAddressedToUs(packetDropped); record=count,sum(packetBytes),vector(packetBytes); interpolationmode=none);
         @statistic[packetDropIncorrectlyReceived](title="packet drop: incorrectly received"; source=packetDropReasonIsIncorrectlyReceived(packetDropped); record=count,sum(packetBytes),vector(packetBytes); interpolationmode=none);
         @statistic[packetDropQueueOverlow](title="packet drop: queue overflow"; source=packetDropReasonIsQueueOverflow(packetDropped); record=count,sum(packetBytes),vector(packetBytes); interpolationmode=none);
         @statistic[packetDropRetryLimitReached](title="packet drop: retry limit reached"; source=packetDropReasonIsRetryLimitReached(packetDropped); record=count,sum(packetBytes),vector(packetBytes); interpolationmode=none);
         @statistic[packetDropBackoffLimitReached](title="packet drop: backoff limit reached"; source=packetDropReasonIsCongestion(packetDropped); record=count,sum(packetBytes),vector(packetBytes); interpolationmode=none);
+        
+        @statistic[highPrioQueueOverflow](title="packet drop: queue overflow on link ID -1"; source=highPrioQueueOverflow; record=count,vector; interpolationmode=none);
         
         @signal[nbTxFrames-*](type=long);
         @signal[nbMissedAcks-*](type=long);

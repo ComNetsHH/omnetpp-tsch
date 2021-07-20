@@ -34,7 +34,7 @@ simple TschMSF like TschSF
         bool showDedicatedTxCells = default(true); // show scheduled TX cells coordinates above node pictorgram
     	bool showTxCellCount = default(false); // instead of displaying TX cells coordinates, show their count only
         bool showQueueUtilization = default(false); // displays queue utilization for preferred parent (if available)
-        bool allowMinimalCellsOverride = default(false); 
+        bool deleteOverlappingMinCells = default(true); 
         
      	bool handleRankUpdates = default(false); // TEST parameter, only needed for delay-testing scenarios 
 

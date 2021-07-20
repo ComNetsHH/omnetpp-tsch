@@ -51,6 +51,13 @@
 using namespace inet;
 using namespace std;
 
+enum LINK_PRIORITY {
+    LINK_PRIORITY_CONTROL = -2,
+    LINK_PRIORITY_HIGH = -1,
+    LINK_PRIORITY_NORMAL = 0,
+    LINK_PRIORITY_LOW = 1
+};
+
 namespace tsch {
 
 /**
@@ -154,12 +161,16 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
 
     InterfaceEntry *getInterfaceEntry();
 
+    // Get current cell frequency based on ASN, required for radio altimeter interference calculation
+    units::values::Hz getCurrentFrequency();
+
     // OperationalBase:
     virtual void handleStartOperation(inet::LifecycleOperation *operation) override {}    //TODO implementation
     virtual void handleStopOperation(inet::LifecycleOperation *operation) override {}    //TODO implementation
     virtual void handleCrashOperation(inet::LifecycleOperation *operation) override {}    //TODO implementation
 
     simsignal_t pktRecFromUpperSignal; // emitted when packet is received from upper layers
+    simsignal_t highPrioQueueOverflowSignal;
 
     // Utility
     list<uint64_t> getNeighborsInRange(); // get list of neighbors based on maximum communication range

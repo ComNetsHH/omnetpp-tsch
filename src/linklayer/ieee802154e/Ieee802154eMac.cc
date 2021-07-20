@@ -170,6 +170,7 @@ void Ieee802154eMac::initialize(int stage) {
 
         pktEnqueuedSignal = registerSignal("pktEnqueued");
         pktRecFromUpperSignal = registerSignal("pktReceviedFromUpperLayer");
+        highPrioQueueOverflowSignal = registerSignal("highPrioQueueOverflow");
     } else if (stage == INITSTAGE_LAST) {
         auto nbrs = this->getNeighborsInRange();
         for (auto nbrId : nbrs)
@@ -354,9 +355,13 @@ void Ieee802154eMac::handleUpperPacket(Packet *packet) {
     emit(pktRecFromUpperSignal, 0, (cObject*) ctrlInfo);
 
     if (neighbor->add2Queue(packet, dest, linkId)) {
-        EV_DETAIL << "Added packet to queue" << endl;
+        EV_DETAIL << "Added packet to queue with link ID " << linkId << endl;
     } else {
         EV_DETAIL << "Packet is dropped due to Queue Overflow" << endl;
+
+        if (linkId == LINK_PRIORITY_HIGH)
+            emit(highPrioQueueOverflowSignal, packet);
+
         PacketDropDetails details;
         details.setReason(QUEUE_OVERFLOW);
         details.setLimit(neighbor->getQueueLength());
@@ -396,23 +401,11 @@ double Ieee802154eMac::getQueueUtilization(MacAddress nbrAddr, int virtualLinkId
 }
 
 TschLink* Ieee802154eMac::selectActiveLink(std::vector<TschLink*> links, bool prioAppData) {
-    if (links.size() == 1)
+    if ((int) links.size() == 1)
         return links.back();
 
-    if (prioAppData) {
-        // First check for the DEDICATED TX link with packets in queue
-        for (auto link : links) {
-            if (link->isTx() && !link->isAuto()
-                    // TODO: check virtual link id is determined correctly
-                    && neighbor->checkVirtualQueueSizeAt(link->getAddr(), getVirtualLinkId(link)))
-            {
-                EV_DETAIL << "Found dedicated TX link with non-empty queue: " << link << endl;
-                return link;
-            }
-        }
-    }
-
-    // Next look for any UNICAST TX link (auto, shared)
+    // If multiple links / cells are scheduled at the same position
+    // First look for any UNICAST TX link (auto / dedicated)
     for (auto link : links) {
         if (link->isTx() && link->getAddr() != MacAddress::BROADCAST_ADDRESS
                 && neighbor->checkVirtualQueueSizeAt(link->getAddr(), getVirtualLinkId(link)))
@@ -422,7 +415,7 @@ TschLink* Ieee802154eMac::selectActiveLink(std::vector<TschLink*> links, bool pr
         }
     }
 
-    // If no unicast link with packets found, check shared broadcast links
+    // If no unicast link with queued packets found, check shared broadcast links
     for (auto link : links) {
         if (link->isTx() && neighbor->checkVirtualQueueSizeAt(link->getAddr(), getVirtualLinkId(link)))
         {
@@ -443,11 +436,16 @@ TschLink* Ieee802154eMac::selectActiveLink(std::vector<TschLink*> links, bool pr
         return nullptr;
 
     auto activeLink = rxLinks[intrand(rxLinks.size())];
-    EV_DETAIL << "Selected active link: " << activeLink << endl;
+    EV_DETAIL << "Found " << rxLinks.size() << " RX links: "
+            << rxLinks << ",\nselected active link: " << activeLink << endl;
 
     return activeLink;
 }
 
+units::values::Hz Ieee802154eMac::getCurrentFrequency() {
+    Enter_Method_Silent();
+    return hopping->channelToCenterFrequency(currentChannel);
+}
 
 void Ieee802154eMac::updateStatusIdle(t_mac_event event, cMessage *msg) {
     switch (event) {

@@ -66,6 +66,14 @@ TschSlotframe::~TschSlotframe()
         delete elem;
 }
 
+TschLink* TschSlotframe::getLinkByCellCoordinates(offset_t slotOf, offset_t chOf) {
+    for (auto link : links) {
+        if (link->getChannelOffset() == chOf && link->getSlotOffset() == slotOf)
+            return link;
+    }
+    return nullptr;
+}
+
 void TschSlotframe::initialize(int stage)
 {
     cSimpleModule::initialize(stage);
