@@ -58,7 +58,7 @@ network HighDensity
                 @6tisch;
                 @display("r=,,#707070;p=313.04,416.58398");
         }
-        radioAltimeter: RplRouter {
-        	@display("r=,,#707070;p=313.04,416.58398");
-        }
+//        radioAltimeter: RplRouter {
+//        	@display("r=,,#707070;p=313.04,416.58398");
+//        }
 }

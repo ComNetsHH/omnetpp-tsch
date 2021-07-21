@@ -69,6 +69,7 @@ void TschMSF::initialize(int stage) {
         pHousekeepingDisabled = par("disableHousekeeping").boolValue();
         internalEvent = new cMessage("SF internal event", UNDEFINED);
         queueUtilization = registerSignal("queueUtilization");
+        failed6pAdd = registerSignal("failed6pAdd");
     } else if (stage == 5) {
         interfaceModule = dynamic_cast<InterfaceTable *>(getParentModule()->getParentModule()->getParentModule()->getParentModule()->getSubmodule("interfaceTable", 0));
         pNodeId = interfaceModule->getInterface(1)->getMacAddress().getInt();
@@ -104,6 +105,7 @@ void TschMSF::initialize(int stage) {
         isSink = rpl->par("isRoot");
 
         WATCH(numInconsistenciesDetected);
+        WATCH(pMaxNumCells);
         WATCH(util);
         WATCH(rplParentId);
         WATCH(numLinkResets);
@@ -219,7 +221,9 @@ void TschMSF::start() {
     msg->setKind(DO_START);
 
     scheduleAt(simTime() + SimTime(par("startTime").doubleValue()), msg);
-    scheduleAt(simTime() + par("queueEstimationPeriod"), new cMessage("", QUEUE_ESTIMATION));
+
+    if (par("estimateQueueUtil").boolValue())
+        scheduleAt(simTime() + par("queueEstimationPeriod"), new cMessage("", QUEUE_ESTIMATION));
 }
 
 std::string TschMSF::printCellUsage(std::string neighborMac, double usage) {
@@ -256,10 +260,10 @@ void TschMSF::handleMaxCellsReached(cMessage* msg) {
 
     EV_DETAIL << printCellUsage(neighborMac->str(), usage) << endl;
 
-//    if (usage >= pLimNumCellsUsedHigh)
-//        addCells(neighborId, pCellIncrement, MAC_LINKOPTIONS_TX, pSend6pDelayed ? uniform(1, 3) : 0);
-//    if (usage <= pLimNumCellsUsedLow)
-//        deleteCells(neighborId, 1);
+    if (usage >= pLimNumCellsUsedHigh)
+        addCells(neighborId, pCellIncrement, MAC_LINKOPTIONS_TX, pSend6pDelayed ? uniform(1, 3) : 0);
+    if (usage <= pLimNumCellsUsedLow)
+        deleteCells(neighborId, 1);
 
     // reset values
     nbrStatistic[neighborId].NumCellsUsed = 0; //intrand(pMaxNumCells >> 1);
@@ -706,11 +710,18 @@ void TschMSF::handleSuccessResponse(uint64_t sender, tsch6pCmd_t cmd, int numCel
             // No cells were added if 6P SUCCESS responds with an empty CELL_LIST
             if (!cellList.size()) {
                 EV_DETAIL << "Seems ADD to " << MacAddress(sender) << " failed" << endl;
+
+                auto details = new TransactionFailDetails(EMPTY_CELLLIST, MacAddress(sender));
+
+                emit(failed6pAdd, (cObject*) details);
                 return;
             }
 
             // if we successfully scheduled dedicated TX we don't need an auto, shared TX cell anymore
             removeAutoTxCell(sender);
+
+            // FIXME: magic numbers
+            pMaxNumCells = pow(2, (int) pTschLinkInfo->getDedicatedCells(sender).size()) * par("maxNumCells").intValue();
 
             EV_DETAIL << "6P ADD succeeded, " << cellList << " added" << endl;
             break;

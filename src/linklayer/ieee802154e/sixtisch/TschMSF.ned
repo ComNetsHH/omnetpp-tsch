@@ -8,9 +8,11 @@ simple TschMSF like TschSF
         
         @signal[rplParentChanged](type=unsigned long);
         @signal[queueUtilization](type=double);
+        @signal[failed6pAdd](type=string);
         
         @statistic[rplParentChanged](title="Number of rpl parents changed"; source="rplParentChanged"; record=count; interpolationmode=none);
         @statistic[queueUtilization](title="Queue utilization"; source=queueUtilization; record=mean?, vector?; interpolationmode=none);
+        @statistic[numFailed6pAdd](title="Number of failed 6P ADD requests"; source=failed6pAdd; record=count, vector?; interpolationmode=none);
         
         // the time after which an active, unfinished transaction expires
         // (needs to be defined by every SF as per the 6P standard)
@@ -40,6 +42,7 @@ simple TschMSF like TschSF
 
 		double startTime @unit("s") = default(uniform(1s, 2s));
 		
+		bool estimateQueueUtil = default(false); // use queue utilization instead of cell util
 		double queueEstimationPeriod @unit("s") = default(uniform(10s, 20s));
 		double queueUtilUpperThresh = default(0.95);
 		

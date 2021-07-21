@@ -429,11 +429,13 @@ TschLink* Ieee802154eMac::selectActiveLink(std::vector<TschLink*> links, bool pr
     // Else just pick remaining RX/AUTO link randomly
     std::vector<TschLink*> rxLinks = {};
     for (auto link : links)
-        if (!link->isTx())
+        if (link->isRx())
             rxLinks.push_back(link);
 
-    if (!rxLinks.size())
+    if (!rxLinks.size()) {
+        EV_WARN << "No RX link as well? Seems like a bug" << endl;
         return nullptr;
+    }
 
     auto activeLink = rxLinks[intrand(rxLinks.size())];
     EV_DETAIL << "Found " << rxLinks.size() << " RX links: "

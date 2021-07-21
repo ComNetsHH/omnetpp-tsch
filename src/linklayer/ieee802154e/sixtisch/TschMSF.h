@@ -442,6 +442,28 @@ class TschMSF: public TschSF, public cListener {
 
     simsignal_t queueUtilization;
 
+    simsignal_t failed6pAdd; // tracks number of failed 6P ADD requests
+
+    enum transactionFailReason_t {
+        TIMEOUT,
+        EMPTY_CELLLIST
+    };
+
+    class TransactionFailDetails : public cObject {
+        private:
+            transactionFailReason_t failReason;
+            MacAddress nbr;
+
+        public:
+            TransactionFailDetails() {}
+            TransactionFailDetails(transactionFailReason_t failReason, MacAddress nbr) {
+                this->failReason = failReason;
+                this->nbr = nbr;
+            }
+    };
+
+
+
     /**
      * Pick @param numRequested items without duplicates randomly uniformly
      * from @param inputVec collection

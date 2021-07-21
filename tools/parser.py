@@ -113,7 +113,7 @@ def plot_hpq_delay_cdf(data, app_to_traffic_map):
 				df = df.append(row, ignore_index=True)
 
 	ax = sns.displot(data=df, x="Delay", hue='Experiment', kind="ecdf")
-	ax.set(xlim=(None, df['Delay'].max() * 0.8))
+	ax.set(xlim=(0, 6)) # df['Delay'].max() * 0.8)
 
 def plot_inter_arrival_time(data):
 	df = pd.DataFrame(columns=['Interarrival Bin', 'Occurrences', 'Repetition'])
