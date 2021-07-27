@@ -39,6 +39,7 @@ network HighDensity
         @display("bgb=20,110");
         int numHosts = default(1);
         int numSinks = default(1);
+        int numAltimeters = default(0);
     submodules:
         configurator: RplNetConfigurator {
             parameters:
@@ -58,7 +59,7 @@ network HighDensity
                 @6tisch;
                 @display("r=,,#707070;p=313.04,416.58398");
         }
-//        radioAltimeter: RplRouter {
-//        	@display("r=,,#707070;p=313.04,416.58398");
-//        }
+        radioAltimeter[numAltimeters]: RplRouter {
+        	@display("r=,,#707070;p=313.04,416.58398");
+        }
 }
