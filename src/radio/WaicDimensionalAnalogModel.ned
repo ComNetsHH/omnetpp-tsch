@@ -1,6 +1,5 @@
 //
-// Copyright (C) 2014 Florian Meier
-// Copyright (C) 2013 OpenSim Ltd.
+// Copyright (C) 2013 OpenSim Ltd
 //
 // This program is free software; you can redistribute it and/or
 // modify it under the terms of the GNU Lesser General Public License
@@ -15,17 +14,19 @@
 // You should have received a copy of the GNU Lesser General Public License
 // along with this program; if not, see <http://www.gnu.org/licenses/>.
 //
-
 package tsch.radio;
 
-import inet.physicallayer.base.packetlevel.NarrowbandReceiverBase;
-import inet.physicallayer.ieee802154.packetlevel.Ieee802154NarrowbandDimensionalReceiver;
+import inet.physicallayer.analogmodel.packetlevel.DimensionalAnalogModel;
 
+//
+// This analog model computes with dimensional analog power representation. In
+// other words the signal power may change over time and/or frequency.
+//
 @namespace(tsch);
 
-module Ieee802154NarrowbandDimensionalReceiverWaic extends Ieee802154NarrowbandDimensionalReceiver
+module WaicDimensionalAnalogModel extends DimensionalAnalogModel
 {
     parameters:
-        @class(Ieee802154NarrowbandDimensionalReceiverWaic);
+    	@class(WaicDimensionalAnalogModel);
 }
 
