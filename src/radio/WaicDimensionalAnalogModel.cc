@@ -56,6 +56,53 @@ const ISnir *WaicDimensionalAnalogModel::computeSNIR(const IReception *reception
             );
 }
 
+const INoise *WaicDimensionalAnalogModel::computeNoise(const IListening *listening, const IInterference *interference) const
+{
+    const BandListening *bandListening = check_and_cast<const BandListening *>(listening);
+    Hz centerFrequency = bandListening->getCenterFrequency();
+    Hz bandwidth = bandListening->getBandwidth();
+    std::vector<Ptr<const IFunction<WpHz, Domain<simsec, Hz>>>> receptionPowers;
+    const DimensionalNoise *dimensionalBackgroundNoise = check_and_cast_nullable<const DimensionalNoise *>(interference->getBackgroundNoise());
+    if (dimensionalBackgroundNoise) {
+        const auto& backgroundNoisePower = dimensionalBackgroundNoise->getPower();
+        receptionPowers.push_back(backgroundNoisePower);
+    }
+    const std::vector<const IReception *> *interferingReceptions = interference->getInterferingReceptions();
+    for (const auto & interferingReception : *interferingReceptions) {
+        const DimensionalReception *dimensionalReception = check_and_cast<const DimensionalReception *>(interferingReception);
+        auto receptionPower = dimensionalReception->getPower();
+        receptionPowers.push_back(receptionPower);
+        EV_DETAIL << "Interference power begin " << endl;
+        EV_DETAIL << *receptionPower << endl;
+        EV_DETAIL << "Interference power end" << endl;
+    }
+
+    if (isAltimeterInterfering()) {
+        // TODO: calculate altimeter power spectral density for given point in time?
+        WpHz altimeterPowerSpectralDensity = WpHz(0.1);
+        const Ptr<const IFunction<WpHz, Domain<simsec, Hz>>>& altimeterPower =
+                makeShared<ConstantFunction<WpHz, Domain<simsec, Hz>>>(altimeterPowerSpectralDensity);
+        EV_DETAIL << "Detected altimeter interference, created power function: " << *altimeterPower << endl;
+        receptionPowers.push_back(altimeterPower);
+    }
+
+    const Ptr<const IFunction<WpHz, Domain<simsec, Hz>>>& noisePower = makeShared<SummedFunction<WpHz, Domain<simsec, Hz>>>(receptionPowers);
+
+    EV_DETAIL << "Noise power begin " << endl;
+    EV_DETAIL << *noisePower << endl;
+    EV_DETAIL << "Noise power end" << endl;
+    const auto& bandpassFilter = makeShared<Boxcar2DFunction<double, simsec, Hz>>(simsec(listening->getStartTime()), simsec(listening->getEndTime()), centerFrequency - bandwidth / 2, centerFrequency + bandwidth / 2, 1);
+    return new DimensionalNoise(listening->getStartTime(), listening->getEndTime(), centerFrequency, bandwidth, noisePower->multiply(bandpassFilter));
+}
+
+const INoise *WaicDimensionalAnalogModel::computeNoise(const IReception *reception, const INoise *noise) const
+{
+    auto dimensionalReception = check_and_cast<const DimensionalReception *>(reception);
+    auto dimensionalNoise = check_and_cast<const DimensionalNoise *>(noise);
+    const Ptr<const IFunction<WpHz, Domain<simsec, Hz>>>& noisePower = makeShared<AddedFunction<WpHz, Domain<simsec, Hz>>>(dimensionalReception->getPower(), dimensionalNoise->getPower());
+    return new DimensionalNoise(reception->getStartTime(), reception->getEndTime(), dimensionalReception->getCenterFrequency(), dimensionalReception->getBandwidth(), noisePower);
+}
+
 const Coord& WaicDimensionalAnalogModel::getAltimeterLocation() const {
     // Find NED network module
     auto simul = cModule::getParentModule()->getParentModule();

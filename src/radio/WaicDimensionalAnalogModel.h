@@ -38,7 +38,15 @@ class WaicDimensionalAnalogModel : public DimensionalAnalogModel
 
   public:
     virtual const ISnir *computeSNIR(const IReception *reception, const INoise *noise) const override;
+
+    virtual const INoise *computeNoise(const IListening *listening, const IInterference *interference) const override;
+    virtual const INoise *computeNoise(const IReception *reception, const INoise *noise) const override;
+
     const Coord& getAltimeterLocation() const;
+    // TODO: Implement logic to check whether we have to consider altimeter interference
+    // at given point in time / frequency
+    const bool isAltimeterInterfering() const { return uniform(0, 1) > 0.1; };
+
 };
 
 }
