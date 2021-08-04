@@ -49,10 +49,12 @@ const ISnir *WaicDimensionalAnalogModel::computeSNIR(const IReception *reception
     const DimensionalReception *dimensionalReception = check_and_cast<const DimensionalReception *>(reception);
     const DimensionalNoise *dimensionalNoise = check_and_cast<const DimensionalNoise *>(noise);
 
+    auto distToAltimeter = reception->getEndPosition().distance(altimeterLocation);
+
     return new WaicDimensionalSnir(
             dimensionalReception,
             dimensionalNoise,
-            reception->getEndPosition().distance(altimeterLocation)
+            distToAltimeter
             );
 }
 
@@ -112,7 +114,6 @@ const Coord& WaicDimensionalAnalogModel::getAltimeterLocation() const {
     for (cModule::SubmoduleIterator it(simul); !it.end(); ++it) {
         altimeter = *it;
         std::string submFullName(altimeter->getFullName());
-        EV_DETAIL << "checking module - " << submFullName << endl;
 
         if (submFullName.find(std::string("Altimeter")) != std::string::npos)
             break;
@@ -122,11 +123,15 @@ const Coord& WaicDimensionalAnalogModel::getAltimeterLocation() const {
     // so need to double-check
     std::string altiName(altimeter->getFullName());
 
-    if (altiName.find(std::string("Altimeter")) == std::string::npos)
+    if (altiName.find(std::string("Altimeter")) == std::string::npos) {
+        EV_WARN << "Altimeter not found, returning (0, 0, 0) position" << endl;
         return *(new Coord());
+    }
 
     auto altiMobility = check_and_cast<StationaryMobilityBase*> (altimeter->getSubmodule("mobility"));
-    return altiMobility->getCurrentPosition();
+    auto altimeterLocation = new Coord(altiMobility->getCurrentPosition());
+
+    return *altimeterLocation;
 }
 
 
