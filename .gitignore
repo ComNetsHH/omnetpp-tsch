@@ -16,6 +16,7 @@ precompiled_*.h.*
 # output and result files
 **/*.anf
 **/*.json
+**/tsch-master_dbg
 #**/*.csv*
 **/simulation
 .settings/
