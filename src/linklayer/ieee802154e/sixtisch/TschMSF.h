@@ -196,7 +196,9 @@ class TschMSF: public TschSF, public cListener {
     void handleResponse(uint64_t sender, tsch6pReturn_t code, int numCells = -1,
                             std::vector<cellLocation_t> cellList = {}) override;
 
-    void handleSuccessResponse(uint64_t sender, tsch6pCmd_t lastKnownCmd, int numCells, std::vector<cellLocation_t> cellList);
+    virtual void handleSuccessResponse(uint64_t sender, tsch6pCmd_t lastKnownCmd, int numCells, std::vector<cellLocation_t> cellList);
+
+    virtual void handleSuccessRelocate(uint64_t sender, std::vector<cellLocation_t> cellList);
 
     /**
      * @brief Handle @p data that was piggybacked by @p sender.
@@ -234,7 +236,7 @@ class TschMSF: public TschSF, public cListener {
     void handleMessage(cMessage* msg) override;
     void handleDoStart(cMessage* msg);
     void handleHousekeeping(cMessage* msg);
-    void handleMaxCellsReached(cMessage* msg);
+    void virtual handleMaxCellsReached(cMessage* msg);
 
     /* unimplemented on purpose */
     void recordPDR(cMessage* msg) override {}
@@ -264,7 +266,6 @@ class TschMSF: public TschSF, public cListener {
    protected:
     virtual void refreshDisplay() const override;
 
-   private:
     const tsch6pSFID_t pSFID = SFID_MSF;
 
     /** the time after which an active, unfinished transaction expires
@@ -365,7 +366,7 @@ class TschMSF: public TschSF, public cListener {
     void addCells(uint64_t nodeId, int numCells, uint8_t cellOptions) { addCells(nodeId, numCells, cellOptions, 0); };
     void addCells(uint64_t nodeId, int numCells) { addCells(nodeId, numCells, MAC_LINKOPTIONS_TX, 0); }
 
-    void deleteCells(uint64_t nodeId, int numCells);
+    virtual void deleteCells(uint64_t nodeId, int numCells);
     void scheduleAutoCell(uint64_t neighbor);
     void scheduleAutoRxCell(InterfaceToken euiAddr);
     void removeAutoTxCell(uint64_t neighbor);
@@ -377,13 +378,6 @@ class TschMSF: public TschSF, public cListener {
      * @param ctrlInfo control info object containig all the details about the 6P request to be sent
      */
     void send6topRequest(SfControlInfo *ctrlInfo);
-
-    /**
-     * Randomly relocate all cells scheduled with specified neighbor
-     *
-     * @param neighbor MAC address of the neighbour to relocate cells with
-     */
-    void relocateCells(uint64_t neighbor);
 
     /**
      * Relocate single cell scheduled with the neighbor at specified location
@@ -398,7 +392,7 @@ class TschMSF: public TschSF, public cListener {
      *
      * @param neighbor MAC address of the neighbor to relocate cells with
      */
-    void relocateCells(uint64_t neighbor, std::vector<cellLocation_t> relocCells);
+    virtual void relocateCells(uint64_t neighbor, std::vector<cellLocation_t> relocCells);
 
     /**
      * Remove cells from the schedule as well as corresponding cell statsistics associated with neighbour
@@ -477,7 +471,7 @@ class TschMSF: public TschSF, public cListener {
      *
      * @return vector of free slot offsets
      */
-    std::vector<offset_t> getAvailableSlotsInRange(offset_t start, offset_t end);
+    std::vector<offset_t> getAvailableSlotsInRange(int start, int end);
     std::vector<offset_t> getAvailableSlotsInRange(int slOffsetEnd);
 
     void estimateQueueUtilization();
