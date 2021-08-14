@@ -276,8 +276,6 @@ class TschMSF: public TschSF, public cListener {
     uint64_t pNodeId;
     uint64_t rplParentId; // MAC of RPL preferred parent
 
-    int numHosts; // DELAY_TEST: Number of hosts in the simulation
-
     bool hasOverlapping;
     int pHousekeepingPeriod;
     bool pHousekeepingDisabled;

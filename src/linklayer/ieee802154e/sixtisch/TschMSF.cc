@@ -37,7 +37,6 @@ Define_Module(TschMSF);
 TschMSF::TschMSF() :
     rplParentId(0),
     tsch6pRtxThresh(3),
-    numHosts(0),
     numInconsistenciesDetected(0),
     numLinkResets(0),
     hasStarted(false),
@@ -85,7 +84,6 @@ void TschMSF::initialize(int stage) {
             return;
 
         hostNode = getModuleByPath("^.^.^.^.");
-        numHosts = hostNode->getParentModule()->par("numHosts").intValue();
         showTxCells = par("showDedicatedTxCells").boolValue();
         showQueueUtilization = par("showQueueUtilization").boolValue();
         showTxCellCount = par("showTxCellCount").boolValue();
