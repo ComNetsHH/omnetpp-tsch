@@ -6,8 +6,8 @@ OMNeT++ simulation model for IEEE 802.15.4e Time Slotted Channel Hopping (TSCH) 
 
 This model is developed and tested with the following library versions
 
-*  OMNeT++ [5.6.X](https://omnetpp.org/software/2020/01/13/omnet-5-6-released.html)
-*  INET [4.2.X](https://github.com/inet-framework/inet/releases/download/v4.2.0/inet-4.2.0-src.tgz)
+*  OMNeT++ [5.6.X](https://omnetpp.org/download/)
+*  INET [4.2.X](https://github.com/inet-framework/inet/releases/download/v4.2.5/inet-4.2.5-src.tgz)
 
 ## Installation
 1. Add INET to project references by navigating TSCH project 'Properties' -> 'Project References'
