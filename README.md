@@ -10,9 +10,10 @@ This model is developed and tested with the following library versions
 *  INET [4.2.X](https://github.com/inet-framework/inet/releases/download/v4.2.5/inet-4.2.5-src.tgz)
 
 ## Installation
-1. Add INET to project references by navigating TSCH project 'Properties' -> 'Project References'
-2. Add RPL project source directory to compile options of TSCH project by navigating `Properties` -> `OMNeT++` -> `Makemake` -> (select `src` folder) -> `Build Makemake Options...` -> `Compile` tab -> add absolute path containing RPL 'src' folder, e.g. '/home/yevhenii/omnetpp-5.6.2/samples/omnetpp-rpl/src'. Also make sure `Add include paths exported from referenced projects` is enabled
-3. In RPL `Properties`->`OMNeT++`-> `Makemake`-> (select `src` folder) -> `Build Makemake Options...`: 
+1. To use with 6TiSCH, import RPL project from https://github.com/ComNetsHH/omnetpp-rpl first, using branch `6tisch-clx` and following respective installation instructions
+2. Add INET to project references by navigating TSCH project 'Properties' -> 'Project References'
+3. Add RPL project source directory to compile options of TSCH project by navigating `Properties` -> `OMNeT++` -> `Makemake` -> (select `src` folder) -> `Build Makemake Options...` -> `Compile` tab -> add absolute path containing RPL 'src' folder, e.g. '/home/yevhenii/omnetpp-5.6.2/samples/omnetpp-rpl/src'. Also make sure `Add include paths exported from referenced projects` is enabled
+4. In RPL `Properties`->`OMNeT++`-> `Makemake`-> (select `src` folder) -> `Build Makemake Options...`: 
    - Set `Target` to `Shared library` and enable `Export this shared library...`
 
 
