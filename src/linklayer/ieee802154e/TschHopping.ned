@@ -1,7 +1,7 @@
 // 
 // Simulation model for IEEE 802.15.4 Time Slotted Channel Hopping (TSCH)
 //
-// Copyright (C) 2019  Institute of Communication Networks (ComNets), 
+// Copyright (C) 2021  Institute of Communication Networks (ComNets), 
 //                     Hamburg University of Technology (TUHH)
 //           (C) 2019  Leo Krueger
 //
@@ -29,6 +29,7 @@ simple TschHopping
         string pattern = default("11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26"); // ramp
 //      string pattern = default("16 17 23 18 26 15 25 22 19 11 12 13 24 14 20 21"); // from contiki
 //      string pattern = default("11"); 											 // hopping disabled
+		double centerFrequency @unit(Hz) = default (2405 MHz); 
         @display("i=block/table");
         @class(TschHopping);
 }

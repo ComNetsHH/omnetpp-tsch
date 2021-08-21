@@ -1,8 +1,9 @@
 /*
  * Simulation model for IEEE 802.15.4 Time Slotted Channel Hopping (TSCH)
  *
- * Copyright (C) 2019  Institute of Communication Networks (ComNets),
+ * Copyright (C) 2021  Institute of Communication Networks (ComNets),
  *                     Hamburg University of Technology (TUHH)
+ *           (C) 2021  Yevhenii Shudrenko
  *           (C) 2019  Leo Krueger
  *           (C) 2004-2006 Andras Varga
  *           (C) 2000  Institut fuer Telematik, Universitaet Karlsruhe
@@ -30,8 +31,8 @@
 #include <omnetpp.h>
 #include "inet/common/lifecycle/ILifecycle.h"
 #include "TschLink.h"
+#include "sixtisch/WaicCellComponents.h"
 #include "TschVirtualLink.h"
-
 
 
 using namespace omnetpp;
@@ -123,6 +124,10 @@ class TschSlotframe : public cSimpleModule, protected cListener, public ILifecyc
      */
     virtual int getNumLinks() const { return links.size(); }
 
+    virtual LinkVector getLinks() const { return links; }
+
+    TschLink* getLinkByCellCoordinates(offset_t slotOf, offset_t chOf);
+
     /**
      * Returns the kth link.
      */
@@ -198,6 +203,8 @@ class TschSlotframe : public cSimpleModule, protected cListener, public ILifecyc
      */
     TschLink *getLinkFromASN(int64_t asn);
 
+    std::vector<TschLink*> getLinksFromASN(int64_t asn);
+
     /**
      * Get the next scheduled link considering the given ASN.
      */
@@ -208,12 +215,13 @@ class TschSlotframe : public cSimpleModule, protected cListener, public ILifecyc
      * Useful to suspend execution of MAC until the next scheduled link.
      */
     int64_t getASNofNextLink(int64_t asn);
+
     /**
-     * Removes the route with the given Slot and Channeloffset from the routing table.
-     * True is returned if the route was removed
-     * Falls if the route was not found
+     * @brief Removes the link assigned to @param cell.
+     *
+     * @return true is returned if the link was removed, false otherwise
      */
-    bool removeLinkFromOffset(int slotOffset, int channelOffset);
+    bool removeLinkAtCell(cellLocation_t cell);
 
     /**
      * Checks if there is a link scheduled for the given Macaddress
@@ -223,6 +231,7 @@ class TschSlotframe : public cSimpleModule, protected cListener, public ILifecyc
     bool hasLink(inet::MacAddress macAddress);
 
     std::vector<TschLink*> allTxLinks(inet::MacAddress macAddress);
+    std::vector<TschLink*> getDedicatedLinksForNeighbor(inet::MacAddress neigbhorMac);
 
     void xmlSchedule();
 

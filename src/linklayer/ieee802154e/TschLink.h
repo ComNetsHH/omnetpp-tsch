@@ -1,7 +1,7 @@
 /*
  * Simulation model for IEEE 802.15.4 Time Slotted Channel Hopping (TSCH)
  *
- * Copyright (C) 2019  Institute of Communication Networks (ComNets),
+ * Copyright (C) 2021  Institute of Communication Networks (ComNets),
  *                     Hamburg University of Technology (TUHH)
  *           (C) 2019  Leo Krueger
  *           (C) 2008  Andras Varga
@@ -71,6 +71,13 @@ class TschLink : public omnetpp::cObject
     virtual std::string str() const override;
     virtual std::string detailedInfo() const OMNETPP5_CODE(override);
     virtual std::string slug() const;
+
+//    friend std::ostream& operator<<(std::ostream& os, const TschLink& link) { os << link.str(); return os; }
+//    friend std::ostream& operator<<(std::ostream& os, std::vector<TschLink *> links) {
+//        for (auto l : links)
+//            os << l->str() << std::endl;
+//        return os;
+//    }
 
     virtual bool operator==(const TschLink& link) const { return equals(link); }
     virtual bool operator!=(const TschLink& link) const { return !equals(link); }

@@ -1,7 +1,7 @@
 /*
  * Simulation model for IEEE 802.15.4 Time Slotted Channel Hopping (TSCH)
  *
- * Copyright   (C) 2019  Institute of Communication Networks (ComNets),
+ * Copyright   (C) 2021  Institute of Communication Networks (ComNets),
  *                       Hamburg University of Technology (TUHH)
  *                       Leo Krueger, Louis Yin
  *
@@ -48,6 +48,8 @@
 #include "inet/physicallayer/common/packetlevel/RadioMedium.h"
 #include "./sixtisch/SixpHeaderChunk_m.h"
 #include "../../common/VirtualLinkTag_m.h"
+#include "sixtisch/TschSF.h"
+
 
 namespace tsch {
 
@@ -65,7 +67,7 @@ void Ieee802154eMac::initialize(int stage) {
         //sixTopSublayerControlInGateId = findGate("sixTopSublayerControlInGate");
         sixTopSublayerControlOutGateId = findGate("sixTopSublayerControlOutGate");
         useMACAcks = par("useMACAcks");
-        sifs = par("sifs");
+        macTsTxAckDelay = par("macTsTxAckDelay");
         macTsTimeslotLength = par("macTsTimeslotLength");
         headerLength = par("headerLength");
         transmissionAttemptInterruptedByRx = false;
@@ -79,11 +81,14 @@ void Ieee802154eMac::initialize(int stage) {
         nbBackoffs = 0;
         backoffValues = 0;
         macMaxFrameRetries = par("macMaxFrameRetries");
-        macAckWaitDuration = par("macAckWaitDuration");
+        //macAckWaitDuration = par("macAckWaitDuration");
+        macTsRxAckDelay = par("macTsRxAckDelay");
+        macTsAckWait = par("macTsAckWait");
+        macTsMaxAck = par("macTsMaxAck");
         ccaDetectionTime = par("ccaDetectionTime");
         useCCA = par("useCCA");
         rxSetupTime = par("rxSetupTime");
-        aTurnaroundTime = par("aTurnaroundTime");
+        macTsRxTx = par("macTsRxTx");
         channelSwitchingTime = par("channelSwitchingTime");
         bitrate = par("bitrate");
         ackLength = par("ackLength");
@@ -92,6 +97,8 @@ void Ieee802154eMac::initialize(int stage) {
         currentLink = nullptr;
         currentChannel = 0;
 
+        // util parameter for artificial packet drop scenarios
+        pPacketDropThreshold = par("packetDropThreshold").doubleValue();
 
         //init parameters for backoff method
         std::string backoffMethodStr = par("backoffMethod").stdstringValue();
@@ -116,6 +123,8 @@ void Ieee802154eMac::initialize(int stage) {
         macState = IDLE_1;
         txAttempts = 0;
 
+        pPrioAppData = par("prioritizeApplicationData").boolValue();
+
         statisticTemplate = getProperties()->get("statisticTemplate", "nbStats");
 
     } else if (stage == INITSTAGE_LINK_LAYER) {
@@ -127,32 +136,30 @@ void Ieee802154eMac::initialize(int stage) {
         radio = check_and_cast<IRadio *>(radioModule);
 
         //check parameters for consistency
-        //aTurnaroundTime should match (be equal or bigger) the RX to TX
+        //macTsRxTx should match (be equal or bigger) the RX to TX
         //switching time of the radio
         if (radioModule->hasPar("timeRXToTX")) {
             simtime_t rxToTx = radioModule->par("timeRXToTX");
-            if (rxToTx > aTurnaroundTime) {
+            if (rxToTx > macTsRxTx) {
                 throw cRuntimeError(
-                        "Parameter \"aTurnaroundTime\" (%f) does not match"
+                        "Parameter \"macTsRxTx\" (%f) does not match"
                                 " the radios RX to TX switching time (%f)! It"
                                 " should be equal or bigger",
-                        SIMTIME_DBL(aTurnaroundTime), SIMTIME_DBL(rxToTx));
+                        SIMTIME_DBL(macTsRxTx), SIMTIME_DBL(rxToTx));
             }
         }
         radio->setRadioMode(IRadio::RADIO_MODE_SLEEP);
 
-        hopping = dynamic_cast<TschHopping*>(getModuleByPath(
-                "^.channelHopping"));
-
-        // get our slotframe
+        hopping = dynamic_cast<TschHopping*>(getModuleByPath("^.channelHopping"));
         schedule = dynamic_cast<TschSlotframe*>(getModuleByPath("^.schedule"));
-
         neighbor = dynamic_cast<TschNeighbor*>(getModuleByPath("^.neighbor"));
 
-        // minimal schedule as per 6TiSCH some document TODO
-
-        schedule->xmlSchedule();
-        schedule->printSlotframe();
+        // Use XML schedule only if SF is disabled
+        auto sf = getModuleByPath("^.sixtischInterface.sf");
+        if (sf->par("disable").boolValue()) {
+            schedule->xmlSchedule();
+            schedule->printSlotframe();
+        }
 
         asn.setMacTsTimeslotLength(macTsTimeslotLength);
         asn.setReference(simTime() + 0.1);
@@ -160,24 +167,39 @@ void Ieee802154eMac::initialize(int stage) {
 
         EV_DETAIL << "QueueLength = " << neighbor->getQueueLength() << " bitrate = " << bitrate << endl;
         EV_DETAIL << "Finished tsch init stage 1." << endl;
+
+        pktEnqueuedSignal = registerSignal("pktEnqueued");
+        pktRecFromUpperSignal = registerSignal("pktReceviedFromUpperLayer");
+        highPrioQueueOverflowSignal = registerSignal("highPrioQueueOverflow");
+    } else if (stage == INITSTAGE_LAST) {
+        auto nbrs = this->getNeighborsInRange();
+        for (auto nbrId : nbrs)
+            neighbors.push_back(MacAddress(nbrId));
+
+        WATCH_LIST(neighbors);
+        WATCH(pArtificialPacketDrop);
+
+        auto timeoutVal = par("lossyLinkTimeout").doubleValue();
+        if (timeoutVal)
+            scheduleAt(simTime() + SimTime(timeoutVal, SIMTIME_S), new cMessage("Start losing packets", MAC_ENABLE_DROPS));
     }
 }
 
 void Ieee802154eMac::finish() {
-    recordScalar("nbTxFrames", nbTxFrames);
-    recordScalar("nbRxFrames", nbRxFrames);
-    recordScalar("nbDroppedFrames", nbDroppedFrames);
-    recordScalar("nbMissedAcks", nbMissedAcks);
-    recordScalar("nbRecvdAcks", nbRecvdAcks);
-    recordScalar("nbTxAcks", nbTxAcks);
-    recordScalar("nbDuplicates", nbDuplicates);
-    if (nbBackoffs > 0) {
-        recordScalar("meanBackoff", backoffValues / nbBackoffs);
-    } else {
-        recordScalar("meanBackoff", 0);
-    }
-    recordScalar("nbBackoffs", nbBackoffs);
-    recordScalar("backoffDurations", backoffValues);
+//    recordScalar("nbTxFrames", nbTxFrames);
+//    recordScalar("nbRxFrames", nbRxFrames);
+//    recordScalar("nbDroppedFrames", nbDroppedFrames);
+//    recordScalar("nbMissedAcks", nbMissedAcks);
+//    recordScalar("nbRecvdAcks", nbRecvdAcks);
+//    recordScalar("nbTxAcks", nbTxAcks);
+//    recordScalar("nbDuplicates", nbDuplicates);
+//    if (nbBackoffs > 0) {
+//        recordScalar("meanBackoff", backoffValues / nbBackoffs);
+//    } else {
+//        recordScalar("meanBackoff", 0);
+//    }
+//    recordScalar("nbBackoffs", nbBackoffs);
+//    recordScalar("backoffDurations", backoffValues);
 }
 
 Ieee802154eMac::~Ieee802154eMac() {
@@ -326,18 +348,105 @@ void Ieee802154eMac::handleUpperPacket(Packet *packet) {
     packet->insertAtFront(macPkt);
     // TODO we are using protocol ieee802154 for now
     packet->getTag<PacketProtocolTag>()->setProtocol(&Protocol::ieee802154);
-    EV_DETAIL << "Pkt encapsulated, length: " << macPkt->getChunkLength()
-                     << "\n";
-    if(neighbor->add2Queue(packet, dest, linkId)){
-        EV_DETAIL << "Added packet to queue" << endl;
-    }else{
+    EV_DETAIL << "Pkt encapsulated, length: " << macPkt->getChunkLength() << endl;
+
+    // Notify scheduling function (MSF) to ensure there's a cell available for transmission
+    auto ctrlInfo = new MacGenericInfo(dest.getInt());
+    emit(pktRecFromUpperSignal, 0, (cObject*) ctrlInfo);
+
+    if (neighbor->add2Queue(packet, dest, linkId)) {
+        EV_DETAIL << "Added packet to queue with link ID " << linkId << endl;
+    } else {
         EV_DETAIL << "Packet is dropped due to Queue Overflow" << endl;
+
+        if (linkId == LINK_PRIORITY_HIGH)
+            emit(highPrioQueueOverflowSignal, packet);
+
         PacketDropDetails details;
         details.setReason(QUEUE_OVERFLOW);
         details.setLimit(neighbor->getQueueLength());
         emit(packetDroppedSignal, packet, &details);
         delete packet;
     }
+}
+
+int Ieee802154eMac::getVirtualLinkId(TschLink* link) {
+    auto vl = dynamic_cast<TschVirtualLink*>(link);
+
+    return vl ? vl->getVirtualLink() : 0;
+}
+
+TschLink* Ieee802154eMac::selectActiveLink(std::vector<TschLink*> links) {
+    return selectActiveLink(links, false);
+}
+
+vector<tuple<int, int>> Ieee802154eMac::getQueueSizes(MacAddress nbrAddr, vector<int> virtuaLinkIds)
+{
+    vector<tuple<int, int>> queueSizes;
+
+    for (auto linkId : virtuaLinkIds)
+        queueSizes.emplace_back(linkId, neighbor->checkVirtualQueueSizeAt(nbrAddr, linkId));
+
+    return queueSizes;
+}
+
+double Ieee802154eMac::getQueueUtilization(MacAddress nbrAddr) {
+    return neighbor->checkQueueSizeAt(nbrAddr) / (double) neighbor->getQueueLength();
+}
+
+double Ieee802154eMac::getQueueUtilization(MacAddress nbrAddr, int virtualLinkId) {
+    auto numEnqPackets = std::get<1>(getQueueSizes(nbrAddr, {virtualLinkId}).back());
+
+    return numEnqPackets / (double) neighbor->getQueueLength();
+}
+
+TschLink* Ieee802154eMac::selectActiveLink(std::vector<TschLink*> links, bool prioAppData) {
+    if ((int) links.size() == 1)
+        return links.back();
+
+    // If multiple links / cells are scheduled at the same position
+    // First look for any UNICAST TX link (auto / dedicated)
+    for (auto link : links) {
+        if (link->isTx() && link->getAddr() != MacAddress::BROADCAST_ADDRESS
+                && neighbor->checkVirtualQueueSizeAt(link->getAddr(), getVirtualLinkId(link)))
+        {
+            EV_DETAIL << "Found unicast TX link with non-empty queue: " << link << endl;
+            return link;
+        }
+    }
+
+    // If no unicast link with queued packets found, check shared broadcast links
+    for (auto link : links) {
+        if (link->isTx() && neighbor->checkVirtualQueueSizeAt(link->getAddr(), getVirtualLinkId(link)))
+        {
+            EV_DETAIL << "Found broadcast TX link with non-empty queue: " << link << endl;
+            return link;
+        }
+    }
+
+    EV_DETAIL << "No active TX link detected, choosing RX one" << endl;
+
+    // Else just pick remaining RX/AUTO link randomly
+    std::vector<TschLink*> rxLinks = {};
+    for (auto link : links)
+        if (link->isRx())
+            rxLinks.push_back(link);
+
+    if (!rxLinks.size()) {
+        EV_WARN << "No RX link as well? Seems like a bug" << endl;
+        return nullptr;
+    }
+
+    auto activeLink = rxLinks[intrand(rxLinks.size())];
+    EV_DETAIL << "Found " << rxLinks.size() << " RX links: "
+            << rxLinks << ",\nselected active link: " << activeLink << endl;
+
+    return activeLink;
+}
+
+units::values::Hz Ieee802154eMac::getCurrentFrequency() {
+    Enter_Method_Silent();
+    return hopping->channelToCenterFrequency(currentChannel);
 }
 
 void Ieee802154eMac::updateStatusIdle(t_mac_event event, cMessage *msg) {
@@ -352,18 +461,16 @@ void Ieee802154eMac::updateStatusIdle(t_mac_event event, cMessage *msg) {
         // start of new slot
         // Done in  startTimer(Timer_Slot);
         //currentAsn = asn.getAsn(simTime());
-        currentLink = schedule->getLinkFromASN(currentAsn);
-        if (currentLink == nullptr) {
+//        currentLink = schedule->getLinkFromASN(currentAsn);
+
+        currentLink = selectActiveLink(schedule->getLinksFromASN(currentAsn), pPrioAppData);
+
+        if (!currentLink)
             return;
-        }
+
         currentChannel = hopping->channel(currentAsn, currentLink->getChannelOffset());
         auto freq = hopping->channelToCenterFrequency(currentChannel);
-        int currentVirtualLinkID;
-        if(dynamic_cast<TschVirtualLink*>(currentLink) != nullptr){
-            currentVirtualLinkID = (dynamic_cast<TschVirtualLink*>(currentLink))->getVirtualLink();
-        }else{
-            currentVirtualLinkID = 0;
-        }
+        int currentVirtualLinkID = getVirtualLinkId(currentLink);
 
         EV_DETAIL << currentLink->str() << endl;
 
@@ -372,9 +479,8 @@ void Ieee802154eMac::updateStatusIdle(t_mac_event event, cMessage *msg) {
 
         neighbor->reset();
         auto queueSize = neighbor->checkVirtualQueueSizeAt(currentLink->getAddr(), currentVirtualLinkID);
-        EV_DETAIL << "We are in ASN " << currentAsn << " queue size "
-                         << queueSize
-                         << " channel " << currentChannel << " frequency " << freq << endl;
+        EV_DETAIL << "We are in ASN " << currentAsn << " queue size " << queueSize
+                << " channel " << currentChannel << " frequency " << freq << endl;
         EV_DETAIL << "This Node is: " << interfaceEntry->getMacAddress() << endl;
         neighbor->printQueue();
 
@@ -443,12 +549,12 @@ void Ieee802154eMac::updateStatusIdle(t_mac_event event, cMessage *msg) {
     }
 }
 
-void Ieee802154eMac::configureRadio(Hz carrierFrequency /*= NAN*/,
+void Ieee802154eMac::configureRadio(Hz centerFrequency /*= NAN*/,
         int mode /*= -1*/) {
     auto configureCommand = new ConfigureRadioCommand();
     auto request = new Message("changeChannel", RADIO_C_CONFIGURE);
 
-    configureCommand->setCarrierFrequency(carrierFrequency);
+    configureCommand->setCenterFrequency(centerFrequency);
     configureCommand->setRadioMode(mode);
     request->setControlInfo(configureCommand);
 
@@ -468,8 +574,10 @@ void Ieee802154eMac::updateStatusCCA(t_mac_event event, cMessage *msg) {
     switch (event) {
     case EV_TIMER_CCA: {
         EV_DETAIL << "(25) FSM State CCA_3, EV_TIMER_CCA" << endl;
-        bool isIdle = radio->getReceptionState()
-                == IRadio::RECEPTION_STATE_IDLE;
+        bool isIdle = true;
+        if(useCCA){
+            isIdle = radio->getReceptionState() == IRadio::RECEPTION_STATE_IDLE;
+        }
         if (isIdle) {
             EV_DETAIL
                              << "(3) FSM State CCA_3, EV_TIMER_CCA, [Channel Idle]: -> TRANSMITFRAME_4."
@@ -477,9 +585,10 @@ void Ieee802154eMac::updateStatusCCA(t_mac_event event, cMessage *msg) {
             updateMacState(TRANSMITFRAME_4);
             radio->setRadioMode(IRadio::RADIO_MODE_TRANSMITTER);
             Packet *mac =  check_and_cast<Packet *>(neighbor->getCurrentNeighborQueueFirstPacket()->dup());
-            attachSignal(mac, simTime() + aTurnaroundTime);
+            attachSignal(mac, simTime() + macTsRxTx);
             // give time for the radio to be in Tx state before transmitting
-            sendDelayed(mac, aTurnaroundTime, lowerLayerOutGateId);
+            // TODO: Strangely the total amount for transmission time is 192us longer then the theoretical one, needs to be fixed !
+            sendDelayed(mac, macTsRxTx, lowerLayerOutGateId);
             nbTxFrames++;
 
             emitSignal(NBTXFRAMES);
@@ -502,42 +611,39 @@ void Ieee802154eMac::updateStatusCCA(t_mac_event event, cMessage *msg) {
     }
 }
 
-void Ieee802154eMac::updateStatusTransmitFrame(t_mac_event event,
-        cMessage *msg) {
-    if (event == EV_FRAME_TRANSMITTED) {
-        Packet *packet =
-                neighbor->getCurrentNeighborQueueFirstPacket();
-        const auto& csmaHeader = packet->peekAtFront<Ieee802154eMacHeader>();
-
-        bool expectAck = useMACAcks;
-        if (!csmaHeader->getDestAddr().isBroadcast()
-                && !csmaHeader->getDestAddr().isMulticast()) {
-            //unicast
-            EV_DETAIL << "(4) FSM State TRANSMITFRAME_4, "
-                             << "EV_FRAME_TRANSMITTED [Unicast]: ";
-        } else {
-            //broadcast
-            EV_DETAIL << "(27) FSM State TRANSMITFRAME_4, EV_FRAME_TRANSMITTED "
-                             << " [Broadcast]";
-            expectAck = false;
-        }
-
-        if (expectAck) {
-            EV_DETAIL << "RadioSetupRx -> WAITACK." << endl;
-            radio->setRadioMode(IRadio::RADIO_MODE_RECEIVER);
-            updateMacState(WAITACK_5);
-            startTimer(TIMER_RX_ACK);
-        } else {
-            EV_DETAIL << ": RadioSetupSleep..." << endl;
-            radio->setRadioMode(IRadio::RADIO_MODE_SLEEP);
-            neighbor->removeFirstPacketFromQueue();
-            delete packet;
-            updateMacState(IDLE_1);
-        }
-        delete msg;
-    } else {
+void Ieee802154eMac::updateStatusTransmitFrame(t_mac_event event, cMessage *msg) {
+    if (event != EV_FRAME_TRANSMITTED)
         fsmError(event, msg);
+
+    Packet *packet = neighbor->getCurrentNeighborQueueFirstPacket();
+    const auto& csmaHeader = packet->peekAtFront<Ieee802154eMacHeader>();
+
+    bool expectAck = useMACAcks;
+    if (!csmaHeader->getDestAddr().isBroadcast() && !csmaHeader->getDestAddr().isMulticast())
+    {
+        //unicast
+        EV_DETAIL << "(4) FSM State TRANSMITFRAME_4, "
+                         << "EV_FRAME_TRANSMITTED [Unicast]: ";
+    } else {
+        //broadcast
+        EV_DETAIL << "(27) FSM State TRANSMITFRAME_4, EV_FRAME_TRANSMITTED "
+                         << " [Broadcast]";
+        expectAck = false;
     }
+
+    if (expectAck) {
+        EV_DETAIL << "RadioSetupRx -> WAITACK." << endl;
+        radio->setRadioMode(IRadio::RADIO_MODE_RECEIVER);
+        updateMacState(WAITACK_5);
+        startTimer(TIMER_RX_ACK);
+    } else {
+        EV_DETAIL << ": RadioSetupSleep..." << endl;
+        radio->setRadioMode(IRadio::RADIO_MODE_SLEEP);
+        neighbor->removeFirstPacketFromQueue();
+        delete packet;
+        updateMacState(IDLE_1);
+    }
+    delete msg;
 }
 
 void Ieee802154eMac::updateStatusWaitAck(t_mac_event event, cMessage *msg) {
@@ -549,8 +655,7 @@ void Ieee802154eMac::updateStatusWaitAck(t_mac_event event, cMessage *msg) {
         radio->setRadioMode(IRadio::RADIO_MODE_SLEEP);
         if (rxAckTimer->isScheduled())
             cancelEvent(rxAckTimer);
-        cMessage *mac =
-                neighbor->getCurrentNeighborQueueFirstPacket();
+        cMessage *mac = neighbor->getCurrentNeighborQueueFirstPacket();
         neighbor->removeFirstPacketFromQueue();
         if(neighbor->isDedicated()){
             if(neighbor->getCurrentNeighborQueueSize() == 0){
@@ -597,29 +702,78 @@ void Ieee802154eMac::updateStatusWaitAck(t_mac_event event, cMessage *msg) {
     }
 }
 
+list<uint64_t> Ieee802154eMac::getNeighborsInRange() {
+    list<uint64_t> resultingList;
+
+    auto nodeId = this->interfaceEntry->getMacAddress().getInt(); // our own MAC
+    auto radio = this->getRadio();
+    auto medium = dynamic_cast<const physicallayer::RadioMedium*>(radio->getMedium());
+    auto limitcache = dynamic_cast<const physicallayer::MediumLimitCache*>(medium->getMediumLimitCache());
+    auto range = limitcache->getMaxCommunicationRange(radio).get();
+    auto myCoords = radio->getAntenna()->getMobility()->getCurrentPosition();
+
+
+    // we extract the topology here and filter for nodes that have the property @6tisch set.
+    // The property has to be set within the top-level ned-file (contains your network) e.g. like this:
+    //
+    // host[numHosts]: WirelessHost {
+    //     parameters:
+    //         @6tisch;
+    // }
+    //
+    cTopology topo;
+    topo.extractByProperty("6tisch");
+
+    for (int i = 0; i < topo.getNumNodes(); i++) {
+        auto host = topo.getNode(i)->getModule();
+        auto mobilityModule = dynamic_cast<IMobility *>(host->getSubmodule("mobility"));
+        auto interfaceModule = dynamic_cast<InterfaceTable *>(host->getSubmodule("interfaceTable"));
+        auto coords = mobilityModule->getCurrentPosition();
+        inet::MacAddress addr;
+
+        // look for a WirelessInterface and get it's address
+        // TODO currently takes first WirelessInterface, does not filter for interface type
+        if (interfaceModule->getNumInterfaces() > 0) {
+            for (int y = 0; y < interfaceModule->getNumInterfaces(); y++) {
+                if (strcmp(interfaceModule->getInterface(y)->getNedTypeName(), "inet.linklayer.common.WirelessInterface") == 0) {
+                    addr = interfaceModule->getInterface(y)->getMacAddress();
+                    break;
+                }
+            }
+        }
+
+        // we found no mac address to use or we found ourself
+        if (addr.isUnspecified() || addr.getInt() == nodeId) {
+            continue;
+        }
+
+        // verify distance to ourself
+        if (myCoords.distance(coords) <= range) {
+            resultingList.push_back(addr.getInt());
+            EV_DETAIL << "node " << addr.str() << " (" << coords.str() << ") is a neighbor of " << MacAddress(nodeId).str() << " (" << myCoords.str() << ")" << endl;
+        }
+    }
+
+    return resultingList;
+}
+
 void Ieee802154eMac::manageFailedTX() {
     neighbor->failedTX();
-    if ((int) macMaxFrameRetries
-            < (neighbor->getCurrentTschCSMA()->getNB())) {
+    if ((int) macMaxFrameRetries < (neighbor->getCurrentTschCSMA()->getNB())) {
         EV_DETAIL << "Packet was transmitted " << macMaxFrameRetries
-                                 << " times and an ACK was never received. The packet is dropped."
-                                 << endl;
-                cMessage *mac =
-                        neighbor->getCurrentNeighborQueueFirstPacket();
-                neighbor->removeFirstPacketFromQueue();
-                neighbor->terminateCurrentTschCSMA();
-                PacketDropDetails details;
-                details.setReason(RETRY_LIMIT_REACHED);
-                details.setLimit(macMaxFrameRetries);
-                emit(packetDroppedSignal, mac, &details);
-                emit(linkBrokenSignal, mac);
-                delete mac;
+                << " times and an ACK was never received. The packet is dropped." << endl;
+        cMessage *mac = neighbor->getCurrentNeighborQueueFirstPacket();
+        neighbor->removeFirstPacketFromQueue();
+        neighbor->terminateCurrentTschCSMA();
+        PacketDropDetails details;
+        details.setReason(RETRY_LIMIT_REACHED);
+        details.setLimit(macMaxFrameRetries);
+        emit(packetDroppedSignal, mac, &details);
+        emit(linkBrokenSignal, mac);
+        delete mac;
     }
     neighbor->reset();
 }
-
-
-
 
 void Ieee802154eMac::updateStatusReceiveFrame(t_mac_event event,
         omnetpp::cMessage *msg) {
@@ -711,7 +865,7 @@ void Ieee802154eMac::updateStatusSIFS(t_mac_event event, cMessage *msg) {
         emitSignal(NBTXACKS);
 
         EV << "Number of transmitted Acks: " << nbTxAcks << endl;
-        //        sendDelayed(ackMessage, aTurnaroundTime, lowerLayerOut);
+        //        sendDelayed(ackMessage, macTsRxTx, lowerLayerOut);
         ackMessage = nullptr;
         break;
 
@@ -816,13 +970,16 @@ void Ieee802154eMac::startTimer(t_mac_timer timer) {
         scheduleAt(simTime() + rxSetupTime + ccaDetectionTime, ccaTimer);
     } else if (timer == TIMER_SIFS) {
         assert(useMACAcks);
-        EV_DETAIL << "(startTimer) sifsTimer value=" << sifs << endl;
-        scheduleAt(simTime() + sifs, sifsTimer);
+        EV_DETAIL << "(startTimer) sifsTimer value=" << macTsTxAckDelay << endl;
+        scheduleAt(simTime() + macTsTxAckDelay, sifsTimer);
     } else if (timer == TIMER_RX_ACK) {
         assert(useMACAcks);
-        EV_DETAIL << "(startTimer) rxAckTimer value=" << macAckWaitDuration
+//        EV_DETAIL << "(startTimer) rxAckTimer value=" << macAckWaitDuration
+//                                 << endl;
+        EV_DETAIL << "(startTimer) rxAckTimer value=" << macTsRxAckDelay + macTsAckWait + macTsMaxAck
                          << endl;
-        scheduleAt(simTime() + macAckWaitDuration, rxAckTimer);
+        //scheduleAt(simTime() + macAckWaitDuration, rxAckTimer);
+        scheduleAt(simTime() + macTsRxAckDelay + macTsAckWait + macTsMaxAck, rxAckTimer);
     } else if (timer == TIMER_HOPPING) {
         //assert(useMACAcks); TODO verify if channel hopping is enabled?
         // or always on and rely on TschHopping class to disable?
@@ -832,9 +989,12 @@ void Ieee802154eMac::startTimer(t_mac_timer timer) {
     } else if (timer == TIMER_SLOTEND) {
         // TODO currently scheduled right before slot end,
         // but could be done more strict to increase radio sleep
+        // TODO This value should not be calculated this way,
+        // but due to the fact that mactsCcaOffset and macTsRxOffset are not considered
+        // it should be around 0.48
         EV_DETAIL << "(startTimer) slotendTimer value="
-                         << (macTsTimeslotLength * 0.75) << endl;
-        scheduleAt(simTime() + (macTsTimeslotLength * 0.75), slotendTimer);
+                         << (macTsTimeslotLength * 0.48) << endl;
+        scheduleAt(simTime() + (macTsTimeslotLength * 0.48), slotendTimer);
     } else {
         EV << "Unknown timer requested to start:" << timer << endl;
     }
@@ -845,6 +1005,14 @@ void Ieee802154eMac::startTimer(t_mac_timer timer) {
  */
 void Ieee802154eMac::handleSelfMessage(cMessage *msg) {
     EV_DETAIL << "timer routine." << endl;
+
+    // TEST part, for artificial packet drops
+    if (msg->getKind() == MAC_ENABLE_DROPS) {
+        pArtificialPacketDrop = true;
+        delete msg;
+        return;
+    }
+
     if (msg == slotTimer)
         executeMac(EV_TIMER_SLOT, msg);
     else if (msg == ccaTimer)
@@ -857,12 +1025,23 @@ void Ieee802154eMac::handleSelfMessage(cMessage *msg) {
         executeMac(EV_TIMER_SLOTEND, msg);
     else if (msg == rxAckTimer) {
         nbMissedAcks++;
-
         emitSignal(NBMISSEDACKS);
-
         executeMac(EV_ACK_TIMEOUT, msg);
     } else
         EV << "TSCH Error: unknown timer fired:" << msg << endl;
+}
+
+
+bool Ieee802154eMac::artificialPacketDrop() {
+    if (pArtificialPacketDrop) {
+        auto dice = uniform(0, 1);
+        EV_DETAIL << "Deciding whether to drop packet, dice = " << dice
+            << ", drop threshold = " << pPacketDropThreshold << endl;
+        return dice > pPacketDropThreshold;
+
+    }
+
+    return false;
 }
 
 /**
@@ -870,7 +1049,7 @@ void Ieee802154eMac::handleSelfMessage(cMessage *msg) {
  * frame. Generates the corresponding event.
  */
 void Ieee802154eMac::handleLowerPacket(Packet *packet) {
-    if (packet->hasBitError()) {
+    if (packet->hasBitError() || artificialPacketDrop()) {
         EV << "Received " << packet
                   << " contains bit errors or collision, dropping it\n";
         PacketDropDetails details;
@@ -1044,6 +1223,10 @@ void Ieee802154eMac::sendUp(cMessage *message)
     }
 
     send(message, upperLayerOutGateId);
+}
+
+InterfaceEntry* Ieee802154eMac::getInterfaceEntry(){
+    return this->interfaceEntry;
 }
 
 

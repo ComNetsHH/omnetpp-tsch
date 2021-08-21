@@ -2,7 +2,7 @@
  * Simulation model for IEEE 802.15.4 Time Slotted Channel Hopping (TSCH).
  * Implementation of our Scheduling Function with Soft Blacklisting
  *
- * Copyright (C) 2019  Institute of Communication Networks (ComNets),
+ * Copyright (C) 2021  Institute of Communication Networks (ComNets),
  *                     Hamburg University of Technology (TUHH)
  *           (C) 2017  Lotte Steenbrink
  *
@@ -115,6 +115,14 @@ public:
      */
     void handleResponse(uint64_t sender, tsch6pReturn_t code, int numCells = -1,
                         std::vector<cellLocation_t> *cellList = NULL);
+
+    /**
+     * @brief More "nullptr exceptions"-safe version of handleResponse().
+     *
+     * @overload
+     */
+    void handleResponse(uint64_t sender, tsch6pReturn_t code, int numCells = -1,
+                                std::vector<cellLocation_t> cellList = {}) {}
 
     /**
      * @brief Handle @p data that was piggybacked by @p sender.

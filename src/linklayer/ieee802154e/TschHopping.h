@@ -1,7 +1,7 @@
 /*
  * Simulation model for IEEE 802.15.4 Time Slotted Channel Hopping (TSCH)
  *
- * Copyright (C) 2019  Institute of Communication Networks (ComNets),
+ * Copyright (C) 2021  Institute of Communication Networks (ComNets),
  *                     Hamburg University of Technology (TUHH)
  *           (C) 2019  Leo Krueger
  *           (C) 2004-2006 Andras Varga
@@ -38,6 +38,7 @@ class TschHopping: public omnetpp::cSimpleModule, public IChannelPlan
         typedef std::vector<int> PatternVector;
     private:
         PatternVector pattern;
+        units::values::Hz centerFrequency;
     public:
         TschHopping();
         virtual ~TschHopping();
@@ -56,8 +57,10 @@ class TschHopping: public omnetpp::cSimpleModule, public IChannelPlan
 
         virtual inline int getMinChannel() { return 11; }
         virtual inline int getMaxChannel() { return 26; }
-        virtual units::values::Hz getMinCenterFrequency() { return units::values::Hz(2.405e9); }
-        virtual units::values::Hz getMaxCenterFrequency() { return units::values::Hz(2.405e9); }
+        //virtual units::values::Hz getMinCenterFrequency() { return units::values::Hz(2.405e9); }
+        //virtual units::values::Hz getMaxCenterFrequency() { return units::values::Hz(2.405e9); }
+        virtual units::values::Hz getMinCenterFrequency();
+        virtual units::values::Hz getMaxCenterFrequency();
         virtual units::values::Hz getChannelSpacing() { return units::values::Hz(5.0e6); }
         virtual units::values::Hz channelToCenterFrequency(int channel);
 };

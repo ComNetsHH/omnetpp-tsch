@@ -1,7 +1,7 @@
 /*
  * Simulation model for IEEE 802.15.4 Time Slotted Channel Hopping (TSCH)
  *
- * Copyright (C) 2019  Institute of Communication Networks (ComNets),
+ * Copyright (C) 2021  Institute of Communication Networks (ComNets),
  *                     Hamburg University of Technology (TUHH)
  *           (C) 2019  Louis Yin
  *
@@ -112,6 +112,14 @@ class TschNeighbor : public cSimpleModule, protected cListener
          * Shows the maximum queue length
          */
         int queueLength;
+
+        int W_npq;
+        int C_npq;
+        int W_nq;
+        int C_nq;
+
+        cModule *hostNode; // reference to this host node's module
+
     public:
         /**
          * Default constructor
@@ -133,6 +141,7 @@ class TschNeighbor : public cSimpleModule, protected cListener
          * @return Packet is successfully added or not
          */
         bool add2Queue(inet::Packet *, MacAddress macAddr, int virtualLinkID);
+
         /**
          * A public member function to reset the private member variables to determine the current neighbor and virtualLinkId
          */
@@ -154,6 +163,9 @@ class TschNeighbor : public cSimpleModule, protected cListener
          * @return Size of the currently used queue
          */
         int getCurrentNeighborQueueSize();
+
+
+        int getCurrentVirtualLinkIDKey();
         /**
          * A public member function to return the first packet of the currently used neighbor queue
          * @return Pointer to the first packet of the currently used queue
@@ -265,6 +277,7 @@ class TschNeighbor : public cSimpleModule, protected cListener
         void clearQueue();
 
     protected:
+        virtual void refreshDisplay() const override;
         virtual int numInitStages() const override { return NUM_INIT_STAGES; }
         virtual void initialize(int stage) override;
         virtual void handleMessage(cMessage *) override;

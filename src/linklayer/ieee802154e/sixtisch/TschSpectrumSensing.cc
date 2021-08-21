@@ -1,7 +1,7 @@
 /*
  * Simulation model for IEEE 802.15.4 Time Slotted Channel Hopping (TSCH).
  *
- * Copyright (C) 2019  Institute of Communication Networks (ComNets),
+ * Copyright (C) 2021  Institute of Communication Networks (ComNets),
  *                     Hamburg University of Technology (TUHH)
  *           (C) 2017  Lotte Steenbrink
  *
@@ -114,16 +114,19 @@ double TschSpectrumSensing::conductCca(int channel)
         return NaN;
     }
 
-    auto receptionPowers = new std::vector<ConstMapping *>();
-
+    //auto receptionPowers = new std::vector<FunctionBase<WpHz, Domain<simsec, Hz>>*>();
+    //const Ptr<const FunctionBase<WpHz, Domain<simsec, Hz>>> receptionPowers;
+    auto receptionPowers = makeShared<SummedFunction<WpHz, Domain<simsec, Hz>>>();
     // extract power mapping of each transmission
     for (auto const& transmission : *interferingTransmissions) {
         auto rcpt = radioMedium->getReception(radio, transmission);
         auto dimRcpt = dynamic_cast<const DimensionalReception*>(rcpt);
-        auto power = const_cast<ConstMapping *>(dimRcpt->getPower());
+        auto power = const_cast<const Ptr<const IFunction<WpHz, Domain<simsec, Hz>>>&>(dimRcpt->getPower());
 
+        //std::cout << power->detailedInfo() << endl;
         if (power != nullptr) {
-            receptionPowers->push_back(power);
+            //TODO: Not sure if correct?
+            receptionPowers->addElement(power);
         } else {
             // alternatively just ignore a failure to cast here?
             throw cRuntimeError("const_cast(): Cannot cast ConstMapping");
@@ -150,23 +153,22 @@ double TschSpectrumSensing::conductCca(int channel)
 
     // if there are transmissions ongoing, this should not happen
     // but is it an unrecoverable error? probably not
-    if (receptionPowers->empty()) {
-        return NaN;
-    }
+//    if (receptionPowers->empty()) {
+//        return NaN;
+//    }
 
-    auto listeningMapping = MappingUtils::createMapping(Argument::mapped_type(-150), DimensionSet(Dimension::time, Dimension::frequency), Mapping::LINEAR);
+    //auto listeningMapping = MappingUtils::createMapping(Argument::mapped_type(-150), DimensionSet(Dimension::time, Dimension::frequency), Mapping::LINEAR);
 
     // add up powers
     // TIL: Do not delete this afterwards as destructor of DimensionalNoise will delete it aswell oO
-    auto noisePower = new ConcatConstMapping<std::plus<double> >(listeningMapping, receptionPowers->begin(), receptionPowers->end(), false, Argument::MappedZero);
+    //auto noisePower = new ConcatConstMapping<std::plus<double> >(listeningMapping, receptionPowers->begin(), receptionPowers->end(), false, Argument::MappedZero);
 
-    // calculate total noise from transmissions takibng into consideration the frequency domain as well
-    auto dimensionalNoise = new DimensionalNoise(simTime()-ccaDetectionTime, simTime(), Hz(channelPlan->channelToCenterFrequency(channel)), Hz(bandwidth), noisePower);
+    // calculate total noise from transmissions taking into consideration the frequency domain as well
+    auto dimensionalNoise = new DimensionalNoise(simTime()-ccaDetectionTime, simTime(), Hz(channelPlan->channelToCenterFrequency(channel)), Hz(bandwidth), receptionPowers);
 
     // get max power within given ccaDetectionTime
     // TODO is this the correct way to do it? would an average be an alternative?
-    auto maxPower = math::mW2dBm(dimensionalNoise->computeMaxPower(simTime()-ccaDetectionTime, simTime()).get());
-
+    auto maxPower = math::mW2dBmW(dimensionalNoise->computeMaxPower(simTime()-ccaDetectionTime, simTime()).get());
 //    if (receptionPowers->size() > 1) {
 //        for (int i = 0; i < receptionPowers->size(); i++) {
 //            receptionPowers->at(i)->print(std::cout, 0);
@@ -180,7 +182,7 @@ double TschSpectrumSensing::conductCca(int channel)
 
     delete dimensionalNoise;
     delete interferingTransmissions;
-    delete receptionPowers;
+    //delete receptionPowers;
 
     emitSignal(channel, maxPower);
     return maxPower;

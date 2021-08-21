@@ -1,8 +1,9 @@
 //
 // Simulation model for IEEE 802.15.4 Time Slotted Channel Hopping (TSCH)
 //
-// Copyright (C) 2019  Institute of Communication Networks (ComNets),
+// Copyright (C) 2021  Institute of Communication Networks (ComNets),
 //                     Hamburg University of Technology (TUHH)
+//           (C) 2021  Yevhenii Shudrenko
 //           (C) 2019  Daniel Ploeger
 //           (C) 2019  Leo Krueger
 //           (C) 2006  Andras Varga
@@ -25,32 +26,41 @@
 package tsch.simulations.wireless.waic;
 
 import inet.networklayer.configurator.ipv4.Ipv4NetworkConfigurator;
+import inet.networklayer.configurator.ipv6.Ipv6FlatNetworkConfigurator;
 import inet.physicallayer.contract.packetlevel.IRadioMedium;
 import inet.visualizer.contract.IIntegratedVisualizer;
 import inet.node.inet.WirelessHost;
+import rpl.configurator.RplNetConfigurator;
+import rpl.RplRouter;
+import rpl.Rpl;
 
-network WaicBasic
+network HighDensity
 {
     parameters:
-        int numWaicHosts;
-        int numWlanHosts;
-        @display("bgb=450,450");
+        @display("bgb=20,110");
+        int numHosts = default(1);
+        int numSinks = default(1);
+        int numAltimeters = default(0);
     submodules:
-        configurator: Ipv4NetworkConfigurator {
+        configurator: RplNetConfigurator {
             parameters:
-                @display("p=100,100;is=s");
+                @display("p=1013.768,81.872;is=s");
         }
         radioMedium: <> like IRadioMedium {
             parameters:
-                @display("p=100,200;is=s");
+                @display("p=1011.36,228.76;is=s");
         }
-        waicHost[numWaicHosts]: WirelessHost {
+        sink[numSinks]: RplRouter {
             parameters:
                 @6tisch;
-                @display("r=,,#707070;p=250,200");
+                @display("r=,,#707070;p=391.62,121.98");
         }
-        wlanHost[numWlanHosts]: WirelessHost {
+        host[numHosts]: RplRouter {
             parameters:
-                @display("r=,,#707070;p=250,200");
+                @6tisch;
+                @display("r=,,#707070;p=313.04,416.58398");
+        }
+        radioAltimeter[numAltimeters]: RplRouter {
+        	@display("r=,,#707070;p=313.04,416.58398");
         }
 }

@@ -2,8 +2,9 @@
 // Simulation model for IEEE 802.15.4 Time Slotted Channel Hopping (TSCH)
 // Control messages sent by the 6top sublayer to the mac layer
 //
-// Copyright (C) 2019  Institute of Communication Networks (ComNets),
+// Copyright (C) 2021  Institute of Communication Networks (ComNets),
 //                     Hamburg University of Technology (TUHH)
+//			 (C) 2021  Yevhenii Shudrenko
 //           (C) 2017  Lotte Steenbrink
 //
 // This program is free software: you can redistribute it and/or modify
@@ -27,7 +28,7 @@ simple Tsch6TopSublayer
     parameters:
 	    int piggybackingBackoff @unit(ms) = 0;
 	   	
-	   	double sfstarttime @unit(s) = 0.0;
+	   	double sfstarttime @unit(s) = default(0.0);
 	   	bool stats = false;	           	
 	   	@class(Tsch6topSublayer);
     gates:

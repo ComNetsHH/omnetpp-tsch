@@ -1,7 +1,7 @@
 // 
 // Simulation model for IEEE 802.15.4 Time Slotted Channel Hopping (TSCH)
 //
-// Copyright (C) 2019  Institute of Communication Networks (ComNets), 
+// Copyright (C) 2021  Institute of Communication Networks (ComNets), 
 //                     Hamburg University of Technology (TUHH)
 //			 (C) 2019  Leo Krueger
 //
@@ -28,7 +28,7 @@ import tsch.linklayer.contract.ISlotframe;
 simple TschSlotframe like ISlotframe
 {
     parameters:
-        int macSlotframeSize = default(101); // recommended by IETF 6TiSCH TODO add rfc number
+        int macSlotframeSize = default(101); // recommended by IETF 6TiSCH Internet Draft
         int macSlotframeHandle = default(0);
         string fileName = default("Tsch_Schedule_example.xml")
         @display("i=block/table");

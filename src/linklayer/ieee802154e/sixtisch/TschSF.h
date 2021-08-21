@@ -3,7 +3,7 @@
  * Interface that must be implemented by each 6TiSCH
  * Scheduling Function.
  *
- * Copyright (C) 2019  Institute of Communication Networks (ComNets),
+ * Copyright (C) 2021  Institute of Communication Networks (ComNets),
  *                     Hamburg University of Technology (TUHH)
  *           (C) 2017  Lotte Steenbrink
  *
@@ -106,6 +106,14 @@ public:
      */
     virtual void handleResponse(uint64_t sender, tsch6pReturn_t code, int numCells = -1,
                                 std::vector<cellLocation_t> *cellList = NULL) = 0;
+
+    /**
+     * @brief More "nullptr exceptions"-safe version of handleResponse().
+     *
+     * @overload
+     */
+    virtual void handleResponse(uint64_t sender, tsch6pReturn_t code, int numCells = -1,
+                                        std::vector<cellLocation_t> cellList = {}) = 0;
 
     /**
      * @brief Handle the inconsistency which was uncovered by @p seqnum

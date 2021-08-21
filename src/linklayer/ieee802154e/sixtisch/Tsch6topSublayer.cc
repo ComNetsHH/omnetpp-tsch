@@ -11,8 +11,9 @@
  * For more details on the sublayer see
  * https://tools.ietf.org/html/draft-ietf-6tisch-architecture
  *
- * Copyright (C) 2019  Institute of Communication Networks (ComNets),
+ * Copyright (C) 2021  Institute of Communication Networks (ComNets),
  *                     Hamburg University of Technology (TUHH)
+ *           (C) 2021  Yevhenii Shudrenko
  *           (C) 2017  Lotte Steenbrink
  *
  * This program is free software: you can redistribute it and/or modify
@@ -36,7 +37,6 @@
 //#include "TschMacWaic.h"
 
 #include "../TschLink.h"
-//#include "TschSFTest.h"
 #include "TschSF.h"
 //#include "msg/tschSpectrumSensingResult_m.h"
 #include "tsch6pPiggybackTimeoutMsg_m.h"
@@ -54,7 +54,6 @@
 #include "../Ieee802154eMacHeader_m.h"
 #include "inet/common/ProtocolGroup.h"
 //#include "TschImprovisedTests.h"
-
 
 using namespace omnetpp;
 using namespace tsch;
@@ -95,6 +94,9 @@ void Tsch6topSublayer::initialize(int stage) {
 
         s_6pMsgSent = registerSignal("sixp_msg_sent");
 
+        numConcurrentTransactionErrors = 0;
+        numTimeouts = 0;
+
         // TODO: just set to sim-time-limit?
 
         int ttl = getParentModule()->getSubmodule("sf")->par("timeout");
@@ -102,22 +104,19 @@ void Tsch6topSublayer::initialize(int stage) {
 
     } else if (stage == 4) {
         auto module = getParentModule()->getParentModule();
-        Ieee802154eMac* mac =
-                dynamic_cast<Ieee802154eMac *>(module->getSubmodule(
-                        "mac", 0));
+        Ieee802154eMac* mac = dynamic_cast<Ieee802154eMac *>(module->getSubmodule("mac", 0));
 
         mac->subscribe(inet::packetDroppedSignal, this);
         mac->subscribe(inet::packetSentSignal, this);
 
-        schedule = dynamic_cast<TschSlotframe*>(module->getSubmodule("schedule",
-                0));
+        schedule = dynamic_cast<TschSlotframe*>(module->getSubmodule("schedule", 0));
         pTschLinkInfo = (TschLinkInfo*) getParentModule()->getSubmodule("linkinfo");
         if (!mac) {
             EV_ERROR << "Tsch6topSublayer: no mac submodule found" << endl;
             return;
         }
-        pNodeId = mac->interfaceEntry->getMacAddress().getInt();
-        EV_DETAIL << " for node " << mac->interfaceEntry->getMacAddress().str() << endl;
+        pNodeId = mac->getInterfaceEntry()->getMacAddress().getInt();
+        EV_DETAIL << " for node " << pNodeId << endl;
         std::list<uint64_t> neighbors = getNeighborsInRange(pNodeId, mac);
 
         std::list<uint64_t>::iterator it;
@@ -142,58 +141,65 @@ void Tsch6topSublayer::initialize(int stage) {
     }
 };
 
+void Tsch6topSublayer::finish() {
+    recordScalar("numTimeouts", numTimeouts);
+    recordScalar("numConcurrentTransactionErrors", numConcurrentTransactionErrors);
+}
+
+Packet* Tsch6topSublayer::handleExternalMessage(cMessage* msg) {
+    Packet* response = NULL;
+    auto arrivalGateId = msg->getArrivalGateId();
+
+    if (arrivalGateId == linkInfoControlIn) {
+        tschLinkInfoTimeoutMsg* tom = dynamic_cast<tschLinkInfoTimeoutMsg*> (msg);
+        if (tom)
+            response = handleTransactionTimeout(tom);
+    }
+    else if (arrivalGateId == lowerLayerIn) {
+        auto pkt = dynamic_cast<Packet*> (msg);
+        if (pkt)
+            response = handle6PMsg(pkt);
+    }
+    else EV_WARN << "Received message through unexpected gate - " << arrivalGateId << endl;
+
+    delete msg;
+    return response;
+}
+
+Packet* Tsch6topSublayer::handleSelfMessage(cMessage* msg)
+{
+    switch (msg->getKind()) {
+        case SF_START: {
+            EV_DETAIL << "Starting Scheduling Function at node " << MacAddress(pNodeId) << endl;
+            pTschSF->start();
+            break;
+        }
+        case PIGGYBACK_TIMEOUT: {
+            tsch6pPiggybackTimeoutMsg* pgb = dynamic_cast<tsch6pPiggybackTimeoutMsg*> (msg);
+
+            if (!pgb || !pgb->getInTransit())
+                break;
+
+            /* a piggybacking timeout has expired, send data stand-alone*/
+            // TODO: let blacklist updates "accumulate" until they are sent off! otherwise a huge
+            // TODO: is the SIGNAL a transaction too? if so, call prepLinkForRequest!
+            pgb->setInTransit(true);
+            uint64_t destId = pgb->getDestId();
+            return createSignalRequest(destId, pTschLinkInfo->getSeqNum(destId), pgb->getContextPointer(), pgb->getPayloadSz());
+        }
+        default: EV_WARN << "Unknown self-message received - " << msg->getKind() << endl;
+    }
+
+    delete msg;
+    return NULL;
+}
+
 void Tsch6topSublayer::handleMessage(cMessage* msg) {
     Packet* response = NULL;
     tsch6topCtrlMsg* ctrl = NULL;
 
-    if (msg->isSelfMessage()) {
-        if (msg->getKind() == SF_START) {
-            EV_DETAIL << "Starting Scheduling Function at node " << pNodeId << std::endl;
+    response = msg->isSelfMessage() ? handleSelfMessage(msg) : handleExternalMessage(msg);
 
-            pTschSF->start();
-
-            delete msg;
-        }
-        if (msg->getKind() == PIGGYBACK_TIMEOUT) {
-            tsch6pPiggybackTimeoutMsg* piggy = dynamic_cast<tsch6pPiggybackTimeoutMsg*> (msg);
-            if (piggy) {
-                /* a piggybacking timeout has expired, send data stand-alone*/
-
-                if (piggy->getInTransit() == false) {
-                    // TODO: let blacklist updates "accumulate" until they are sent off! otherwise a huge
-                    // TODO: is the SIGNAL a transaction too? if so, call prepLinkForRequest!
-
-                    piggy->setInTransit(true);
-                    uint64_t destId = piggy->getDestId();
-                    response = createSignalRequest(destId, pTschLinkInfo->getSeqNum(destId),
-                                                   piggy->getContextPointer(),
-                                                   piggy->getPayloadSz());
-                }
-            }
-        }
-    } else {
-        /* got message from the outside */
-        int arrivalGate = msg->getArrivalGateId();
-        if (arrivalGate == lowerControlIn)
-        {
-        } else if (arrivalGate == linkInfoControlIn) {
-            tschLinkInfoTimeoutMsg* tom = dynamic_cast<tschLinkInfoTimeoutMsg*> (msg);
-            if (tom) {
-                response = handleTransactionTimeout(tom);
-                delete msg;
-            }
-        } else if (arrivalGate == lowerLayerIn) {
-            auto pkt = dynamic_cast<Packet*> (msg);
-            if (pkt) {
-                response = handle6PMsg(pkt);
-                delete msg;
-            }
-        } else {
-            /* message is nothing we can work with */
-            EV_WARN << "received message through unexpected gate" << endl;
-            delete msg;
-        }
-    }
     if (response != NULL) {
         /* a response was created somewhere in the handling process, send it */
         sendMessageToRadio(response);
@@ -201,20 +207,26 @@ void Tsch6topSublayer::handleMessage(cMessage* msg) {
          /* record statistics */
         emit(s_6pMsgSent, 1);
     }
+
+    // TODO: Unreachable code, ctrl variable is unused, check whether bug
+    // or a part of older implementation
     if (ctrl != NULL) {
         // Updated to directly modify the schedule
         //sendControlDown(ctrl);
-        updateSchedule(ctrl);
+        updateSchedule(*ctrl);
     }
-
 }
 
-void Tsch6topSublayer::sendMessageToRadio(cMessage *msg) {
-    if (msg) {
-        send(msg, lowerLayerOut);
-    } else {
+void Tsch6topSublayer::sendMessageToRadio(cMessage *msg, double delay) {
+    if (!msg) {
         EV_WARN << "sendMessageToRadio: msg pointer is null!" << endl;
+        return;
     }
+
+    if (delay > 0)
+        sendDelayed(msg, delay, lowerLayerOut);
+    else
+        send(msg, lowerLayerOut);
 }
 /**void Tsch6topSublayer::sendControlDown(cMessage *msg) {
     if (msg) {
@@ -225,8 +237,15 @@ void Tsch6topSublayer::sendMessageToRadio(cMessage *msg) {
 }*/
 
 void Tsch6topSublayer::sendAddRequest(uint64_t destId, uint8_t cellOptions,
+                            int numCells, std::vector<cellLocation_t> &cellList, int timeout)
+{
+    sendAddRequest(destId, cellOptions, numCells, cellList, timeout, 0);
+}
+
+void Tsch6topSublayer::sendAddRequest(uint64_t destId, uint8_t cellOptions,
                             int numCells, std::vector<cellLocation_t> &cellList,
-                            int timeout) {
+                            int timeout, double delay)
+{
     Enter_Method_Silent();
 
     if (pTschLinkInfo->inTransaction(destId)) {
@@ -234,13 +253,14 @@ void Tsch6topSublayer::sendAddRequest(uint64_t destId, uint8_t cellOptions,
         return;
     }
 
-    /* calculate simtime at which this transaction will time out. since simtime_t is
+    /* Calculate simtime at which this transaction will time out. since simtime_t is
        always counted in (fractions of) seconds, we need to convert timeout first */
     simtime_t absoluteTimeout = getAbsoluteTimeout(timeout);
+    EV_DETAIL << "Sending ADD to " << MacAddress(destId) << ", timeout scheduled at: "
+            << absoluteTimeout << endl;
     uint8_t seqNum = prepLinkForRequest(destId, absoluteTimeout);
 
-    auto pkt = createAddRequest(destId, seqNum, cellOptions, numCells,
-                                         cellList, absoluteTimeout);
+    auto pkt = createAddRequest(destId, seqNum, cellOptions, numCells, cellList, absoluteTimeout);
 
     pTschLinkInfo->setLastKnownCommand(destId, CMD_ADD);
     pTschLinkInfo->setLastLinkOption(destId, (uint8_t) cellOptions);
@@ -248,15 +268,21 @@ void Tsch6topSublayer::sendAddRequest(uint64_t destId, uint8_t cellOptions,
     /* record statistics */
     emit(s_6pMsgSent, 1);
 
-    sendMessageToRadio(pkt);
+    sendMessageToRadio(pkt, delay);
 }
 
 void Tsch6topSublayer::sendDeleteRequest(uint64_t destId, uint8_t cellOptions, int numCells,
-                       std::vector<cellLocation_t> &cellList, int timeout) {
+        std::vector<cellLocation_t> cellList, int timeout)
+{
     Enter_Method_Silent();
 
     if (pTschLinkInfo->inTransaction(destId)) {
         EV_ERROR <<"Can't send DELETE request during open transaction" << endl;
+        return;
+    }
+
+    if (!cellList.size()) {
+        EV_WARN << "Received DELETE req with empty cellList" << endl;
         return;
     }
 
@@ -265,8 +291,7 @@ void Tsch6topSublayer::sendDeleteRequest(uint64_t destId, uint8_t cellOptions, i
     simtime_t absoluteTimeout = getAbsoluteTimeout(timeout);
     uint8_t seqNum = prepLinkForRequest(destId, absoluteTimeout);
 
-    auto pkt = createDeleteRequest(destId, seqNum, cellOptions, numCells,
-                                            cellList, absoluteTimeout);
+    auto pkt = createDeleteRequest(destId, seqNum, cellOptions, numCells, cellList, absoluteTimeout);
 
     pTschLinkInfo->setLastKnownCommand(destId, CMD_DELETE);
     pTschLinkInfo->setLastLinkOption(destId, (uint8_t) cellOptions);
@@ -280,7 +305,8 @@ void Tsch6topSublayer::sendDeleteRequest(uint64_t destId, uint8_t cellOptions, i
 void Tsch6topSublayer::sendRelocationRequest(uint64_t destId, uint8_t cellOptions, int numCells,
                             std::vector<cellLocation_t> &relocationCellList,
                             std::vector<cellLocation_t> &candidateCellList,
-                            int timeout) {
+                            int timeout)
+{
     Enter_Method_Silent();
 
     if (pTschLinkInfo->inTransaction(destId)) {
@@ -289,13 +315,11 @@ void Tsch6topSublayer::sendRelocationRequest(uint64_t destId, uint8_t cellOption
     }
 
     simtime_t absoluteTimeout = getAbsoluteTimeout(timeout);
-    pTschLinkInfo->setRelocationCells(destId, relocationCellList,
-                                      getCellOption(cellOptions));
+    pTschLinkInfo->setRelocationCells(destId, relocationCellList, getCellOption(cellOptions));
     uint8_t seqNum = prepLinkForRequest(destId, absoluteTimeout);
 
-    auto pkt = createRelocationRequest(destId, seqNum, cellOptions,
-                                                numCells, relocationCellList,
-                                                candidateCellList, absoluteTimeout);
+    auto pkt = createRelocationRequest(destId, seqNum, cellOptions, numCells,
+            relocationCellList, candidateCellList, absoluteTimeout);
 
     pTschLinkInfo->setLastKnownCommand(destId, CMD_RELOCATE);
     pTschLinkInfo->setLastLinkOption(destId, (uint8_t) cellOptions);
@@ -312,15 +336,14 @@ void Tsch6topSublayer::sendClearRequest(uint64_t destId, int timeout) {
     uint8_t seqNum = pTschLinkInfo->getLastKnownSeqNum(destId);
     simtime_t absoluteTimeout = getAbsoluteTimeout(timeout);
 
-    /* clear requests end a transaction, so we can override the current status
-       no matter what. however, seqnum & cells are only reset after a RC_SUCCESS
+    /* CLEAR requests end a transaction, so we can override the current status
+       no matter what. However seqnum & cells are only reset after a RC_SUCCESS
        response is received, so we still need to note that we sent a CLEAR */
-    if(!pTschLinkInfo->linkInfoExists(destId)) {
+    if (!pTschLinkInfo->linkInfoExists(destId))
         /* We don't have a link to destId yet, register one and start @ SeqNum 0 */
         pTschLinkInfo->addLink(destId, true, absoluteTimeout, seqNum);
-    } else if (pTschLinkInfo->inTransaction(destId) == false) {
+    else if (!pTschLinkInfo->inTransaction(destId))
         pTschLinkInfo->setInTransaction(destId, absoluteTimeout);
-    }
 
     auto pkt = createClearRequest(destId, seqNum);
 
@@ -362,13 +385,13 @@ Packet* Tsch6topSublayer::handle6PMsg(Packet* pkt) {
     Packet* response = NULL;
 
     auto hdr = pkt->popAtFront<tsch::sixtisch::SixpHeader>();
-    auto data = pkt->popAtBack<tsch::sixtisch::SixpData>();
+    auto data = pkt->popAtFront<tsch::sixtisch::SixpData>();
     auto addresses = pkt->getTag<MacAddressInd>();
 
-    // TODO: lock linkinfo when handling it?!
+    // TODO: lock linkinfo while handling it?!
     if (hdr->getSfid() != pSFID) {
         /* packet uses scheduling function different from ours */
-        EV_ERROR <<"received 6P message sent by wrong SF" << endl;
+        EV_ERROR << "Received 6P message sent by wrong SF" << endl;
         uint64_t sender = addresses->getSrcAddress().getInt();
         uint8_t seqNum = hdr->getSeqNum();
 
@@ -377,11 +400,16 @@ Packet* Tsch6topSublayer::handle6PMsg(Packet* pkt) {
         /* packet is for us and valid, handle it */
         tsch6pMsg_t msgType = (tsch6pMsg_t) hdr->getType();
 
-        if (msgType == MSG_REQUEST) {
-            response = handleRequestMsg(pkt, hdr, data);
-        }
-        if (msgType == MSG_RESPONSE) {
-            response = handleResponseMsg(pkt, hdr, data);
+        switch (msgType) {
+            case MSG_REQUEST: {
+                response = handleRequestMsg(pkt, hdr, data);
+                break;
+            }
+            case MSG_RESPONSE: {
+                response = handleResponseMsg(pkt, hdr, data);
+                break;
+            }
+            default: EV_WARN << "Unknown 6P message type" << endl;
         }
     }
 
@@ -389,25 +417,26 @@ Packet* Tsch6topSublayer::handle6PMsg(Packet* pkt) {
 }
 
 
-Packet* Tsch6topSublayer::handleRequestMsg(Packet* pkt, inet::IntrusivePtr<const tsch::sixtisch::SixpHeader>& hdr, inet::IntrusivePtr<const tsch::sixtisch::SixpData>& data) {
+Packet* Tsch6topSublayer::handleRequestMsg(Packet* pkt,
+        inet::IntrusivePtr<const tsch::sixtisch::SixpHeader>& hdr,
+        inet::IntrusivePtr<const tsch::sixtisch::SixpData>& data)
+{
     Packet* response = NULL;
 
     auto addresses = pkt->getTag<MacAddressInd>();
 
     uint8_t seqNum = hdr->getSeqNum();
     uint64_t sender = addresses->getSrcAddress().getInt();
-    tsch6pCmd_t commandType = (tsch6pCmd_t) hdr->getCode();
+    tsch6pCmd_t cmd = (tsch6pCmd_t) hdr->getCode();
+    std::vector<cellLocation_t> emptyCellList = {};
 
-    EV_DETAIL << "Node " << MacAddress(pNodeId).str() << " received MSG_REQUEST from "
-            "Node " << MacAddress(sender).str() << " with seq num " << +seqNum << endl;
-    if (commandType == CMD_CLEAR) {
-        /* we don't need to perform any of the (seqNum) checks. A CLEAR is
+    EV_DETAIL << "Received MSG_REQUEST " << cmd << " from " << MacAddress(sender) << ", seqNum - " << +seqNum << endl;
+
+    if (cmd == CMD_CLEAR) {
+        /* We don't need to perform any of the (seqNum) checks. A CLEAR is
            always valid. */
-        EV_DETAIL << "CLEAR" << endl;
-        std::vector<cellLocation_t> empty;
-        pTschLinkInfo->setLastKnownCommand(sender, commandType);
-        pTschSF->handleResponse(sender, RC_SUCCESS, 0, &empty);
-
+        pTschLinkInfo->setLastKnownCommand(sender, cmd);
+        pTschSF->handleResponse(sender, RC_SUCCESS, 0, {}); // Note: SF handles schedule cleanup, not 6P!
         /* "The Response Code to a 6P CLEAR command SHOULD be RC_SUCCESS unless
            the operation cannot be executed.  When the CLEAR operation cannot be
            executed, the Response Code MUST be set to RC_RESET." */
@@ -425,82 +454,89 @@ Packet* Tsch6topSublayer::handleRequestMsg(Packet* pkt, inet::IntrusivePtr<const
     }
 
     /* TODO untangle the mess of checks following this, this was a quick fix */
-    bool isDuplicate = ((seqNum != 0) &&
-                        (seqNum == pTschLinkInfo->getLastKnownSeqNum(sender)) &&
-                        (commandType == pTschLinkInfo->getLastKnownCommand(sender)) &&
-                        (MSG_REQUEST == pTschLinkInfo->getLastKnownType(sender)) &&
-                        (pTschLinkInfo->getLastLinkOption(sender)) == data->getCellOptions());
+    bool isDuplicate = seqNum != 0 && seqNum == pTschLinkInfo->getLastKnownSeqNum(sender)
+            && cmd == pTschLinkInfo->getLastKnownCommand(sender)
+            && MSG_REQUEST == pTschLinkInfo->getLastKnownType(sender)
+            && pTschLinkInfo->getLastLinkOption(sender) == data->getCellOptions();
 
-    if (pTschLinkInfo->inTransaction(sender) &&
-        (commandType != CMD_SIGNAL) &&
-        (isDuplicate == false)) {
+    if (pTschLinkInfo->inTransaction(sender) && cmd != CMD_SIGNAL && !isDuplicate) {
         /* as per the 6P standard, concurrent transactions are not allowed.
-         * (but make sure you don't abort an ongoing transaction because you received
-         * the initial request twice) */
-        EV_WARN <<"received new MSG_REQUEST during active transaction: ignoring request, sending RC_RESET with seqNum " << +seqNum << endl;
+         * (but make sure you don't abort an ongoing transaction because initial request received twice) */
+        EV_WARN <<"received new MSG_REQUEST during active transaction: ignoring request, sending RC_RESET with seqNum "
+                << +seqNum << endl;
         return createErrorResponse(sender, seqNum, RC_RESET, data->getTimeout());
     }
 
-    if (seqNum != 0 &&
-               seqNum != (pTschLinkInfo->getLastKnownSeqNum(sender))) {
-        /* schedule inconsistency detected (sequence number!) */
-        EV_DETAIL << " rcvd seqnum: " << unsigned(seqNum) << " expected seqnum: " <<
-                        unsigned(pTschLinkInfo->getLastKnownSeqNum(sender)) << endl;
+//    if (seqNum != 0 && seqNum != (pTschLinkInfo->getLastKnownSeqNum(sender))) {
+//        /* schedule inconsistency detected (sequence number!) */
+//        EV_WARN << "Received seqNum - " << unsigned(seqNum) << ", expected - "
+//                << unsigned(pTschLinkInfo->getLastKnownSeqNum(sender)) << endl;
+//
+//        // The Draft mandates that we should send a RC_SEQNUM response but handling
+//        // those is a bit underspecified for 2-2way transactions so I'm going
+//        // to do it this way for now.
+//        pTschSF->handleInconsistency(sender, seqNum);
+//        return response;
+//    }
 
-        // The Draft mandates that we should send a RC_SEQNUM response but handling
-        // those is a bit underspecified for 2-2way transactions so I'm going
-        // to do it this way for now.
-        pTschSF->handleInconsistency(sender, seqNum);
-    } else if (commandType == CMD_SIGNAL) {
+    if (cmd == CMD_SIGNAL) {
         /* SIGNALs currently don't behave like fully-fledged requests so
            we handle them separately*/
-        EV_DETAIL << "SIGNAL" << endl;
         auto pl = pkt->popAtBack<BytesChunk>(pkt->getDataLength(), Chunk::PF_ALLOW_NULLPTR);
-        if ((pl != nullptr) && (pTschLinkInfo->linkInfoExists(sender))){
+        if (pl != nullptr && pTschLinkInfo->linkInfoExists(sender))
             /* there's piggybacked data and a link that's relevant to it, let
                the SF that uses this data handle it */
             pTschSF->handlePiggybackedData(sender, (void*) &(pl->getBytes()));
-        }
-    } else if (getCellOptions_isMultiple(data->getCellOptions())) {
+
+        return response;
+    }
+
+    if (getCellOptions_isMultiple(data->getCellOptions())) {
         /* multiple cell options have been set. The draft doesn't specify how to
          handle this yet. :(*/
         // TODO. still handle piggybacked blacklist update?
-        EV_ERROR <<"Multiple CellOptions set!" << endl;
-    } else {
-        if(pTschLinkInfo->inTransaction(sender)) {
-            EV_WARN <<"received new MSG_REQUEST during active transaction: ignoring request, sending RC_RESET (noticed late)" << endl;
-            return createErrorResponse(sender, seqNum, RC_RESET, data->getTimeout());
-        }
-        pTschLinkInfo->setLastKnownCommand(sender, commandType);
+        EV_ERROR << "Multiple CellOptions set!" << endl;
+        return response;
+    }
 
-        simtime_t timeout = data->getTimeout();
-        int numCells = data->getNumCells();
-        // Type of link
-        uint8_t cellOptions = (uint8_t) data->getCellOptions();
+    if (pTschLinkInfo->inTransaction(sender)) {
+        EV_WARN << "Received new MSG_REQUEST during active transaction: "
+                << "ignoring request, sending RC_RESET (noticed late)" << endl;
 
-        auto pl = pkt->popAtBack<BytesChunk>(pkt->getDataLength(),  Chunk::PF_ALLOW_NULLPTR);
-        if (pl != nullptr) {
-            /* there's piggybacked data, let the SF that uses this data handle it */
-            EV_DETAIL << "Node " << pNodeId << " handling piggybacked data" << std::endl;
-            pTschSF->handlePiggybackedData(sender, (void*) &pl->getBytes());
-        }
+        return createErrorResponse(sender, seqNum, RC_RESET, data->getTimeout());
+    }
 
-        if (!pTschLinkInfo->linkInfoExists(sender)) {
-            /* We don't know this node yet, add link info for it */
-            pTschLinkInfo->addLink(sender, true, timeout, seqNum);
-            pTschLinkInfo->setLastKnownCommand(sender, commandType);
-        } else if (seqNum == 0) {
-            /* node has been reset, clear all existing link information. */
-            pTschLinkInfo->resetLink(sender, MSG_REQUEST);
-            pTschLinkInfo->setInTransaction(sender, timeout);
-        } else {
-            pTschLinkInfo->setInTransaction(sender, timeout);
-        }
-        pTschLinkInfo->setLastKnownType(sender, MSG_REQUEST);
+    pTschLinkInfo->setLastKnownCommand(sender, cmd);
 
-        if (commandType == CMD_ADD) {
-            EV_DETAIL << "ADD" << endl;
+    simtime_t timeout = data->getTimeout();
+    int numCells = data->getNumCells();
+    // Type of link
+    uint8_t cellOptions = (uint8_t) data->getCellOptions();
 
+    auto pl = pkt->popAtBack<BytesChunk>(pkt->getDataLength(),  Chunk::PF_ALLOW_NULLPTR);
+
+    if (pl != nullptr) {
+        /* there's piggybacked data, let the SF that uses this data handle it */
+        EV_DETAIL << "Node " << pNodeId << " handling piggybacked data" << std::endl;
+        pTschSF->handlePiggybackedData(sender, (void*) &pl->getBytes());
+    }
+
+    if (!pTschLinkInfo->linkInfoExists(sender)) {
+        /* We don't know this node yet, add link info for it */
+        pTschLinkInfo->addLink(sender, true, timeout, seqNum);
+        pTschLinkInfo->setLastKnownCommand(sender, cmd);
+    } else if (seqNum == 0) {
+        /* node has been reset, clear all existing link information. */
+        pTschLinkInfo->resetLink(sender, MSG_REQUEST);
+        pTschLinkInfo->setInTransaction(sender, timeout);
+    } else
+        pTschLinkInfo->setInTransaction(sender, timeout);
+
+    pTschLinkInfo->setLastKnownType(sender, MSG_REQUEST);
+
+    // TODO: Refactor this further/split into separate handler functions
+    switch (cmd) {
+        case CMD_ADD: {
             std::vector<cellLocation_t> cellList = data->getCellList();
             // TODO: do I need to copy this to make sure it doesn't go out of
             // scope when pkt is deleted?
@@ -510,87 +546,94 @@ Packet* Tsch6topSublayer::handleRequestMsg(Packet* pkt, inet::IntrusivePtr<const
                                                 !getCellOptions_isRX(cellOptions),
                                                 !getCellOptions_isTX(cellOptions),
                                                 getCellOptions_isSHARED(cellOptions));
-            if (pickResult == -EINVAL) {
-                EV_ERROR <<"invalid input during SF cell pick" << endl;
-            } else if (pickResult == -ENOSPC) {
-                /* no suitable cell(s) available. Send an (empty) success response
-                   anyway, as mandated by the standard */
-                EV_WARN <<"no suitable cell(s) found" << endl;
-                response = createSuccessResponse(sender, seqNum, cellList, data->getTimeout());
-            } else if ((pickResult == -EFBIG) || (pickResult == 0)) {
-                /* whoop whoop successfully found cells */
-                response = createSuccessResponse(sender, seqNum, cellList, data->getTimeout());
 
-                /* TODO: check if we need to split cellList into multiple messages!
-                   -> either because cellList is too long or because we have RX, TX,
-                   Shared cells in there (need 1 list per type) */
+            switch (pickResult) {
+                case -EINVAL: {
+                    EV_ERROR <<"Invalid input during SF cell pick" << endl;
+                    break;
+                }
+                case -ENOSPC: {
+                    /* no suitable cell(s) available. Send an (empty) success response
+                       anyway, as mandated by the standard */
+                    EV_WARN <<"No suitable cell(s) found" << endl;
+                    std::vector<cellLocation_t> empty = {};
+                    response = createSuccessResponse(sender, seqNum, empty, data->getTimeout());
+                    break;
+                }
+                case 0:
+                case -EFBIG: {
+                    /* Enough cells found */
+                    response = createSuccessResponse(sender, seqNum, cellList, data->getTimeout());
 
-                uint8_t myOpt = invertCellOption(getCellOption(cellOptions));
-                /* store potential change to our hopping sequence (will be activated
-                   if LL ACK arrives within this timeslot) */
-                pendingPatternUpdates[sender] = setCtrlMsg_PatternUpdate(
-                                                    pendingPatternUpdates[sender],
-                                                    sender, myOpt, cellList, {},
-                                                    data->getTimeout());
+                    /* TODO: check if we need to split cellList into multiple messages!
+                       -> either because cellList is too long or because we have RX, TX,
+                       Shared cells in there (need 1 list per type) */
+                    uint8_t myOpt = invertCellOption(getCellOption(cellOptions));
+                    /* store potential change to our hopping sequence (will be activated
+                       if LL ACK arrives within this timeslot) */
+                    pendingPatternUpdates[sender] = setCtrlMsg_PatternUpdate(
+                                                        pendingPatternUpdates[sender],
+                                                        sender, myOpt, cellList, emptyCellList,
+                                                        data->getTimeout());
+                    break;
+                }
+                default: EV_ERROR << "Undefined result code of SF cell-picking: " << pickResult << endl;
             }
-        } else if (commandType == CMD_DELETE) {
-            EV_DETAIL << "DELETE" << endl;
+            break;
+        }
+        case CMD_DELETE: {
             std::vector<cellLocation_t> cellList = data->getCellList();
+            EV_DETAIL << "DELETE cells: " << cellList << endl;
 
             /* all cells currently scheduled on this link */
-            cellVector sharedCells = pTschLinkInfo->getCells(sender);
-            //TODO: Delete this part?
-            bool isCellListValid = true;
-            std::tuple<cellLocation_t, uint8_t> currCell;
+            cellVector sharedCells = pTschLinkInfo->getCells(sender); // TODO: investigate why is this not used
+
             if (cellList.size() < numCells) {
-                isCellListValid = false;
-            }
-            if(!isCellListValid){
                 EV_ERROR << "Cell list size is smaller than number of cells requested" << endl;
                 /** Send the error response due to error in cell list */
                 response = createErrorResponse(sender, seqNum, RC_CELLLIST, data->getTimeout());
             }
-            else{
-                std::vector<cellLocation_t> emptyCellList; // in response to delete request, send empty cell list
+            else {
+                // in response to delete request send RC_SUCCESS with empty cell list,
+                // TODO: figure out how and when node sending DELETE request clears ITS local schedule
+                std::vector<cellLocation_t> emptyList = {};
                 response = createSuccessResponse(sender, seqNum, cellList, data->getTimeout());
-                EV_DETAIL << "Node " << pNodeId << " received delete request from " << sender << endl;
-                for(int k=0; k < cellList.size(); k++){
-                    EV_DETAIL << "Time offset => " << cellList[k].timeOffset << " chan Offset => " << cellList[k].channelOffset << endl;
-                }
-                /* store potential change to our hopping sequence (will be activated
-                   if LL ACK arrives within this timeslot) */
+
+                /* store potential change to our hopping sequence
+                 * (activated if LL ACK arrives within this timeslot) */
                 pendingPatternUpdates[sender] = setCtrlMsg_PatternUpdate(
                                                     pendingPatternUpdates[sender],
-                                                    sender, MAC_LINKOPTIONS_RX, {},
+                                                    sender, MAC_LINKOPTIONS_RX, emptyList,
                                                     cellList, data->getTimeout());
             }
-
-            /* TODO: IMPLEMENT ME */
-        } else if (commandType == CMD_RELOCATE) {
-            EV_DETAIL << "RELOCATE" << endl;
-
-            std::vector<cellLocation_t> candiateCellList = data->getCellList();
+            break;
+        }
+        case CMD_RELOCATE: {
+            std::vector<cellLocation_t> candidateCellList = data->getCellList();
             std::vector<cellLocation_t> relocCellList = data->getRelocationCellList();
+
+            EV_DETAIL << "RELOCATE " << numCells << " cell(s): " << relocCellList
+                    << "\nto (any of the following): " << candidateCellList << endl;
+
             /* all cells currently scheduled on this link */
             cellVector sharedCells = pTschLinkInfo->getCells(sender);
-            uint8_t linkOption = getCellOption(cellOptions);
+            uint8_t linkOption = invertCellOption(getCellOption(cellOptions));
 
-            if ((numCells == (int)relocCellList.size()) &&
-                (pTschLinkInfo->cellsInSchedule(sender, relocCellList, linkOption))) {
+            if (numCells == (int) relocCellList.size() && pTschLinkInfo->cellsInSchedule(sender, relocCellList, linkOption))
+            {
                 /* relocCellList has the right size and all its cells are actually
                    part of the link it is trying to delete them from; handle pkt. */
 
                 /* Since Tx cells for the sender are Rx cells for me and vice versa,
                    results of getCellOptions_isRx/Tx() are inverted */
-                int pickResult = pTschSF->pickCells(sender,
-                                            candiateCellList, numCells,
+                int pickResult = pTschSF->pickCells(sender, candidateCellList, numCells,
                                             !getCellOptions_isRX(cellOptions),
                                             !getCellOptions_isTX(cellOptions),
                                             getCellOptions_isSHARED(cellOptions));
-                uint8_t numRelocCells = candiateCellList.size();
 
-                if ((pickResult == 0 || pickResult == -EFBIG) &&
-                    (numRelocCells > 0)) {
+                uint8_t numRelocCells = candidateCellList.size();
+
+                if ((pickResult == 0 || pickResult == -EFBIG) && numRelocCells > 0) {
                     /* delete first n cells from relocCellList from our link */
                     relocCellList.resize(numRelocCells);
 
@@ -600,35 +643,40 @@ Packet* Tsch6topSublayer::handleRequestMsg(Packet* pkt, inet::IntrusivePtr<const
                        if LL ACK arrives within this timeslot) */
                     pendingPatternUpdates[sender] = setCtrlMsg_PatternUpdate(
                                                         pendingPatternUpdates[sender],
-                                                        sender, myOpt, candiateCellList,
+                                                        sender, myOpt, candidateCellList,
                                                         relocCellList, data->getTimeout());
                 }
 
-                response = createSuccessResponse(sender, seqNum, candiateCellList, data->getTimeout());
+                response = createSuccessResponse(sender, seqNum, candidateCellList, data->getTimeout());
             } else {
                 /* that was an invalid RELOCATE message, respond accordingly */
+                EV_DETAIL << "Received invalid RELOCATE request, sending error response" << endl;
                 response = createErrorResponse(sender, seqNum, RC_CELLLIST, data->getTimeout());
             }
-        } else {
-            EV_DETAIL << "UNKNOWN COMMAND: " << commandType << endl;
+            break;
         }
+        default: EV_WARN << "Unknown 6P command received - " << cmd << endl;
     }
 
     return response;
 }
 
-Packet* Tsch6topSublayer::handleResponseMsg(Packet* pkt, inet::IntrusivePtr<const tsch::sixtisch::SixpHeader>& hdr, inet::IntrusivePtr<const tsch::sixtisch::SixpData>& data) {
-    //TODO: Does this response does anything at all?
+
+// TODO: refactor this to be more modular
+Packet* Tsch6topSublayer::handleResponseMsg(Packet* pkt, inet::IntrusivePtr<const tsch::sixtisch::SixpHeader>& hdr,
+        inet::IntrusivePtr<const tsch::sixtisch::SixpData>& data)
+{
     Packet* response = NULL;
 
     auto addresses = pkt->getTag<MacAddressInd>();
 
+    std::vector<cellLocation_t> emptyCellList = {};
     uint8_t seqNum = hdr->getSeqNum();
     uint64_t sender = addresses->getSrcAddress().getInt();
     tsch6pReturn_t returnCode = (tsch6pReturn_t) hdr->getCode();
 
-    EV_DETAIL << "Node " << MacAddress(pNodeId).str() << " received MSG_RESPONSE from "
-            "Node " << MacAddress(sender).str() << " with seq num " << +seqNum << endl;
+    EV_DETAIL << "Node " << MacAddress(pNodeId) << " received MSG_RESPONSE from "
+            << MacAddress(sender) << " with seqNum " << +seqNum << ", return code - " << returnCode << endl;
     if (data->getTimeout() < simTime()) {
         /* received msg whose timeout already expired; ignore it. */
         /* QUICK FIX (we probably shouldn't start the timeout timer before
@@ -639,112 +687,121 @@ Packet* Tsch6topSublayer::handleResponseMsg(Packet* pkt, inet::IntrusivePtr<cons
 
     if (!pTschLinkInfo->inTransaction(sender)) {
         /* There's no transaction this response corresponds to, ignore it */
-        EV_WARN <<"received unexpected MSG_RESPONSE: not in transaction" << endl;
-    } else if (pTschLinkInfo->getLastKnownType(sender) == MSG_RESPONSE) {
-        EV_WARN << "received unexpected MSG_RESPONSE: this node just "
-                    " sent a MSG_RESPONSE itself" << endl;
-    } else if (returnCode == RC_RESET) {
-        EV_DETAIL << "RC_RESET" << endl;
+        EV_WARN << "Received unexpected MSG_RESPONSE: not in transaction" << endl;
+        return response;
+    }
+
+    if (pTschLinkInfo->getLastKnownType(sender) == MSG_RESPONSE) {
+        EV_WARN << "Received unexpected MSG_RESPONSE: this node just sent a MSG_RESPONSE itself" << endl;
+        return response;
+    }
+
+    if (returnCode == RC_RESET) {
         pTschLinkInfo->revertLink(sender, MSG_RESPONSE);
-        pTschSF->handleResponse(sender, RC_RESET, 0, NULL);
+        EV_DETAIL << "Reverted link with " << MacAddress(sender) << endl;
+        pTschSF->handleResponse(sender, RC_RESET, 0, emptyCellList);
 
         /* cancel any pending pattern update that we might have created */
         pendingPatternUpdates[sender]->setDestId(-1);
-
         return response;
-    } else if (pTschLinkInfo->getLastKnownCommand(sender) == CMD_CLEAR) {
-        EV_DETAIL << "successful CMD_CLEAR" << endl;
+    }
+
+    if (pTschLinkInfo->getLastKnownCommand(sender) == CMD_CLEAR) {
         /* We interrupted an ongoing transaction or got a response to our CLEAR
           => don't need to perform any other checks
           (TODO: Do we still need to check seqNum though? Unclear in the draft!) */
-        std::vector<cellLocation_t> empty;
-        pTschSF->handleResponse(sender, RC_RESET, 0, &empty);
-
-
+        pTschSF->handleResponse(sender, returnCode, 0, emptyCellList);
 
         /* cancel any pending pattern update that we might have created */
         pendingPatternUpdates[sender]->setDestId(-1);
-
         return response;
-    } else if (seqNum == pTschLinkInfo->getLastKnownSeqNum(sender) &&
-               MSG_RESPONSE == pTschLinkInfo->getLastKnownType(sender)) {
-        /* pkt is duplicate, ignore */
-    } else if (returnCode == RC_SEQNUM) {
-        /* we don't currently send/handle those (see comment in handleRequestMsg()) */
-        EV_ERROR <<"received unexpected RC_SEQNUM" << endl;
-    } else if (seqNum != (pTschLinkInfo->getLastKnownSeqNum(sender))) {
-        /* schedule inconsistency detected (sequence number!) or other node has
-           detected an inconsistency in their schedule with us*/
-        pTschSF->handleInconsistency(sender, seqNum);
-    } else {
-        pTschLinkInfo->setLastKnownType(sender, MSG_RESPONSE);
-
-        auto pl = pkt->popAtBack<BytesChunk>(pkt->getDataLength(), Chunk::PF_ALLOW_NULLPTR);
-        if (pl != nullptr) {
-            /* there's piggybacked data, let the SF that uses this data handle it */
-            EV_DETAIL << "Node " << pNodeId << " handling piggybacked data" << endl;
-            pTschSF->handlePiggybackedData(sender,(void*) &pl->getBytes());
-        }
-
-        if (returnCode == RC_CELLLIST) {
-            /* "In case the received Response Code is RC_ERR_CELLLIST,
-                the transaction is aborted and no cell is relocated" */
-            EV_DETAIL << "RC_CELLLIST" << endl;
-            pTschLinkInfo->abortTransaction(sender);
-            pTschSF->handleResponse(sender, returnCode, 0, NULL);
-        } else if (returnCode == RC_SFID) {
-            /* the draft doesn't define how to handle this (yet), wait for updates*/
-        } else if (returnCode == RC_SUCCESS) {
-            EV_DETAIL << "RC_SUCCESS"<< endl;
-
-            std::vector<cellLocation_t> cellList = data->getCellList();
-            auto cellOption = pTschLinkInfo->getLastLinkOption(sender);
-            tsch6pCmd_t command = pTschLinkInfo->getLastKnownCommand(sender);
-            std::vector<cellLocation_t> deleteCells = {};
-
-            switch (command) {
-                case CMD_ADD:
-                    pTschLinkInfo->addCells(sender, cellList, cellOption);
-                    break;
-                case CMD_DELETE:
-                    if (cellList.size() > 0) {
-                        pTschLinkInfo->deleteCells(sender, cellList, cellOption);
-                    } else {
-                        pTschLinkInfo->clearCells(sender);
-                    }
-                    break;
-                case CMD_RELOCATE:
-                    deleteCells = pTschLinkInfo->getRelocationCells(sender);
-                    pTschLinkInfo->relocateCells(sender, cellList, cellOption);
-                    break;
-                default:
-                    EV_ERROR << "unknown or unexpected command" << endl;
-            }
-
-            /* let SF know the transaction it initiated was a success */
-            pTschSF->handleResponse(sender, returnCode, cellList.size(), &cellList);
-
-            /* tell mac layer to update hopping patterns
-               (we can do this here because we will ACK the message we've just
-                handled during the currently active timeframe. all hopping pattern
-                updates will only be active after that.) */
-
-            // TODO: Change to directly update TschSlotframe instead of using msg
-            tsch6topCtrlMsg *msg = new tsch6topCtrlMsg();
-            if (command == CMD_DELETE) {
-                setCtrlMsg_PatternUpdate(msg, sender, cellOption, {}, cellList,data->getTimeout());
-            } else {
-                setCtrlMsg_PatternUpdate(msg, sender, cellOption, cellList, deleteCells,data->getTimeout());
-            }
-            //sendControlDown(msg);
-            updateSchedule(msg);
-
-
-            /* as far as we're considered, this transaction is complete now. */
-            pTschLinkInfo->abortTransaction(sender);
-            pTschLinkInfo->incrementSeqNum(sender);
-        }
     }
+
+    if (seqNum == pTschLinkInfo->getLastKnownSeqNum(sender) && MSG_RESPONSE == pTschLinkInfo->getLastKnownType(sender))
+    {
+        /* pkt is duplicate, ignore */
+        EV_DETAIL << "Received duplicate response, ignoring" << endl;
+        return response;
+    }
+
+    if (returnCode == RC_SEQNUM) {
+        /* we don't currently send/handle those (see comment in handleRequestMsg()) */
+        EV_ERROR << "Received unexpected RC_SEQNUM" << endl;
+        return response;
+    }
+
+//    if (seqNum != pTschLinkInfo->getLastKnownSeqNum(sender)) {
+//        /* schedule inconsistency detected (sequence number!) or other node has
+//           detected an inconsistency in their schedule with us*/
+//        pTschSF->handleInconsistency(sender, seqNum);
+//        return response;
+//    }
+
+    pTschLinkInfo->setLastKnownType(sender, MSG_RESPONSE);
+
+    auto pl = pkt->popAtBack<BytesChunk>(pkt->getDataLength(), Chunk::PF_ALLOW_NULLPTR);
+    if (pl != nullptr) {
+        /* there's piggybacked data, let the SF that uses this data handle it */
+        EV_DETAIL << "Node " << pNodeId << " handling piggybacked data" << endl;
+        pTschSF->handlePiggybackedData(sender,(void*) &pl->getBytes());
+    }
+
+    if (returnCode == RC_CELLLIST) {
+        /* "In case the received Response Code is RC_ERR_CELLLIST,
+            the transaction is aborted and no cell is relocated" */
+        pTschLinkInfo->abortTransaction(sender);
+        pTschSF->handleResponse(sender, returnCode, 0, emptyCellList);
+    } else if (returnCode == RC_SFID) {
+        /* the draft doesn't define how to handle this (yet), wait for updates*/
+    } else if (returnCode == RC_SUCCESS) {
+        std::vector<cellLocation_t> cellList = data->getCellList();
+        auto cellOption = pTschLinkInfo->getLastLinkOption(sender);
+        tsch6pCmd_t command = pTschLinkInfo->getLastKnownCommand(sender);
+        std::vector<cellLocation_t> deleteCells = {};
+
+        switch (command) {
+            case CMD_ADD:
+                pTschLinkInfo->addCells(sender, cellList, cellOption);
+                break;
+            case CMD_DELETE:
+                pTschLinkInfo->deleteCells(sender, cellList, cellOption);
+                break;
+            case CMD_RELOCATE:
+                if (!cellList.size()) {
+                    EV_DETAIL << "Received empty SUCCESS for RELOCATE, none of the proposed cells were accepted!" << endl;
+                    break;
+                }
+
+                deleteCells = pTschLinkInfo->getRelocationCells(sender);
+                pTschLinkInfo->relocateCells(sender, cellList, cellOption);
+                break;
+            default:
+                EV_ERROR << "unknown or unexpected command - " << command << endl;
+        }
+
+        /* let SF know the transaction it initiated was a success */
+        pTschSF->handleResponse(sender, returnCode, cellList.size(), cellList);
+
+        /* tell mac layer to update hopping patterns
+           (we can do this here because we will ACK the message we've just
+            handled during the currently active timeframe. all hopping pattern
+            updates will only be active after that.) */
+
+        // TODO: Change to directly update TschSlotframe instead of using msg
+        tsch6topCtrlMsg *msg = new tsch6topCtrlMsg();
+        if (command == CMD_DELETE)
+            setCtrlMsg_PatternUpdate(msg, sender, cellOption, emptyCellList, cellList, data->getTimeout());
+        else
+            setCtrlMsg_PatternUpdate(msg, sender, cellOption, cellList, deleteCells, data->getTimeout());
+
+        //sendControlDown(msg);
+        updateSchedule(*msg);
+
+        /* as far as we're considered, this transaction is complete now. */
+        pTschLinkInfo->abortTransaction(sender);
+        pTschLinkInfo->incrementSeqNum(sender);
+    }
+
 
     return response;
 }
@@ -753,19 +810,17 @@ void Tsch6topSublayer::receiveSignal(cComponent *source, simsignal_t signalID, c
     Enter_Method_Silent();
     bool txSuccess = false;
 
-    if (signalID == inet::packetDroppedSignal) {
+    if (signalID == inet::packetDroppedSignal)
         txSuccess = false;
-    } else if (signalID == inet::packetSentSignal) {
+    else if (signalID == inet::packetSentSignal)
         txSuccess = true;
-    } else {
+    else
         // we cannot process this signal?!
         return;
-    }
 
     auto pkt = dynamic_cast<Packet *>(value);
-    if (pkt == nullptr) {
+    if (!pkt)
         return;
-    }
 
     // TODO This does not work, find a better solution to filter unwanted signals
     /**auto proto = pkt->getTag<PacketProtocolTag>();
@@ -774,97 +829,119 @@ void Tsch6topSublayer::receiveSignal(cComponent *source, simsignal_t signalID, c
         return;
     }**/
 
-
-
     auto machdr = pkt->popAtFront<Ieee802154eMacHeader>();
     uint64_t destId = machdr->getDestAddr().getInt();
 
-    if (machdr->getNetworkProtocol() == -1 || ProtocolGroup::ethertype.getProtocol(machdr->getNetworkProtocol()) != &Protocol::wiseRoute) {
+    if (machdr->getNetworkProtocol() == -1
+            || ProtocolGroup::ethertype.getProtocol(machdr->getNetworkProtocol()) != &Protocol::wiseRoute)
+    {
         return;
     }
 
     auto sixphdr = pkt->popAtFront<tsch::sixtisch::SixpHeader>();
 
-    if (((tsch6pMsg_t) sixphdr->getType()) == MSG_REQUEST) {
+    if ( sixphdr && ((tsch6pMsg_t) sixphdr->getType()) == MSG_REQUEST )
         return;
-    }
 
     tsch6topCtrlMsg* result = NULL;
 
-    if ((piggybackableData.find(destId) != piggybackableData.end()) &&
-            (piggybackableData[destId].front()->getInTransit() == true)) {
-            if (txSuccess) {
-                /* successfully piggybacked data, remove it from queue */
-                deletePiggybackableData(destId, piggybackableData[destId].front()
-                                                ->getContextPointer());
-            } else {
-                /* data not successfully piggybacked, try again */
-                // TODO: the whole assumption that it's always the front that has been
-                // piggybacked is quite feeble; but time etc etc.
-                piggybackableData[destId].front()->setInTransit(false);
-                if (piggybackableData[destId].front()->getArrivalTime() <= simTime()) {
-                    /* piggyback timeout already ran out, re-schedule */
-                    scheduleAt(simTime()+PIGGYBACKING_BACKOFF,
-                               piggybackableData[destId].front());
-                }
-            }
+    bool pigbackDataExists = piggybackableData.find(destId) != piggybackableData.end();
+    auto pigbackData = piggybackableData[destId];
+
+    if (pigbackDataExists && !pigbackData.empty() && pigbackData.front()->getInTransit()) {
+        if (txSuccess)
+            /* successfully piggybacked data, remove it from queue */
+            deletePiggybackableData(destId, pigbackData.front()->getContextPointer());
+        else {
+            /* data not successfully piggybacked, try again */
+            // TODO: the whole assumption that it's always the front that has been
+            // piggybacked is quite feeble; but time etc etc.
+            pigbackData.front()->setInTransit(false);
+            if (pigbackData.front()->getArrivalTime() <= simTime())
+                /* piggyback timeout already ran out, re-schedule */
+                scheduleAt(simTime() + PIGGYBACKING_BACKOFF, pigbackData.front());
         }
-
-    if (pendingPatternUpdates.find(destId) != pendingPatternUpdates.end()) {
-        /* txsuccess is for a 6P transmission towards one of our neighbors */
-
-        if (txSuccess &&
-            (pendingPatternUpdates[destId]->getDestId() != -1) &&
-            (pendingPatternUpdates[destId]->getTimeout() > simTime()) &&
-            (pTschLinkInfo->inTransaction(destId))) {
-
-            /* LL ACK arrived and there is a pattern update waiting for this ACK
-             * and the transaction hasn't timed out in the meantime */
-            tsch6topCtrlMsg* pendingPatternUpdate = pendingPatternUpdates[destId];
-
-            // TODO: using handleResponse() is a bit hacky since we're the ones who
-            // sent the response, we're just handling the fact that it was ACKed
-            // create dedicated SF fct for that?
-            pTschSF->handleResponse(destId, RC_SUCCESS, 0, NULL);
-            pTschLinkInfo->incrementSeqNum(destId);
-
-            // TODO: wenn reloc: cells in reloccellist aus ptschlinkinfo entfernen
-            pTschLinkInfo->addCells(destId, pendingPatternUpdate->getNewCells(),
-                                        pendingPatternUpdate->getCellOptions());
-
-            if (pendingPatternUpdate->getDeleteCells().size() != 0) {
-                pTschLinkInfo->deleteCells(destId,
-                                           pendingPatternUpdate->getDeleteCells(),
-                                           pendingPatternUpdate->getCellOptions());
-            }
-
-            /* as far as we're considered, this transaction is complete now. */
-            pTschLinkInfo->abortTransaction(destId);
-
-            result = pendingPatternUpdate->dup();
-        }
-
-        // TODO: this gets called in response to SIGNALs as well. might break stuff.
-        /* PatternUpdate is no longer needed */
-        pendingPatternUpdates[destId]->setDestId(-1);
     }
-    if (result != nullptr) {
-        updateSchedule(result);
+
+    if (pendingPatternUpdates.find(destId) == pendingPatternUpdates.end()) {
+        EV_DETAIL << "We are in test condition #1" << endl;
+//        if (pTschLinkInfo->inTransaction(destId))
+//            pTschLinkInfo->abortTransaction(destId); // EXPERIMENTAL: clear in-transaction flag for TSCH-ACKs on RC_RESET
+
+        return;
     }
-    pTschSF->recordPDR(nullptr); // TODO call with meaningfull parameters
+
+    /* txsuccess is for a 6P transmission towards one of our neighbors */
+    if (txSuccess && pendingPatternUpdates[destId]->getDestId() != -1
+            && pendingPatternUpdates[destId]->getTimeout() > simTime()
+            && pTschLinkInfo->inTransaction(destId))
+    {
+        /* LL ACK arrived and there is a pattern update waiting for this ACK
+         * and the transaction hasn't timed out in the meantime */
+        EV_DETAIL << "LL ACK arrived and there is a pattern update waiting for this ACK" << endl;
+
+        tsch6topCtrlMsg* pendingPatternUpdate = pendingPatternUpdates[destId];
+        auto cellsToAdd = pendingPatternUpdate->getNewCells();
+        auto cellsToDelete = pendingPatternUpdate->getDeleteCells();
+        auto cellOptions = pendingPatternUpdate->getCellOptions();
+
+        EV_DETAIL << "Cells to add: " << cellsToAdd << "to delete: " << cellsToDelete << endl;
+
+        // TODO: using handleResponse() is a bit hacky since we're the ones who
+        // sent the response, we're just handling the fact that it was ACKed
+        // create dedicated SF fct for that?
+        pTschSF->handleResponse(destId, RC_SUCCESS, 0, NULL);
+//        pTschLinkInfo->incrementSeqNum(destId);
+
+        // TODO: wenn reloc: cells in reloccellist aus ptschlinkinfo entfernen
+        pTschLinkInfo->addCells(destId, cellsToAdd, cellOptions);
+
+        if (cellsToDelete.size())
+            pTschLinkInfo->deleteCells(destId, cellsToDelete, cellOptions);
+
+//        /* as far as we're considered, this transaction is complete now. */
+//        pTschLinkInfo->abortTransaction(destId);
+
+        result = pendingPatternUpdate->dup();
+    }
+
+    if (pTschLinkInfo->inTransaction(destId))
+    {
+        /* as far as we're considered, this transaction is complete now. */
+        // EXPERIMENTAL: moved these 2 lines here to ensure proper seqNum management and transaction termination
+        // when receiving an ACK for empty RC_SUCCESS
+        pTschLinkInfo->incrementSeqNum(destId);
+        pTschLinkInfo->abortTransaction(destId);
+    }
+
+    // TODO: this gets called in response to SIGNALs as well. might break stuff.
+    /* PatternUpdate is no longer needed */
+    pendingPatternUpdates[destId]->setDestId(-1);
+
+    if (result != nullptr)
+        updateSchedule(*result);
+
+    pTschSF->recordPDR(nullptr); // TODO call with meaningful parameters
 }
 
 Packet* Tsch6topSublayer::handleTransactionTimeout(tschLinkInfoTimeoutMsg* tom) {
     uint64_t destId = tom->getNodeId();
-    //uint8_t seqNum = tom->getSeqNum();
+    uint8_t seqNum = tom->getSeqNum();
+    std::vector<cellLocation_t> emptyCellList = {};
 
-    if (!pTschLinkInfo->linkInfoExists(destId)) {
-        EV_WARN <<"received timeout for link that doesn't exist something"
-                    "went colossally wrong" << endl;
-    }
+    auto lastCmd = pTschLinkInfo->getLastKnownCommand(destId);
+    auto lastType = pTschLinkInfo->getLastKnownType(destId);
+
+    EV_DETAIL << "Timeout fired for " << lastCmd << " "
+            << lastType << " addressed to " << MacAddress(destId) << endl;
+
+    if (!pTschLinkInfo->linkInfoExists(destId))
+        EV_WARN << "Received timeout for link that doesn't exist, something went very wrong" << endl;
 
     /* Notify SF that it might want to try again */
-    pTschSF->handleResponse(destId, RC_RESET, 0, NULL);
+    pTschSF->handleResponse(destId, RC_RESET, 0, emptyCellList);
+
+    numTimeouts++;
 
     return NULL;
 }
@@ -872,7 +949,8 @@ Packet* Tsch6topSublayer::handleTransactionTimeout(tschLinkInfoTimeoutMsg* tom) 
 Packet* Tsch6topSublayer::createAddRequest(uint64_t destId, uint8_t seqNum,
                                        uint8_t cellOptions, int numCells,
                                        std::vector<cellLocation_t>& cellList,
-                                       simtime_t timeout) {
+                                       simtime_t timeout)
+{
     if (numCells == 0 || timeout <= 0) {
         return NULL;
     }
@@ -904,17 +982,17 @@ Packet* Tsch6topSublayer::createAddRequest(uint64_t destId, uint8_t seqNum,
 
     pkt->addTagIfAbsent<PacketProtocolTag>()->setProtocol(&Protocol::wiseRoute);
     auto virtualTag = pkt->addTagIfAbsent<VirtualLinkTagReq>();
-    virtualTag->setVirtualLinkID(-1);
+    virtualTag->setVirtualLinkID(-2);
     return pkt;
 }
 
 Packet* Tsch6topSublayer::createDeleteRequest(uint64_t destId, uint8_t seqNum,
                             uint8_t cellOptions, int numCells,
-                            std::vector<cellLocation_t> &cellList,
-                            simtime_t timeout) {
-    if (numCells == 0 || timeout <= 0 || numCells > (int)cellList.size()) {
+                            std::vector<cellLocation_t> cellList,
+                            simtime_t timeout)
+{
+    if (numCells == 0 || timeout <= 0 || numCells > (int)cellList.size())
         return NULL;
-    }
 
     int cellListSz = cellHdrSz * cellList.size();
 
@@ -943,7 +1021,7 @@ Packet* Tsch6topSublayer::createDeleteRequest(uint64_t destId, uint8_t seqNum,
 
     pkt->addTagIfAbsent<PacketProtocolTag>()->setProtocol(&Protocol::wiseRoute);
     auto virtualTag = pkt->addTagIfAbsent<VirtualLinkTagReq>();
-        virtualTag->setVirtualLinkID(-1);
+    virtualTag->setVirtualLinkID(-2);
     return pkt;
 }
 
@@ -986,7 +1064,7 @@ Packet* Tsch6topSublayer::createRelocationRequest(uint64_t destId, uint8_t seqNu
 
     pkt->addTagIfAbsent<PacketProtocolTag>()->setProtocol(&Protocol::wiseRoute);
     auto virtualTag = pkt->addTagIfAbsent<VirtualLinkTagReq>();
-        virtualTag->setVirtualLinkID(-1);
+        virtualTag->setVirtualLinkID(-2);
     return pkt;
 }
 
@@ -1013,7 +1091,7 @@ Packet* Tsch6topSublayer::createClearRequest(uint64_t destId, uint8_t seqNum) {
 
     pkt->addTagIfAbsent<PacketProtocolTag>()->setProtocol(&Protocol::wiseRoute);
     auto virtualTag = pkt->addTagIfAbsent<VirtualLinkTagReq>();
-        virtualTag->setVirtualLinkID(-1);
+        virtualTag->setVirtualLinkID(-2);
     return pkt;
 }
 
@@ -1047,13 +1125,14 @@ Packet* Tsch6topSublayer::createSignalRequest(uint64_t destId, uint8_t seqNum,
 
     pkt->addTagIfAbsent<PacketProtocolTag>()->setProtocol(&Protocol::wiseRoute);
     auto virtualTag = pkt->addTagIfAbsent<VirtualLinkTagReq>();
-        virtualTag->setVirtualLinkID(-1);
+        virtualTag->setVirtualLinkID(-2);
     return pkt;
 }
 
 Packet* Tsch6topSublayer::createSuccessResponse(uint64_t destId, uint8_t seqNum,
                                         std::vector<cellLocation_t> &cellList,
-                                        simtime_t timeout) {
+                                        simtime_t timeout)
+{
     int cellListSz = cellHdrSz * cellList.size();
 
     const auto& sixpHeader = makeShared<tsch::sixtisch::SixpHeader>();
@@ -1079,18 +1158,17 @@ Packet* Tsch6topSublayer::createSuccessResponse(uint64_t destId, uint8_t seqNum,
 
     pkt->addTagIfAbsent<PacketProtocolTag>()->setProtocol(&Protocol::wiseRoute);
     auto virtualTag = pkt->addTagIfAbsent<VirtualLinkTagReq>();
-        virtualTag->setVirtualLinkID(-1);
+        virtualTag->setVirtualLinkID(-2);
     return pkt;
 }
 
 Packet* Tsch6topSublayer::createErrorResponse(uint64_t destId, uint8_t seqNum,
                                           tsch6pReturn_t returnCode,
-                                          simtime_t timeout) {
-    if (returnCode <  RC_ERROR ||
-        returnCode == RC_SEQNUM ) {
+                                          simtime_t timeout)
+{
+    if (returnCode < RC_ERROR || returnCode == RC_SEQNUM )
         /* returnCode isn't an error code, abort. */
         return NULL;
-    }
 
     const auto& sixpHeader = makeShared<tsch::sixtisch::SixpHeader>();
     sixpHeader->setType(MSG_RESPONSE);
@@ -1113,7 +1191,7 @@ Packet* Tsch6topSublayer::createErrorResponse(uint64_t destId, uint8_t seqNum,
 
     pkt->addTagIfAbsent<PacketProtocolTag>()->setProtocol(&Protocol::wiseRoute);
     auto virtualTag = pkt->addTagIfAbsent<VirtualLinkTagReq>();
-        virtualTag->setVirtualLinkID(-1);
+        virtualTag->setVirtualLinkID(-2);
     return pkt;
 }
 
@@ -1141,14 +1219,15 @@ Packet* Tsch6topSublayer::createSeqNumErrorResponse(uint64_t destId,
 
     pkt->addTagIfAbsent<PacketProtocolTag>()->setProtocol(&Protocol::wiseRoute);
     auto virtualTag = pkt->addTagIfAbsent<VirtualLinkTagReq>();
-        virtualTag->setVirtualLinkID(-1);
+        virtualTag->setVirtualLinkID(-2);
     return pkt;
 }
 
 Packet* Tsch6topSublayer::createClearResponse(uint64_t destId, uint8_t seqNum,
                                                     tsch6pReturn_t returnCode,
-                                                    simtime_t timeout) {
-    if ((returnCode != RC_SUCCESS) && (returnCode != RC_RESET)) {
+                                                    simtime_t timeout)
+{
+    if (returnCode != RC_SUCCESS && returnCode != RC_RESET) {
         /* returnCode isn't valid, abort. */
         return NULL;
     }
@@ -1174,7 +1253,7 @@ Packet* Tsch6topSublayer::createClearResponse(uint64_t destId, uint8_t seqNum,
 
     pkt->addTagIfAbsent<PacketProtocolTag>()->setProtocol(&Protocol::wiseRoute);
     auto virtualTag = pkt->addTagIfAbsent<VirtualLinkTagReq>();
-        virtualTag->setVirtualLinkID(-1);
+        virtualTag->setVirtualLinkID(-2);
     return pkt;
 }
 
@@ -1185,7 +1264,13 @@ tsch6topCtrlMsg* Tsch6topSublayer::setCtrlMsg_PatternUpdate(
                             uint8_t cellOption,
                             std::vector<cellLocation_t> newCells,
                             std::vector<cellLocation_t> deleteCells,
-                            simtime_t timeout) {
+                            simtime_t timeout)
+{
+    // TODO: Check if such nullptr handling is really appropriate here or expection should be thrown,
+    // introduced this during MSF mobility handling debug
+    if (!msg)
+        msg = new tsch6topCtrlMsg();
+
     msg->setKind(CTRLMSG_PATTERNUPDATE);
     msg->setDestId(destId);
     msg->setCellOptions(cellOption);
@@ -1196,12 +1281,11 @@ tsch6topCtrlMsg* Tsch6topSublayer::setCtrlMsg_PatternUpdate(
     return msg;
 }
 
-void Tsch6topSublayer::updateSchedule(tsch6topCtrlMsg* msg){
-
-    for (cellLocation_t cell : msg->getNewCells()) {
+void Tsch6topSublayer::updateSchedule(tsch6topCtrlMsg msg) {
+    for (cellLocation_t cell : msg.getNewCells()) {
         TschLink *tl = schedule->createLink();
-        tl->setAddr(inet::MacAddress(msg->getDestId()));
-        uint8_t cellOption = msg->getCellOptions();
+        tl->setAddr(inet::MacAddress(msg.getDestId()));
+        uint8_t cellOption = msg.getCellOptions();
         tl->setShared(getCellOptions_isSHARED(cellOption));
         tl->setRx(getCellOptions_isRX(cellOption));
         tl->setTx(getCellOptions_isTX(cellOption));
@@ -1211,17 +1295,13 @@ void Tsch6topSublayer::updateSchedule(tsch6topCtrlMsg* msg){
         schedule->addLink(tl);
     }
 
-    for (cellLocation_t cell : msg->getDeleteCells()) {
-        if (!schedule->removeLinkFromOffset(cell.timeOffset,
-                cell.channelOffset)) {
-            EV_DETAIL << "The link with SlotOffset: " << cell.timeOffset
-                             << " and ChannelOffset: " << cell.channelOffset
-                             << " does not exist" << endl;
-        } else {
-            EV_DETAIL << "link with slotOffset " << cell.timeOffset << " and channelOffset " << cell.channelOffset << " removed" << endl;
-        }
+    for (auto cell : msg.getDeleteCells())
+    {
+        if ( !schedule->removeLinkAtCell(cell) )
+            EV_DETAIL << "Link at " << cell << " doesn't exist" << endl;
+        else
+            EV_DETAIL << "Link at " << cell << " deleted" << endl;
     }
-    delete msg;
 }
 
 
@@ -1234,11 +1314,10 @@ void Tsch6topSublayer::setCellOption(uint8_t* cellOptions, uint8_t option) {
 uint8_t Tsch6topSublayer::invertCellOption(uint8_t senderOpt) {
     uint8_t myOpt = MAC_LINKOPTIONS_SHARED;
     if (senderOpt != MAC_LINKOPTIONS_SHARED) {
-        if (senderOpt == MAC_LINKOPTIONS_TX) {
+        if (senderOpt == MAC_LINKOPTIONS_TX)
             myOpt = MAC_LINKOPTIONS_RX;
-        } else {
+        else
             myOpt = MAC_LINKOPTIONS_TX;
-        }
     }
 
     return myOpt;
@@ -1282,13 +1361,13 @@ simtime_t Tsch6topSublayer::getAbsoluteTimeout(int timeout) {
 uint8_t Tsch6topSublayer::prepLinkForRequest(uint64_t destId, simtime_t absoluteTimeout) {
     uint8_t seqNum = 0;
 
-    if(!pTschLinkInfo->linkInfoExists(destId)) {
+    if (!pTschLinkInfo->linkInfoExists(destId)) {
         /* We don't have a link to destId yet, register one and start @ SeqNum 0 */
-        EV_INFO << "We don't have a link to " << MacAddress(destId).str() << " yet, register one and start @ SeqNum 0" << endl;
+        EV_INFO << "We don't have a link to " << MacAddress(destId) << " yet, register one and start at seqNum 0" << endl;
         pTschLinkInfo->addLink(destId, true, absoluteTimeout, seqNum);
     } else {
         seqNum = pTschLinkInfo->getSeqNum(destId);
-        EV_INFO << "We already have a link to " << MacAddress(destId).str() << " with seqNum " << +seqNum << endl;
+        EV_INFO << "Found link to " << MacAddress(destId) << " with seqNum " << +seqNum << endl;
         /* Link already exists, update its info */
         pTschLinkInfo->setInTransaction(destId, absoluteTimeout);
         pTschLinkInfo->setLastKnownType(destId, MSG_REQUEST);
@@ -1298,24 +1377,25 @@ uint8_t Tsch6topSublayer::prepLinkForRequest(uint64_t destId, simtime_t absolute
 }
 
 void Tsch6topSublayer::piggybackOnMessage(Packet* pkt, uint64_t destId) {
-    if (piggybackableData.find(destId) != piggybackableData.end()) {
-        /* vector for destId exists: there might be data to piggyback */
-        for(auto i = piggybackableData[destId].begin();
-                i != piggybackableData[destId].end(); ++i) {
-            if ((*i)->getInTransit() == false) {
-                /* found data to piggyback, put it in our packet */
-                const auto& payloadCast = static_cast<uint8_t *>((*i)->getContextPointer());
+    if (piggybackableData.find(destId) == piggybackableData.end())
+        return;
 
-                const auto& payloadChunk = makeShared<BytesChunk>(payloadCast, (((*i)->getPayloadSz())/8));
+    auto pigbackData = piggybackableData[destId];
 
-                (*i)->setInTransit(true);
+    /* vector for destId exists: there might be data to piggyback */
+    for (auto it = pigbackData.begin(); it != pigbackData.end(); ++it) {
+        if ((*it)->getInTransit())
+            continue;
 
-                pkt->insertAtBack(payloadChunk);
+        /* found data to piggyback, put it in our packet */
+        const auto& payloadCast = static_cast<uint8_t *>((*it)->getContextPointer());
+        const auto& payloadChunk = makeShared<BytesChunk>(payloadCast, ( ((*it)->getPayloadSz()) / 8) );
 
-                break;
-            }
-        }
-  }
+        (*it)->setInTransit(true);
+        pkt->insertAtBack(payloadChunk);
+
+        break;
+    }
 }
 
 // TODO: remove this and just use erase nstead?! piggybackabledata now just contains
