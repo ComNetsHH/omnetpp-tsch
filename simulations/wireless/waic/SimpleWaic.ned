@@ -1,8 +1,9 @@
 //
 // Simulation model for IEEE 802.15.4 Time Slotted Channel Hopping (TSCH)
 //
-// Copyright (C) 2019  Institute of Communication Networks (ComNets),
+// Copyright (C) 2021  Institute of Communication Networks (ComNets),
 //                     Hamburg University of Technology (TUHH)
+//           (C) 2021  Yevhenii Shudrenko
 //           (C) 2019  Daniel Ploeger
 //           (C) 2019  Leo Krueger
 //           (C) 2006  Andras Varga
@@ -20,7 +21,6 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 //
-
 
 package tsch.simulations.wireless.waic;
 

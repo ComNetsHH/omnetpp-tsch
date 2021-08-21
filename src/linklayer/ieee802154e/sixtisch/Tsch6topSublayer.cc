@@ -37,7 +37,6 @@
 //#include "TschMacWaic.h"
 
 #include "../TschLink.h"
-//#include "TschSFTest.h"
 #include "TschSF.h"
 //#include "msg/tschSpectrumSensingResult_m.h"
 #include "tsch6pPiggybackTimeoutMsg_m.h"
@@ -55,7 +54,6 @@
 #include "../Ieee802154eMacHeader_m.h"
 #include "inet/common/ProtocolGroup.h"
 //#include "TschImprovisedTests.h"
-
 
 using namespace omnetpp;
 using namespace tsch;
@@ -469,17 +467,17 @@ Packet* Tsch6topSublayer::handleRequestMsg(Packet* pkt,
         return createErrorResponse(sender, seqNum, RC_RESET, data->getTimeout());
     }
 
-    if (seqNum != 0 && seqNum != (pTschLinkInfo->getLastKnownSeqNum(sender))) {
-        /* schedule inconsistency detected (sequence number!) */
-        EV_WARN << "Received seqNum - " << unsigned(seqNum) << ", expected - "
-                << unsigned(pTschLinkInfo->getLastKnownSeqNum(sender)) << endl;
-
-        // The Draft mandates that we should send a RC_SEQNUM response but handling
-        // those is a bit underspecified for 2-2way transactions so I'm going
-        // to do it this way for now.
-        pTschSF->handleInconsistency(sender, seqNum);
-        return response;
-    }
+//    if (seqNum != 0 && seqNum != (pTschLinkInfo->getLastKnownSeqNum(sender))) {
+//        /* schedule inconsistency detected (sequence number!) */
+//        EV_WARN << "Received seqNum - " << unsigned(seqNum) << ", expected - "
+//                << unsigned(pTschLinkInfo->getLastKnownSeqNum(sender)) << endl;
+//
+//        // The Draft mandates that we should send a RC_SEQNUM response but handling
+//        // those is a bit underspecified for 2-2way transactions so I'm going
+//        // to do it this way for now.
+//        pTschSF->handleInconsistency(sender, seqNum);
+//        return response;
+//    }
 
     if (cmd == CMD_SIGNAL) {
         /* SIGNALs currently don't behave like fully-fledged requests so
@@ -732,12 +730,12 @@ Packet* Tsch6topSublayer::handleResponseMsg(Packet* pkt, inet::IntrusivePtr<cons
         return response;
     }
 
-    if (seqNum != pTschLinkInfo->getLastKnownSeqNum(sender)) {
-        /* schedule inconsistency detected (sequence number!) or other node has
-           detected an inconsistency in their schedule with us*/
-        pTschSF->handleInconsistency(sender, seqNum);
-        return response;
-    }
+//    if (seqNum != pTschLinkInfo->getLastKnownSeqNum(sender)) {
+//        /* schedule inconsistency detected (sequence number!) or other node has
+//           detected an inconsistency in their schedule with us*/
+//        pTschSF->handleInconsistency(sender, seqNum);
+//        return response;
+//    }
 
     pTschLinkInfo->setLastKnownType(sender, MSG_RESPONSE);
 

@@ -1,8 +1,22 @@
 /*
- * TschCLSF.cc
+ * Cross-layer Scheduling Function.
  *
- *  Created on: Aug 13, 2021
- *      Author: yevhenii
+ * Copyright (C) 2021  Institute of Communication Networks (ComNets),
+ *                     Hamburg University of Technology (TUHH)
+ *           (C) 2021  Yevhenii Shudrenko
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 #include "TschCLSF.h"
@@ -55,6 +69,64 @@ void TschCLSF::refreshDisplay() const {
     hostNode->getDisplayString().setTagArg("t", 0, out.str().c_str());
 }
 
+
+void TschCLSF::handlePacketEnqueued(uint64_t dest) {
+    if (MacAddress(dest) == MacAddress::BROADCAST_ADDRESS)
+        return;
+
+    auto txCells = pTschLinkInfo->getCellsByType(dest, MAC_LINKOPTIONS_TX);
+
+    EV_DETAIL << "Received MAC notification for a packet "
+            << MacAddress(dest) << ",\ncells scheduled to this neighbor: " << txCells << endl;
+
+    bool scheduleInconsistency = false;
+
+    for (auto cell : txCells) {
+        if (!schedule->getLinkByCellCoordinates(cell.timeOffset, cell.channelOffset)) {
+            EV_WARN << "TX cell at [ " << cell.timeOffset << ", "
+                    << cell.channelOffset << " ] missing from the schedule!" << endl;
+            scheduleInconsistency = true;
+        }
+    }
+
+    // Heuristic, checking if there's a dedicated cell to preferred parent whenever a packet is enqueued
+//    if (rplParentId == dest) {
+//        auto dedicatedCells = pTschLinkInfo->getDedicatedCells(dest);
+//
+//        if (!dedicatedCells.size() && !pTschLinkInfo->inTransaction(dest)) {
+//            EV_DETAIL << "No dedicated TX cell found to preferred parent, and " <<
+//                    "we are currently not in transaction with him, attempting to add one TX cell" << endl;
+//            addCells(dest, 1);
+//        }
+//    }
+
+    // If the node's just a neighbor, schedule an auto cell if there's no cell at all
+    if (!txCells.size() || scheduleInconsistency)
+        scheduleAutoCell(dest);
+
+    if (isCrossLayerInfoAvailable()) {
+
+        if (dest == rplParentId) {
+            auto dedicatedCells = pTschLinkInfo->getDedicatedCells(dest);
+
+            if (!dedicatedCells.size() && !pTschLinkInfo->inTransaction(dest)) {
+                EV_DETAIL << "No dedicated TX cell found to pref. parent and " <<
+                        "we are currently not in transaction with it, attempting to add one TX cell" << endl;
+                addCells(dest, 1);
+            }
+        }
+
+    } else {
+        auto dedicatedCells = pTschLinkInfo->getDedicatedCells(dest);
+
+        if (!dedicatedCells.size() && !pTschLinkInfo->inTransaction(dest)) {
+            EV_DETAIL << "No dedicated TX cell found to pref. parent and " <<
+                    "we are currently not in transaction with it, attempting to add one TX cell" << endl;
+            addCells(dest, 1);
+        }
+    }
+
+}
 
 offset_t TschCLSF::chooseCrossLayerChOffset() {
     // FIXME: Magic numbers
@@ -121,10 +193,24 @@ vector<offset_t> TschCLSF::getAvailableSlotsInRange(int start, int end, int pad)
     // heuristic to loosen the bounds of a slotframe chunk a little
    start -= pad;
    end += pad;
-   start = start > 0 ? start : 0;
-   end = end > pSlotframeLength ? pSlotframeLength : end;
 
-   return TschMSF::getAvailableSlotsInRange(start, end);
+   if (start < 0) {
+       end += pad; // compensate for tight starting bound from the end
+       start = 0;
+   }
+
+   if (end > pSlotframeLength) {
+       end = pSlotframeLength;
+       start -= pad; // compensate for tight closing bound from the start
+   }
+
+   EV_DETAIL << "CLSF looking for available slots in range: " << start << ", " << end << ", padding = " << pad << endl;
+
+   auto freeSlots = TschMSF::getAvailableSlotsInRange(start, end);
+
+   EV_DETAIL << "Found free slots: " << freeSlots << endl;
+
+   return freeSlots;
 }
 
 int TschCLSF::createCellList(uint64_t destId, std::vector<cellLocation_t> &cellList, int numCells) {
@@ -250,6 +336,7 @@ void TschCLSF::receiveSignal(cComponent *src, simsignal_t id, long value, cObjec
 
     std::string signalName = getSignalName(id);
 
+    // TODO: refactor into signal references
     if (std::strcmp(signalName.c_str(), "setChOffset") == 0)
     {
         setBranchChannelOffset((int) value);

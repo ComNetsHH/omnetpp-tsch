@@ -20,8 +20,6 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 #include "TschMSF.h"
-
-//#include "Rpl.h"
 #include "RplDefs.h"
 #include "Tsch6tischComponents.h"
 #include "../Ieee802154eMac.h"
@@ -474,6 +472,7 @@ void TschMSF::scheduleMinimalCells(int numMinimalCells, int slotframeLength) {
 void TschMSF::removeAutoTxCell(uint64_t neighbor) {
     std::vector<cellLocation_t> cellList;
 
+    // TODO: Check correctness of this auto cell search
     for (auto &cell: pTschLinkInfo->getCells(neighbor))
         if (std::get<1>(cell) != 0xFF && getCellOptions_isAUTO(std::get<1>(cell)))
             cellList.push_back(std::get<0>(cell));
@@ -642,7 +641,7 @@ bool TschMSF::checkOverlapping() {
             auto slOf = link->getSlotOffset();
             auto nodeId = link->getAddr().getInt();
             if (std::count(dedicatedSlOffsets.begin(), dedicatedSlOffsets.end(), slOf)) {
-                handleInconsistency(link->getAddr().getInt(), 0);
+//                handleInconsistency(link->getAddr().getInt(), 0);
                 return true;
             }
             else
@@ -708,8 +707,8 @@ void TschMSF::handleSuccessResponse(uint64_t sender, tsch6pCmd_t cmd, int numCel
             removeAutoTxCell(sender);
 
             // FIXME: magic numbers
-            pMaxNumCells = pow(2, (int) pTschLinkInfo->getDedicatedCells(sender).size()) * par("maxNumCells").intValue();
-//            pMaxNumCells = 2 * ((int) pTschLinkInfo->getDedicatedCells(sender).size()) + par("maxNumCells").intValue();
+//            pMaxNumCells = pow(2, (int) pTschLinkInfo->getDedicatedCells(sender).size()) * par("maxNumCells").intValue();
+            pMaxNumCells = 2 * ((int) pTschLinkInfo->getDedicatedCells(sender).size()) + par("maxNumCells").intValue();
 
             EV_DETAIL << "6P ADD succeeded, " << cellList << " added" << endl;
             break;
@@ -781,12 +780,12 @@ void TschMSF::handleResponse(uint64_t sender, tsch6pReturn_t code, int numCells,
             break;
         }
         // Handle all other return codes (RC_RESET, RC_ERROR, RC_VERSION, RC_SFID, ...) as a generic error
-        default: {
-            clearCellStats(cellList);
-            clearScheduleWithNode(sender);
-            pTschLinkInfo->resetLink(sender, MSG_RESPONSE);
-            numLinkResets++;
-        }
+//        default: {
+//            clearCellStats(cellList);
+//            clearScheduleWithNode(sender);
+//            pTschLinkInfo->resetLink(sender, MSG_RESPONSE);
+//            numLinkResets++;
+//        }
     }
 }
 
@@ -842,6 +841,11 @@ void TschMSF::addCells(uint64_t nodeId, int numCells, uint8_t cellOptions, int d
 }
 
 void TschMSF::deleteCells(uint64_t nodeId, int numCells) {
+    if (numCells <= 0) {
+        EV_WARN << "Invalid number of cells requested to delete" << endl;
+        return;
+    }
+
     std::vector<cellLocation_t> dedicated = pTschLinkInfo->getDedicatedCells(nodeId);
 
     if (!dedicated.size()) {

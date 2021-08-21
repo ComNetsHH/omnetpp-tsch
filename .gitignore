@@ -17,7 +17,7 @@ precompiled_*.h.*
 **/*.anf
 **/*.json
 **/tsch-master_dbg
-#**/*.csv*
+**/*.csv*
 **/simulation
 .settings/
 /doc/doxy/

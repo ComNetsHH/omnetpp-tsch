@@ -35,7 +35,6 @@
 
 #include <omnetpp.h>
 
-//#include "MiXiMDefs.h"
 //#include "BaseApplLayer.h"
 #include "inet/applications/base/ApplicationBase.h"
 

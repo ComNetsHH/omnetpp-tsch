@@ -261,7 +261,7 @@ class TschMSF: public TschSF, public cListener {
      *
      * @param destId MAC address of the destination for which there's a packet enqueued
      */
-    void handlePacketEnqueued(uint64_t destId);
+    virtual void handlePacketEnqueued(uint64_t destId);
 
    protected:
     virtual void refreshDisplay() const override;

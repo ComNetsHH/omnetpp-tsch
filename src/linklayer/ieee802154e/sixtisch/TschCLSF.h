@@ -1,8 +1,22 @@
 /*
- * TschCLSF.h
+ * Cross-layer Scheduling Function.
  *
- *  Created on: Aug 13, 2021
- *      Author: yevhenii
+ * Copyright (C) 2021  Institute of Communication Networks (ComNets),
+ *                     Hamburg University of Technology (TUHH)
+ *           (C) 2021  Yevhenii Shudrenko
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 #ifndef LINKLAYER_IEEE802154E_SIXTISCH_TSCHCLSF_H_
@@ -44,10 +58,11 @@ private:
     vector<cellLocation_t> getNonDaisyChained(vector<cellLocation_t> cellList);
 
     // Functions overriden from the MSF
-    void deleteCells(uint64_t nodeId, int numCells) override;
-    int createCellList(uint64_t destId, vector<cellLocation_t> &cellList, int numCells) override;
-    void handleSuccessRelocate(uint64_t sender, vector<cellLocation_t> cellList) override;
-    void relocateCells(uint64_t neighbor, vector<cellLocation_t> relocCells) override;
+    virtual void deleteCells(uint64_t nodeId, int numCells) override;
+    virtual int createCellList(uint64_t destId, vector<cellLocation_t> &cellList, int numCells) override;
+    virtual void handleSuccessRelocate(uint64_t sender, vector<cellLocation_t> cellList) override;
+    virtual void relocateCells(uint64_t neighbor, vector<cellLocation_t> relocCells) override;
+    virtual void handlePacketEnqueued(uint64_t destId) override;
 
     // Signals handling
     void receiveSignal(cComponent *src, simsignal_t id, long value, cObject *details) override;
