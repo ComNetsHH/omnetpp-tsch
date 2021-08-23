@@ -25,7 +25,7 @@ simple TschMSF like TschSF
         double relocatePdrThresh = default(0.50); // if cell exhibits PDR worse than this, relocate it!
         int maxNumCells = default(intuniform(4, 10)); // sliding window size to esmitate cell utilization
         int maxNumTx = default(254); // maximum number of elapsed cells to consider for PDR calculation
-        int slotframeLen = default(101);
+//        int slotframeLen = default(101);
         int cellListRedundancy = default(3); // number of additional cells to pad CELL_LIST in 6P transcations
 
         int cellBandwidthIncrement = default(1); // number of cells to add with neighbor if cell usage is excessive

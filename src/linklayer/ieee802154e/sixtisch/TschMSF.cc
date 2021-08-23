@@ -780,12 +780,12 @@ void TschMSF::handleResponse(uint64_t sender, tsch6pReturn_t code, int numCells,
             break;
         }
         // Handle all other return codes (RC_RESET, RC_ERROR, RC_VERSION, RC_SFID, ...) as a generic error
-//        default: {
-//            clearCellStats(cellList);
-//            clearScheduleWithNode(sender);
-//            pTschLinkInfo->resetLink(sender, MSG_RESPONSE);
-//            numLinkResets++;
-//        }
+        default: {
+            clearCellStats(cellList);
+            clearScheduleWithNode(sender);
+            pTschLinkInfo->resetLink(sender, MSG_RESPONSE);
+            numLinkResets++;
+        }
     }
 }
 

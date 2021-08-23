@@ -1,8 +1,9 @@
 //
 // Simulation model for IEEE 802.15.4 Time Slotted Channel Hopping (TSCH)
 //
-// Copyright (C) 2019  Institute of Communication Networks (ComNets),
+// Copyright (C) 2021  Institute of Communication Networks (ComNets),
 //                     Hamburg University of Technology (TUHH)
+//           (C) 2021  Yevhenii Shudrenko
 //           (C) 2019  Daniel Ploeger
 //           (C) 2019  Leo Krueger
 //           (C) 2006  Andras Varga
@@ -32,7 +33,30 @@ import inet.node.inet.WirelessHost;
 import rpl.RplRouter;
 import rpl.configurator.RplNetConfigurator;
 
-network Linear extends Branches
+network Generic
 {
-    @display("bgb=158.776,61.587997");
+    parameters:
+        @display("bgb=40,85");
+        int numSinks = default(1);
+        int numHosts = default(30);
+    submodules:
+        configurator: RplNetConfigurator {
+            parameters:
+                @display("p=27.91269,1.9802921;is=s");
+        }
+        radioMedium: <> like IRadioMedium {
+            parameters:
+                @display("p=28.006989,6.9781723;is=s");
+        }
+
+        sink[numSinks]: RplRouter {
+            parameters:
+                @6tisch;
+                @display("r=,,#707070;p=17.63403,16.219536");
+        }
+        host[numHosts]: RplRouter {
+            parameters:
+                @6tisch;
+                @display("r=,,#707070;p=17.63403,16.219536");
+        }
 }
