@@ -142,7 +142,7 @@ void TschMSF::scheduleAutoRxCell(InterfaceToken euiAddr) {
 }
 
 void TschMSF::scheduleAutoCell(uint64_t neighbor) {
-    EV_DETAIL << "Scheduling auto cell to " << MacAddress(neighbor) << endl;
+    EV_DETAIL << "Trying to schedule an auto cell to " << MacAddress(neighbor) << endl;
 
     // Although this is always supposed to be a single cell,
     // implementation-wise it's easier to keep it as vector
@@ -173,7 +173,7 @@ void TschMSF::scheduleAutoCell(uint64_t neighbor) {
     cellList.push_back({slotOffset, nbruid % pNumChannels});
     ctrlMsg->setNewCells(cellList);
 
-    EV_DETAIL << "Scheduling auto TX cell at " << cellList << " to neighbor - " << MacAddress(neighbor) << endl;
+    EV_DETAIL << "Scheduling auto TX cell at " << cellList.back() << " to " << MacAddress(neighbor) << endl;
 
     pTschLinkInfo->addLink(neighbor, false, 0, 0);
     pTschLinkInfo->addCell(neighbor, cellList.back(), MAC_LINKOPTIONS_TX | MAC_LINKOPTIONS_SHARED | MAC_LINKOPTIONS_SRCAUTO);
@@ -610,8 +610,10 @@ int TschMSF::pickCells(uint64_t destId, std::vector<cellLocation_t> &cellList,
             EV_DETAIL << " unavailable" << endl;
     }
     cellList.clear();
-    for (auto i = 0; i < numCells && i < (int) pickedCells.size(); i++)
+    for (auto i = 0; i < numCells && i < (int) pickedCells.size(); i++) {
         cellList.push_back(pickedCells[i]);
+        reservedTimeOffsets[destId].push_back(pickedCells[i].timeOffset);
+    }
 
     EV_DETAIL << "Cell list after picking: " << cellList << endl;
 

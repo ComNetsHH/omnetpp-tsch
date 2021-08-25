@@ -254,6 +254,12 @@ private:
     /** statistics: number of 6p messages sent */
     simsignal_t s_6pMsgSent;
 
+    simsignal_t sent6pClearSignal;
+    simsignal_t sent6pAddSignal;
+    simsignal_t sent6pRelocateSignal;
+    simsignal_t sent6pDeleteSignal;
+    simsignal_t sent6pResponseSignal;
+
     enum tsch6topSelfMessage_t {
         SF_START,
         PIGGYBACK_TIMEOUT

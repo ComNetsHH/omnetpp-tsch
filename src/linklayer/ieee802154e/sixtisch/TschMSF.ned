@@ -8,11 +8,11 @@ simple TschMSF like TschSF
         
         @signal[rplParentChanged](type=unsigned long);
         @signal[queueUtilization](type=double);
-        @signal[failed6pAdd](type=string);
+        @signal[failed6pAdd];
         
         @statistic[rplParentChanged](title="Number of rpl parents changed"; source="rplParentChanged"; record=count; interpolationmode=none);
         @statistic[queueUtilization](title="Queue utilization"; source=queueUtilization; record=mean?, vector?; interpolationmode=none);
-        @statistic[numFailed6pAdd](title="Number of failed 6P ADD requests"; source=failed6pAdd; record=count, vector?; interpolationmode=none);
+        @statistic[failed6pAdd](title="Failed 6P ADD requests"; source=failed6pAdd; record=count, vector?; interpolationmode=none);
         
         // the time after which an active, unfinished transaction expires
         // (needs to be defined by every SF as per the 6P standard)

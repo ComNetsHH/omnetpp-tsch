@@ -170,7 +170,6 @@ void Ieee802154eMac::initialize(int stage) {
 
         pktEnqueuedSignal = registerSignal("pktEnqueued");
         pktRecFromUpperSignal = registerSignal("pktReceviedFromUpperLayer");
-        highPrioQueueOverflowSignal = registerSignal("highPrioQueueOverflow");
     } else if (stage == INITSTAGE_LAST) {
         auto nbrs = this->getNeighborsInRange();
         for (auto nbrId : nbrs)
@@ -358,10 +357,6 @@ void Ieee802154eMac::handleUpperPacket(Packet *packet) {
         EV_DETAIL << "Added packet to queue with link ID " << linkId << endl;
     } else {
         EV_DETAIL << "Packet is dropped due to Queue Overflow" << endl;
-
-        if (linkId == LINK_PRIORITY_HIGH)
-            emit(highPrioQueueOverflowSignal, packet);
-
         PacketDropDetails details;
         details.setReason(QUEUE_OVERFLOW);
         details.setLimit(neighbor->getQueueLength());
@@ -405,26 +400,37 @@ TschLink* Ieee802154eMac::selectActiveLink(std::vector<TschLink*> links, bool pr
         return links.back();
 
     // If multiple links / cells are scheduled at the same position
-    // First look for any UNICAST TX link (auto / dedicated)
+    // First look for a DEDICATED TX link
     for (auto link : links) {
         if (link->isTx() && link->getAddr() != MacAddress::BROADCAST_ADDRESS
-                && neighbor->checkVirtualQueueSizeAt(link->getAddr(), getVirtualLinkId(link)))
+                && neighbor->checkQueueSizeAt(link->getAddr()))
         {
             EV_DETAIL << "Found unicast TX link with non-empty queue: " << link << endl;
             return link;
         }
     }
 
-    // If no unicast link with queued packets found, check shared broadcast links
+    // Then check for AUTO TX cells with packets in queues
     for (auto link : links) {
-        if (link->isTx() && neighbor->checkVirtualQueueSizeAt(link->getAddr(), getVirtualLinkId(link)))
+        if (link->isTx() && link->isAuto()
+                && link->getAddr() != MacAddress::BROADCAST_ADDRESS
+                && neighbor->checkQueueSizeAt(link->getAddr()))
         {
-            EV_DETAIL << "Found broadcast TX link with non-empty queue: " << link << endl;
+            EV_DETAIL << "Found auto TX link with non-empty queue: " << link << endl;
             return link;
         }
     }
 
-    EV_DETAIL << "No active TX link detected, choosing RX one" << endl;
+    // Finally check if there's ANY TX - shared, broadcast - link with packets in queue
+    for (auto link : links) {
+        if (link->isTx() && neighbor->checkQueueSizeAt(link->getAddr()))
+        {
+            EV_DETAIL << "Found shared TX link with non-empty queue: " << link << endl;
+            return link;
+        }
+    }
+
+    EV_DETAIL << "No active TX link detected, looking for RX" << endl;
 
     // Else just pick remaining RX/AUTO link randomly
     std::vector<TschLink*> rxLinks = {};
@@ -433,15 +439,21 @@ TschLink* Ieee802154eMac::selectActiveLink(std::vector<TschLink*> links, bool pr
             rxLinks.push_back(link);
 
     if (!rxLinks.size()) {
-        EV_WARN << "No RX link as well? Seems like a bug" << endl;
+        EV_WARN << "No RX link as well? Seems like a bug!" << endl;
         return nullptr;
     }
 
-    auto activeLink = rxLinks[intrand(rxLinks.size())];
-    EV_DETAIL << "Found " << rxLinks.size() << " RX links: "
-            << rxLinks << ",\nselected active link: " << activeLink << endl;
+    TschLink* activeRxLink;
 
-    return activeLink;
+    if ( (int) rxLinks.size() == 1)
+        activeRxLink = rxLinks.back();
+    else
+        activeRxLink = rxLinks[intrand(rxLinks.size())];
+
+    EV_DETAIL << "Found " << rxLinks.size() << " RX links: "
+            << rxLinks << ",\nselected active link: " << activeRxLink << endl;
+
+    return activeRxLink;
 }
 
 units::values::Hz Ieee802154eMac::getCurrentFrequency() {

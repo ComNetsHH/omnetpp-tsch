@@ -92,7 +92,11 @@ void Tsch6topSublayer::initialize(int stage) {
         lowerControlIn = findGate("lowerControlIn");
         pSFStarttime = par("sfstarttime");
 
-        s_6pMsgSent = registerSignal("sixp_msg_sent");
+        sent6pClearSignal = registerSignal("sent6pClear");
+        sent6pAddSignal = registerSignal("sent6pAdd");
+        sent6pDeleteSignal = registerSignal("sent6pDelete");
+        sent6pRelocateSignal = registerSignal("sent6pRelocate");
+        sent6pResponseSignal = registerSignal("sent6pResponse");
 
         numConcurrentTransactionErrors = 0;
         numTimeouts = 0;
@@ -204,16 +208,7 @@ void Tsch6topSublayer::handleMessage(cMessage* msg) {
         /* a response was created somewhere in the handling process, send it */
         sendMessageToRadio(response);
 
-         /* record statistics */
-        emit(s_6pMsgSent, 1);
-    }
-
-    // TODO: Unreachable code, ctrl variable is unused, check whether bug
-    // or a part of older implementation
-    if (ctrl != NULL) {
-        // Updated to directly modify the schedule
-        //sendControlDown(ctrl);
-        updateSchedule(*ctrl);
+        emit(sent6pResponseSignal, 1);
     }
 }
 
@@ -266,7 +261,7 @@ void Tsch6topSublayer::sendAddRequest(uint64_t destId, uint8_t cellOptions,
     pTschLinkInfo->setLastLinkOption(destId, (uint8_t) cellOptions);
 
     /* record statistics */
-    emit(s_6pMsgSent, 1);
+    emit(sent6pAddSignal, 1);
 
     sendMessageToRadio(pkt, delay);
 }
@@ -297,7 +292,7 @@ void Tsch6topSublayer::sendDeleteRequest(uint64_t destId, uint8_t cellOptions, i
     pTschLinkInfo->setLastLinkOption(destId, (uint8_t) cellOptions);
 
     /* record statistics */
-    emit(s_6pMsgSent, 1);
+    emit(sent6pDeleteSignal, 1);
 
     sendMessageToRadio(pkt);
 }
@@ -325,7 +320,7 @@ void Tsch6topSublayer::sendRelocationRequest(uint64_t destId, uint8_t cellOption
     pTschLinkInfo->setLastLinkOption(destId, (uint8_t) cellOptions);
 
     /* record statistics */
-    emit(s_6pMsgSent, 1);
+    emit(sent6pRelocateSignal, 1);
 
     sendMessageToRadio(pkt);
 }
@@ -351,7 +346,7 @@ void Tsch6topSublayer::sendClearRequest(uint64_t destId, int timeout) {
     pTschLinkInfo->setLastKnownCommand(destId, CMD_CLEAR);
 
     /* record statistics */
-    emit(s_6pMsgSent, 1);
+    emit(sent6pClearSignal, 1);
 
     sendMessageToRadio(pkt);
 }
@@ -391,7 +386,7 @@ Packet* Tsch6topSublayer::handle6PMsg(Packet* pkt) {
     // TODO: lock linkinfo while handling it?!
     if (hdr->getSfid() != pSFID) {
         /* packet uses scheduling function different from ours */
-        EV_ERROR << "Received 6P message sent by wrong SF" << endl;
+        EV_ERROR << "Received 6P message sent by the wrong SF" << endl;
         uint64_t sender = addresses->getSrcAddress().getInt();
         uint8_t seqNum = hdr->getSeqNum();
 
