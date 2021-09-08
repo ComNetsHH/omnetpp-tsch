@@ -199,6 +199,7 @@ class TschMSF: public TschSF, public cListener {
     virtual void handleSuccessResponse(uint64_t sender, tsch6pCmd_t lastKnownCmd, int numCells, std::vector<cellLocation_t> cellList);
 
     virtual void handleSuccessRelocate(uint64_t sender, std::vector<cellLocation_t> cellList);
+    void handleRplRankUpdate(long rank, int numHosts, double lambda);
 
     /**
      * @brief Handle @p data that was piggybacked by @p sender.
@@ -352,6 +353,7 @@ class TschMSF: public TschSF, public cListener {
         DO_START,
         HOUSEKEEPING,
         SEND_6P_REQ,
+        DELAY_TEST,
         UNDEFINED
     };
 
@@ -363,6 +365,7 @@ class TschMSF: public TschSF, public cListener {
     void addCells(uint64_t nodeId, int numCells, uint8_t cellOptions, int delay);
     void addCells(uint64_t nodeId, int numCells, uint8_t cellOptions) { addCells(nodeId, numCells, cellOptions, 0); };
     void addCells(uint64_t nodeId, int numCells) { addCells(nodeId, numCells, MAC_LINKOPTIONS_TX, 0); }
+    void addCells(SfControlInfo *retryInfo);
 
     virtual void deleteCells(uint64_t nodeId, int numCells);
     void scheduleAutoCell(uint64_t neighbor);
@@ -417,6 +420,7 @@ class TschMSF: public TschSF, public cListener {
     bool slotOffsetReserved(offset_t slOf);
     bool slotOffsetReserved(uint64_t nodeId, offset_t slOf);
     bool slOfScheduled(offset_t slOf);
+    bool isLossyLink(); // TEST, only for manual lossy link testing
 
     /**
      * @return    the number of times the channel has been busy in %.

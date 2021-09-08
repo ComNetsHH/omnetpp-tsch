@@ -39,6 +39,7 @@ network Generic
         @display("bgb=40,85");
         int numSinks = default(1);
         int numHosts = default(30);
+        double lambda = default(1); // optional parameter for multi-hop delay testing 
     submodules:
         configurator: RplNetConfigurator {
             parameters:

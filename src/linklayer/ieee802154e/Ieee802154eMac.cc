@@ -97,9 +97,6 @@ void Ieee802154eMac::initialize(int stage) {
         currentLink = nullptr;
         currentChannel = 0;
 
-        // util parameter for artificial packet drop scenarios
-        pPacketDropThreshold = par("packetDropThreshold").doubleValue();
-
         //init parameters for backoff method
         std::string backoffMethodStr = par("backoffMethod").stdstringValue();
         if (backoffMethodStr == "exponential") {
@@ -176,7 +173,6 @@ void Ieee802154eMac::initialize(int stage) {
             neighbors.push_back(MacAddress(nbrId));
 
         WATCH_LIST(neighbors);
-        WATCH(pArtificialPacketDrop);
 
         auto timeoutVal = par("lossyLinkTimeout").doubleValue();
         if (timeoutVal)
@@ -1018,9 +1014,9 @@ void Ieee802154eMac::startTimer(t_mac_timer timer) {
 void Ieee802154eMac::handleSelfMessage(cMessage *msg) {
     EV_DETAIL << "timer routine." << endl;
 
-    // TEST part, for artificial packet drops
+    // TEST message kind for simulating lossy links
     if (msg->getKind() == MAC_ENABLE_DROPS) {
-        pArtificialPacketDrop = true;
+        pLinkCollision = par("pLinkCollision").doubleValue();
         delete msg;
         return;
     }
@@ -1043,27 +1039,15 @@ void Ieee802154eMac::handleSelfMessage(cMessage *msg) {
         EV << "TSCH Error: unknown timer fired:" << msg << endl;
 }
 
-
-bool Ieee802154eMac::artificialPacketDrop() {
-    if (pArtificialPacketDrop) {
-        auto dice = uniform(0, 1);
-        EV_DETAIL << "Deciding whether to drop packet, dice = " << dice
-            << ", drop threshold = " << pPacketDropThreshold << endl;
-        return dice > pPacketDropThreshold;
-
-    }
-
-    return false;
-}
-
 /**
  * Compares the address of this Host with the destination address in
  * frame. Generates the corresponding event.
  */
 void Ieee802154eMac::handleLowerPacket(Packet *packet) {
-    if (packet->hasBitError() || artificialPacketDrop()) {
+    // Either packet has a bit error, or an *artificial* link collision probability applies
+    if (packet->hasBitError() || (uniform(0, 1) < pLinkCollision)) {
         EV << "Received " << packet
-                  << " contains bit errors or collision, dropping it\n";
+                << " contains bit errors or collision, dropping it\n";
         PacketDropDetails details;
         details.setReason(INCORRECTLY_RECEIVED);
         emit(packetDroppedSignal, packet, &details);

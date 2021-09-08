@@ -117,11 +117,11 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
         , NB(0)
         , txAttempts(0)
         , bitrate(0)
+        , pLinkCollision(-1)
         , ackLength(0)
         , ackMessage(nullptr)
         , SeqNrParent()
         , SeqNrChild()
-        , pArtificialPacketDrop(false)
     {
     }
 
@@ -186,9 +186,6 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
      */
     double getQueueUtilization(MacAddress nbrAddr);
     double getQueueUtilization(MacAddress nbrAddr, int virtualLinkId);
-
-    void enableArtificialPacketDrop() { this->pArtificialPacketDrop = true; }
-    void disableArtificialPacketDrop() { this->pArtificialPacketDrop = false; }
 
   protected:
     /** @name Different tracked statistics.*/
@@ -417,8 +414,7 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
     TschLink *currentLink;
     int currentChannel;
 
-    bool pArtificialPacketDrop;
-    double pPacketDropThreshold;
+    double pLinkCollision;
 
   protected:
     /** @brief Generate new interface address*/

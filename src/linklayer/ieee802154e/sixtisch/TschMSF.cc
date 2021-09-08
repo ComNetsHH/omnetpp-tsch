@@ -60,7 +60,7 @@ void TschMSF::initialize(int stage) {
         pCellListRedundancy = par("cellListRedundancy").intValue();
         pNumMinimalCells = par("numMinCells").intValue();
         disable = par("disable").boolValue();
-        pCellIncrement = par("cellBandwidthIncrement").intValue();
+        pCellIncrement = par("cellsToAdd").intValue();
         pSend6pDelayed = par("send6pDelayed").boolValue();
         pHousekeepingPeriod = par("housekeepingPeriod").intValue();
         pHousekeepingDisabled = par("disableHousekeeping").boolValue();
@@ -238,7 +238,7 @@ void TschMSF::handleMaxCellsReached(cMessage* msg) {
 
     EV_DETAIL << printCellUsage(neighborMac->str(), usage) << endl;
 
-    if (usage >= pLimNumCellsUsedHigh)
+    if (usage >= pLimNumCellsUsedHigh && !isLossyLink())
         addCells(neighborId, pCellIncrement, MAC_LINKOPTIONS_TX, pSend6pDelayed ? uniform(1, 3) : 0);
     if (usage <= pLimNumCellsUsedLow)
         deleteCells(neighborId, 1);
@@ -249,6 +249,39 @@ void TschMSF::handleMaxCellsReached(cMessage* msg) {
 
     delete neighborMac;
 }
+
+bool TschMSF::isLossyLink() {
+    return mac->par("pLinkCollision").doubleValue() > 0
+            && simTime().dbl() > mac->par("lossyLinkTimeout").doubleValue();
+}
+
+void TschMSF::addCells(SfControlInfo *retryInfo)
+{
+    auto numCells = retryInfo->getNumCells();
+    auto nodeId = retryInfo->getNodeId();
+    if (!pTschLinkInfo->inTransaction(nodeId)) {
+        EV_DETAIL << "Seems we can send 6P ADD" << endl;
+        addCells(nodeId, numCells, retryInfo->getCellOptions());
+        return;
+    }
+
+    EV_WARN << "Can't add " << numCells << " to " << MacAddress(nodeId)
+            << " currently in transaction with this node" << endl;
+    retryInfo->incRtxCtn();
+    if (retryInfo->getRtxCtn() > par("maxRetries").intValue()) {
+        EV_DETAIL << "Maximum number of retransmits attempted, dropping packet" << endl;
+        delete retryInfo;
+        return;
+    }
+    auto backoff = pow(4, retryInfo->getRtxCtn());
+    auto retryMsg = new cMessage("Retry self-msg", SEND_6P_REQ);
+    retryMsg->setControlInfo(retryInfo);
+    auto timeout = simTime() + SimTime(backoff, SIMTIME_S);
+    scheduleAt(timeout, retryMsg);
+    EV_DETAIL << "Another transmission attempt scheduled at " << timeout
+            << ", " << retryInfo->getRtxCtn() << " retry" << endl;
+}
+
 
 void TschMSF::handleDoStart(cMessage* msg) {
     hasStarted = true;
@@ -401,13 +434,68 @@ void TschMSF::handleMessage(cMessage* msg) {
         }
         case SEND_6P_REQ: {
             auto ctrlInfo = check_and_cast<SfControlInfo*> (msg->getControlInfo());
-            send6topRequest(ctrlInfo);
+
+            // If this 6P request needs to be retransmitted, this check would means
+            // that the first attempt has already failed and we have to retry more
+            if (ctrlInfo->getRtxCtn())
+                addCells(ctrlInfo);
+            else
+                // This one just plainly sends the message out, without scheduling a retransmit attempt
+                send6topRequest(ctrlInfo);
+            break;
+        }
+        case DELAY_TEST: {
+            long *rankPtr = (long*) msg->getContextPointer();
+            EV_DETAIL << "Received DELAY_TEST self-msg, rank - " << *rankPtr << endl;
+
+ //            handleRplRankUpdate(*rankPtr, numHosts);
+
+            auto network = hostNode->getParentModule();
+            // lambda is assumed to be the same for all hosts
+            handleRplRankUpdate(rplRank, network->par("numHosts"), network->par("lambda").doubleValue());
+
             break;
         }
         default: EV_ERROR << "Unknown message received: " << msg << endl;
     }
     delete msg;
 }
+
+void TschMSF::handleRplRankUpdate(long rank, int numHosts, double lambda) {
+    EV_DETAIL << "Trying to schedule TX cells according to our rank - "
+            << rank << " and total number of hosts - " << numHosts << endl;
+
+    if (!rplParentId) {
+        EV_WARN << "RPL parent MAC unknown, aborting" << endl;
+        return;
+    }
+
+    auto currentTxCells = pTschLinkInfo->getDedicatedCells(rplParentId);
+    EV_DETAIL << "Found " << currentTxCells.size() << " cells already scheduled with PP: "
+            << currentTxCells << endl;
+
+    auto val = 0.001 + lambda * (numHosts + 2 - rank);
+    auto numCellsRequired = ceil(val) - (int) currentTxCells.size();
+
+    EV_DETAIL << "Num cells required to schedule - " << numCellsRequired << endl;
+    /**
+     * "numHosts - rank + 3" corresponds to the number of cells required to handle the traffic
+     * from the descendant nodes (numHosts - rank) as well as the node itself (+1).
+     * Additional +1 to account for the fact, that node closest to the sink are of rank 2 rather than 1.
+     * And another +1 to have service rate > arrival rate for stability condition.
+     *
+     * 0.001 is added to account for cases lambda = mu
+     *
+     * Each node is assumed to be M/M/1 system with incoming rate of 1 packet per slotframe
+     */
+    auto ctrlInfo = new SfControlInfo(rplParentId);
+    ctrlInfo->set6pCmd(CMD_ADD);
+    ctrlInfo->setNumCells(numCellsRequired);
+    ctrlInfo->setCellOptions(MAC_LINKOPTIONS_TX);
+    addCells(ctrlInfo);
+}
+
+
 
 void TschMSF::send6topRequest(SfControlInfo *ctrlInfo) {
     auto sixTopCmd = ctrlInfo->get6pCmd();
@@ -1019,6 +1107,20 @@ void TschMSF::receiveSignal(cComponent *src, simsignal_t id, long value, cObject
         handlePacketEnqueued(macCtrlInfo->getNodeId());
         return;
     }
+
+
+    if (std::strcmp(signalName.c_str(), "rankUpdated") == 0 && par("handleRankUpdates")) {
+        auto selfMsg = new cMessage("", DELAY_TEST);
+        long updatedRank = value;
+        rplRank = value;
+        EV_DETAIL << "Set RPL rank inside SF to " << rplRank << endl;
+        selfMsg->setContextPointer((long*) &updatedRank);
+        // FIXME: Magic numbers
+        scheduleAt(simTime() + SimTime(20, SIMTIME_S), selfMsg);
+//        handleRplRankUpdate(value, numHosts);
+        return;
+    }
+
 
     std::string statisticStr;
     std::string scopeStr;

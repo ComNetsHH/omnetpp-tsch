@@ -28,7 +28,7 @@ simple TschMSF like TschSF
 //        int slotframeLen = default(101);
         int cellListRedundancy = default(3); // number of additional cells to pad CELL_LIST in 6P transcations
 
-        int cellBandwidthIncrement = default(1); // number of cells to add with neighbor if cell usage is excessive
+        int cellsToAdd = default(1); // number of cells to add with neighbor if cell usage is excessive
         bool disable = default(false);
         // determines whether auto TX cells to neighbors are scheduled on demand (per transmission), or globally during initialization stage
         bool autoCellOnDemand = default(true); // WARNING: may lead to cell collisions (adding AUTO cell on top of dedicated cell)  
@@ -44,6 +44,8 @@ simple TschMSF like TschSF
 		bool estimateQueueUtil = default(false); // use queue utilization instead of cell util
 		double queueEstimationPeriod @unit("s") = default(uniform(10s, 20s));
 		double queueUtilUpperThresh = default(0.95);
+		
+		int maxRetries = default(3); // 6P request retry threshold
 		
 		// custom parameter to add random delay before 6P requests to minimize
 		// probability of simulatenous transactions in both directions between two nodes
