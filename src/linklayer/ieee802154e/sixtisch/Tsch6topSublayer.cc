@@ -231,13 +231,13 @@ void Tsch6topSublayer::sendMessageToRadio(cMessage *msg, double delay) {
     }
 }*/
 
-void Tsch6topSublayer::sendAddRequest(uint64_t destId, uint8_t cellOptions,
+bool Tsch6topSublayer::sendAddRequest(uint64_t destId, uint8_t cellOptions,
                             int numCells, std::vector<cellLocation_t> &cellList, int timeout)
 {
-    sendAddRequest(destId, cellOptions, numCells, cellList, timeout, 0);
+    return sendAddRequest(destId, cellOptions, numCells, cellList, timeout, 0);
 }
 
-void Tsch6topSublayer::sendAddRequest(uint64_t destId, uint8_t cellOptions,
+bool Tsch6topSublayer::sendAddRequest(uint64_t destId, uint8_t cellOptions,
                             int numCells, std::vector<cellLocation_t> &cellList,
                             int timeout, double delay)
 {
@@ -245,7 +245,7 @@ void Tsch6topSublayer::sendAddRequest(uint64_t destId, uint8_t cellOptions,
 
     if (pTschLinkInfo->inTransaction(destId)) {
         EV_ERROR <<"Can't send ADD request during open transaction" << endl;
-        return;
+        return false;
     }
 
     /* Calculate simtime at which this transaction will time out. since simtime_t is
@@ -264,6 +264,8 @@ void Tsch6topSublayer::sendAddRequest(uint64_t destId, uint8_t cellOptions,
     emit(sent6pAddSignal, 1);
 
     sendMessageToRadio(pkt, delay);
+
+    return true;
 }
 
 void Tsch6topSublayer::sendDeleteRequest(uint64_t destId, uint8_t cellOptions, int numCells,

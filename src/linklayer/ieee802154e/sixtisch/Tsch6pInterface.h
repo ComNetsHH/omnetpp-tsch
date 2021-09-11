@@ -40,7 +40,7 @@ public:
      * @param timeout      Timespan in ms after which a response is
      *                     expected at the latest
      */
-    virtual void sendAddRequest(uint64_t destId, uint8_t cellOptions, int numCells,
+    virtual bool sendAddRequest(uint64_t destId, uint8_t cellOptions, int numCells,
                         std::vector<cellLocation_t> &cellList, int timeout) = 0;
 
     /**

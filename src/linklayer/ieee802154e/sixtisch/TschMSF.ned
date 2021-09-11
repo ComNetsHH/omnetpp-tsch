@@ -47,6 +47,8 @@ simple TschMSF like TschSF
 		
 		int maxRetries = default(3); // 6P request retry threshold
 		
+		int trackFailed6pAddByNum = default(0); // sequence number of specific 6P ADD request to track 
+		
 		// custom parameter to add random delay before 6P requests to minimize
 		// probability of simulatenous transactions in both directions between two nodes
 		bool send6pDelayed = default(false);  

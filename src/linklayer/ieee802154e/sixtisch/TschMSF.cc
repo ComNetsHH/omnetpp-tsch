@@ -40,7 +40,9 @@ TschMSF::TschMSF() :
     hasStarted(false),
     pHousekeepingDisabled(false),
     hasOverlapping(false),
-    isSink(false)
+    isSink(false),
+    num6pAddSent(0),
+    numFailedTracked6p(0)
 {
 }
 TschMSF::~TschMSF() {
@@ -105,6 +107,8 @@ void TschMSF::initialize(int stage) {
         WATCH(util);
         WATCH(rplParentId);
         WATCH(numLinkResets);
+        WATCH(num6pAddSent);
+        WATCH(numFailedTracked6p);
 
         rpl->subscribe("parentChanged", this);
         rpl->subscribe("rankUpdated", this);
@@ -187,6 +191,8 @@ void TschMSF::finish() {
     }
     recordScalar("numInconsistenciesDetected", numInconsistenciesDetected);
     recordScalar("numLinkResets", numLinkResets);
+    if (par("trackFailed6pAddByNum").intValue() > 0)
+        recordScalar("tracked6pFailed", numFailedTracked6p);
 }
 
 void TschMSF::start() {
@@ -787,9 +793,12 @@ void TschMSF::handleSuccessResponse(uint64_t sender, tsch6pCmd_t cmd, int numCel
             if (!cellList.size()) {
                 EV_DETAIL << "Seems ADD to " << MacAddress(sender) << " failed" << endl;
 
-                auto details = new TransactionFailDetails(EMPTY_CELLLIST, MacAddress(sender));
+                if (num6pAddSent == par("trackFailed6pAddByNum").intValue()) {
+//                    auto details = new TransactionFailDetails(EMPTY_CELLLIST, MacAddress(sender));
+//                    emit(failed6pAdd, (cObject*) details);
+                    numFailedTracked6p++;
+                }
 
-                emit(failed6pAdd, (cObject*) details);
                 return;
             }
 
@@ -926,8 +935,10 @@ void TschMSF::addCells(uint64_t nodeId, int numCells, uint8_t cellOptions, int d
 
     if (!cellList.size())
         EV_DETAIL << "No cells could be added to cell list, aborting ADD" << endl;
-    else
-        pTsch6p->sendAddRequest(nodeId, cellOptions, numCells, cellList, pTimeout);
+    else {
+        if (pTsch6p->sendAddRequest(nodeId, cellOptions, numCells, cellList, pTimeout))
+            num6pAddSent++;
+    }
 }
 
 void TschMSF::deleteCells(uint64_t nodeId, int numCells) {

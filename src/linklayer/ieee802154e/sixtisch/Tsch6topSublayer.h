@@ -89,9 +89,9 @@ public:
      * @param timeout      Timespan in ms after which a response is
      *                     expected at the latest
      */
-    void sendAddRequest(uint64_t destId, uint8_t cellOptions, int numCells,
+    bool sendAddRequest(uint64_t destId, uint8_t cellOptions, int numCells,
                         std::vector<cellLocation_t> &cellList, int timeout) override;
-    void sendAddRequest(uint64_t destId, uint8_t cellOptions, int numCells,
+    bool sendAddRequest(uint64_t destId, uint8_t cellOptions, int numCells,
                             std::vector<cellLocation_t> &cellList, int timeout, double delay);
 
     /**

@@ -332,6 +332,8 @@ class TschMSF: public TschSF, public cListener {
     std::map<cellLocation_t, CellStatistic> cellStatistic;
     int numInconsistenciesDetected;
     int numLinkResets;
+    int num6pAddSent;
+    int numFailedTracked6p;
     double util; // queue utilization with preferred parent
 
     bool hasStarted;

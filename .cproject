@@ -93,7 +93,7 @@
                         						
                         <entry flags="VALUE_WORKSPACE_PATH" kind="sourcePath" name="simulations"/>
                         						
-                        <entry flags="VALUE_WORKSPACE_PATH" kind="sourcePath" name="src"/>
+                        <entry excluding="linklayer/ieee802154e/sixtisch/clx" flags="VALUE_WORKSPACE_PATH" kind="sourcePath" name="src"/>
                         					
                     </sourceEntries>
                     				

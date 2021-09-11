@@ -25,11 +25,11 @@
 using namespace std;
 
 #include "TschCLSF.h"
-#include "TschMSF.h"
+#include "../TschMSF.h"
 #include "RplDefs.h"
-#include "Tsch6tischComponents.h"
-#include "Tsch6topSublayer.h"
-#include "../Ieee802154eMac.h"
+#include "../Tsch6tischComponents.h"
+#include "../Tsch6topSublayer.h"
+#include "../../Ieee802154eMac.h"
 
 class TschCLSF: public TschMSF {
 
