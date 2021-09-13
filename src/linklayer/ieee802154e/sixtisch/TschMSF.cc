@@ -807,7 +807,9 @@ void TschMSF::handleSuccessResponse(uint64_t sender, tsch6pCmd_t cmd, int numCel
 
             // FIXME: magic numbers
 //            pMaxNumCells = pow(2, (int) pTschLinkInfo->getDedicatedCells(sender).size()) * par("maxNumCells").intValue();
-            pMaxNumCells = 2 * ((int) pTschLinkInfo->getDedicatedCells(sender).size()) + par("maxNumCells").intValue();
+
+            // FIXME: commented out for Lukas's evaluation
+//            pMaxNumCells = 2 * ((int) pTschLinkInfo->getDedicatedCells(sender).size()) + par("maxNumCells").intValue();
 
             EV_DETAIL << "6P ADD succeeded, " << cellList << " added" << endl;
             break;
