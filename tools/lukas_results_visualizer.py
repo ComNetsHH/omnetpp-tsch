@@ -7,7 +7,7 @@ import math
 
 plt.rcParams['axes.ymargin'] = 0.2
 plt.rcParams.update({'errorbar.capsize': 3.5})
-plt.rcParams.update({'font.size': 24})
+# plt.rcParams.update({'font.size': 24})
 
 def service_time(m):
     return (m + 2)/(2 * pow(m + 1, 2))
@@ -84,7 +84,17 @@ def plot_packet_loss_adaptation(csv_data):
                 df = df.append(pdr_entry, ignore_index=True)
 
     fig, ax = plt.subplots(figsize=(10, 8), dpi=100)
-    graph = sns.lineplot(data=df, x='Traffic rate', y='Packets lost', ci=95, err_style='bars', hue='Max cells', legend='brief')
+
+    for name, group in df.groupby('Max cells'):
+        l = group['Traffic rate'].unique().tolist()
+        l.sort()
+        max_cells = group['Max cells'].tolist().pop()
+        sns.lineplot(data=group, x='Traffic rate', y='Packets lost', ci=95, err_style='bars', \
+            label=f'Max cells = {max_cells} obs.', legend='brief')
+        sns.lineplot(x=l, y=[expected_lost_pkts(int(x), max_cells) for x in l], \
+            label=f'Max cells = {max_cells} expec.', ls='dashed')
+
+    # graph = sns.lineplot(data=df, x='Traffic rate', y='Packets lost', ci=95, err_style='bars', hue='Max cells', legend='brief')
 
     handles, labels = ax.get_legend_handles_labels()
     ax.legend(handles=handles, labels=labels)
@@ -128,6 +138,15 @@ def plot_pdr_lossy(csv_data):
     ax.legend(handles=handles, labels=labels)
     fig.tight_layout()
 
+def expected_lost_pkts(l, max_cells):
+    total_lost = 0
+
+    for m in range(1, l+1):
+        phase_duration = max_cells / m
+    
+        total_lost += math.ceil((l - m) * (phase_duration * 1.01 + service_time(m) * 1.01 + 2))
+        
+    return total_lost
 
 def plot_pdr(csv_data):
     # add a column with traffic rates as floats
@@ -191,10 +210,10 @@ def plot_delay(csv_data):
     fig.tight_layout()
     # plt.savefig(f"delay_{name}.pdf")
 
-plot_delay(pd.read_csv("lukas_delays_dd1_upd.csv", sep="\t"))
+# plot_delay(pd.read_csv("lukas_delays_dd1_upd.csv", sep="\t"))
 # plot_pdr(pd.read_csv("lukas_pdr.csv", sep="\t"))
 # plot_pdr_lossy(pd.read_csv("lukas_lossy_link.csv", sep="\t"))
-# plot_packet_loss_adaptation(pd.read_csv("lukas_msf_adaptation.csv", sep="\t"))
+plot_packet_loss_adaptation(pd.read_csv("lukas_msf_adaptation_upd.csv", sep="\t"))
 # plot_expected_waiting_time()
 
 plt.grid()
