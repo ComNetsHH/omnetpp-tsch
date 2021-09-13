@@ -9,6 +9,52 @@ plt.rcParams['axes.ymargin'] = 0.2
 plt.rcParams.update({'errorbar.capsize': 3.5})
 plt.rcParams.update({'font.size': 24})
 
+def service_time(m):
+    return (m + 2)/(2 * pow(m + 1, 2))
+
+def waiting_time_dd1(l, lim_cell_high):
+    m = math.ceil(l * 1/lim_cell_high)
+
+    return service_time(m)
+
+def waiting_time_md1(l, lim_cell_high):
+    m = math.ceil(l * 1/lim_cell_high)
+
+    rho = l/m
+
+    queuing = rho/(2 * m * (1 - rho))
+    serv_time = service_time(m)
+
+    w_md1 = queuing + serv_time
+
+    # print(f'l = {l}, op = {round(1/lim_cell_high, 2)}, m = {m}, w_md1 = {serv_time} (service) + {queuing} (queuing)')
+
+    return w_md1
+
+def plot_expected_waiting_time(q = 'DD1', ax = None, lim_high = -1, rates = []):
+    lims = [0.25, 0.50, 0.75, 0.9]
+    if len(rates) == 0:
+        rates = [x for x in range(1, 30)]
+
+    if not ax:
+        fig, ax = plt.subplots(figsize=(10, 8), dpi=100)
+
+    if lim_high > 0:
+        if q == 'DD1':
+            wt = [waiting_time_dd1(x, lim_high) for x in rates]
+        else:
+            wt = [waiting_time_md1(x, lim_high) for x in rates]
+        sns.lineplot(x=rates, y=wt, ax=ax, ls='dashed', label=f'OP = {round(1/lim_high, 2)} exp.')
+        return
+
+    for lim_cell_high in lims:
+        if q == 'DD1':
+            wt = [waiting_time_dd1(x, lim_cell_high) for x in rates] # l = 1..30
+        else:
+            wt = [waiting_time_md1(x, lim_cell_high) for x in rates]
+
+        sns.lineplot(x=rates, y=wt, ax=ax, ls='dashed', label=f'OP = {1/lim_cell_high} exp.')
+
 def plot_packet_loss_adaptation(csv_data):
     # add a column with link collision probabilities as floats
     max_num_cells = [int(re.search('\$maxCells=(\d+)', x).group(1)) for x in csv_data['Measurement'].tolist()]
@@ -118,22 +164,38 @@ def plot_pdr(csv_data):
 def plot_delay(csv_data):
     # add a column with traffic rates as floats
     traffic_rate = [float(re.search('\$l=(\d+(\.\d+)?)', x).group(1)) for x in csv_data['Measurement'].tolist()]
+    lim_high = [float(re.search('\$limCellUsedHigh=(\d+(\.\d+)?)', x).group(1)) for x in csv_data['Measurement'].tolist()]
     csv_data['l'] = traffic_rate
+    csv_data['lim_high'] = lim_high
+
+    queue_type = 'DD1' if 'DD1' in csv_data['Experiment'].tolist().pop() else 'MD1'
 
     fig, ax = plt.subplots(figsize=(10, 8), dpi=100)
-    
-    graph = sns.lineplot(data=csv_data, x='l', y='Mean', ci=95, err_style='bars', hue='Experiment', legend='brief')
 
-    # remove legend subtitle
+    # sns.lineplot(data=csv_data, x='l', y='Mean', ci=95, err_style='bars', hue='lim_high')
+
+    for name, group in csv_data.groupby('lim_high'):
+        l = group['l'].tolist()
+        l.sort()
+
+        lim_cell_high = group['lim_high'].tolist().pop()
+
+        plot_expected_waiting_time(queue_type, ax, lim_cell_high, l)
+        sns.lineplot(data=group, x='l', y='Mean', ax=ax, ci=95, err_style='bars', label=f'OP = {round(1/lim_cell_high, 2)} obs.')
+
+    # remove legend subtitl
     handles, labels = ax.get_legend_handles_labels()
     ax.legend(handles=handles, labels=labels,loc='upper left')
+    ax.set_ylabel('Delay (s)')
+    ax.set_xlabel('Traffic rate (pkt/s)')
     fig.tight_layout()
     # plt.savefig(f"delay_{name}.pdf")
 
-# plot_delay(pd.read_csv("lukas_delays.csv", sep="\t"))
+plot_delay(pd.read_csv("lukas_delays_dd1_upd.csv", sep="\t"))
 # plot_pdr(pd.read_csv("lukas_pdr.csv", sep="\t"))
-plot_pdr_lossy(pd.read_csv("lukas_lossy_link.csv", sep="\t"))
+# plot_pdr_lossy(pd.read_csv("lukas_lossy_link.csv", sep="\t"))
 # plot_packet_loss_adaptation(pd.read_csv("lukas_msf_adaptation.csv", sep="\t"))
+# plot_expected_waiting_time()
 
 plt.grid()
 plt.show()
