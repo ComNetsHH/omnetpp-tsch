@@ -336,6 +336,8 @@ class TschMSF: public TschSF, public cListener {
     int numFailedTracked6p;
     double util; // queue utilization with preferred parent
 
+    cMessage *delayed6pReq;
+
     bool hasStarted;
     bool disable;
 

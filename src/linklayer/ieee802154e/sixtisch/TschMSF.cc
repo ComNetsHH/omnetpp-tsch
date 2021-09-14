@@ -42,6 +42,7 @@ TschMSF::TschMSF() :
     hasOverlapping(false),
     isSink(false),
     num6pAddSent(0),
+    delayed6pReq(nullptr),
     numFailedTracked6p(0)
 {
 }
@@ -915,14 +916,17 @@ void TschMSF::addCells(uint64_t nodeId, int numCells, uint8_t cellOptions, int d
     EV_DETAIL << "Trying to add " << numCells << " cell(s) to " << MacAddress(nodeId) << endl;
 
     if (delay > 0) {
-        auto selfMsg = new cMessage("SEND_6P_DELAYED", SEND_6P_REQ);
+        // already in progress
+        if (delayed6pReq)
+            return;
+        delayed6pReq = new cMessage("SEND_6P_DELAYED", SEND_6P_REQ);
         auto ctrlInfo = new SfControlInfo(nodeId);
         ctrlInfo->set6pCmd(CMD_ADD);
         ctrlInfo->setNumCells(numCells);
         ctrlInfo->setCellOptions(cellOptions);
 
-        selfMsg->setControlInfo(ctrlInfo);
-        scheduleAt(simTime() + SimTime(delay, SIMTIME_S), selfMsg);
+        delayed6pReq->setControlInfo(ctrlInfo);
+        scheduleAt(simTime() + SimTime(delay, SIMTIME_S), delayed6pReq);
         EV_DETAIL << "6P ADD will be sent out after " << delay << " seconds timeout" << endl;
         return;
     }
@@ -1074,13 +1078,15 @@ void TschMSF::handlePacketEnqueued(uint64_t dest) {
     }
 
     // Heuristic, checking if there's a dedicated cell to preferred parent whenever a packet is enqueued
-    if (rplParentId == dest) {
+    if (rplParentId == dest || par("downlinkDedicated").boolValue()) {
         auto dedicatedCells = pTschLinkInfo->getDedicatedCells(dest);
 
         if (!dedicatedCells.size() && !pTschLinkInfo->inTransaction(dest)) {
-            EV_DETAIL << "No dedicated TX cell found to preferred parent, and " <<
-                    "we are currently not in transaction with him, attempting to add one TX cell" << endl;
-            addCells(dest, 1);
+            EV_DETAIL << "No dedicated TX cell found to this node, and " <<
+                    "we are currently not in transaction with it, attempting to add one TX cell" << endl;
+            // heuristics - do not send 6P ADD request immediately, cause simultaneous
+            // bi-directional transactions are not yet supported
+            addCells(dest, 1, MAC_LINKOPTIONS_TX, uniform(2, 5)); // FIXME: magic numbers
         }
     }
 

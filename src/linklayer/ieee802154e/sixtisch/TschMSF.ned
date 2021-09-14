@@ -53,6 +53,7 @@ simple TschMSF like TschSF
 		// custom parameter to add random delay before 6P requests to minimize
 		// probability of simulatenous transactions in both directions between two nodes
 		bool send6pDelayed = default(false);  
+		bool downlinkDedicated = default(false);
 		
 		// Module parameters required by the interface but are actually unused
 		int initNumcells = default(6);
