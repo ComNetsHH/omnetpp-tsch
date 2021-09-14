@@ -1035,7 +1035,7 @@ void TschMSF::handleParentChangedSignal(uint64_t newParentId) {
     // If RPL parent hasn't been set, we've just joined the DODAG
     if (!rplParentId) {
         rplParentId = newParentId;
-        addCells(rplParentId, 1);
+        addCells(rplParentId, par("initialNumCells").intValue());
         return;
     }
 
@@ -1051,7 +1051,7 @@ void TschMSF::handleParentChangedSignal(uint64_t newParentId) {
     rplParentId = newParentId;
 
     /** and schedule the same amount of cells (or at least 1) with the new parent */
-    addCells(newParentId, (int) txCells.size() > 0 ? (int) txCells.size() : 1);
+    addCells(newParentId, (int) txCells.size() > 0 ? (int) txCells.size() : par("initialNumCells").intValue());
 }
 
 void TschMSF::handlePacketEnqueued(uint64_t dest) {

@@ -688,11 +688,11 @@ void Ieee802154eMac::updateStatusWaitAck(t_mac_event event, cMessage *msg) {
                          << endl;
         radio->setRadioMode(IRadio::RADIO_MODE_SLEEP);
 
-        if(!neighbor->getCurrentTschCSMAStatus()){
+        if (!neighbor->isDedicated() && !neighbor->getCurrentTschCSMAStatus())
             neighbor->startTschCSMA();
-        }else{
+        else
             manageFailedTX();
-        }
+
         updateMacState(IDLE_1);
         break;
 
@@ -767,8 +767,13 @@ list<uint64_t> Ieee802154eMac::getNeighborsInRange() {
 
 void Ieee802154eMac::manageFailedTX() {
     neighbor->failedTX();
-    if ((int) macMaxFrameRetries < (neighbor->getCurrentTschCSMA()->getNB())) {
-        EV_DETAIL << "Packet was transmitted " << macMaxFrameRetries
+
+    auto rtxAttempts = neighbor->getCurrentTschCSMA()->getNB();
+
+    EV_DETAIL << "RTX attempts: " << rtxAttempts << endl;
+
+    if (rtxAttempts > (int) macMaxFrameRetries) {
+        EV_DETAIL << "Packet was re-transmitted > " << macMaxFrameRetries
                 << " times and an ACK was never received. The packet is dropped." << endl;
         cMessage *mac = neighbor->getCurrentNeighborQueueFirstPacket();
         neighbor->removeFirstPacketFromQueue();
@@ -1039,13 +1044,34 @@ void Ieee802154eMac::handleSelfMessage(cMessage *msg) {
         EV << "TSCH Error: unknown timer fired:" << msg << endl;
 }
 
+bool Ieee802154eMac::artificiallyDropAppPacket(Packet *packet) {
+    std::string packetName(packet->getFullName());
+
+    if (packetName.find(std::string("Udp")) != std::string::npos) {
+
+        auto r = uniform(0, 1, 2);
+        bool drop = r < pLinkCollision;
+
+        EV_DETAIL << "r = " << r;
+
+        if (drop)
+            EV_DETAIL << ", dropping Udp packet #" << udpDroppedCtn++ << endl;
+        else
+            EV_DETAIL << ", forwarding Udp packet #" << udpSentCtn++ << endl;
+
+        return drop;
+    }
+
+    return false;
+}
+
 /**
  * Compares the address of this Host with the destination address in
  * frame. Generates the corresponding event.
  */
 void Ieee802154eMac::handleLowerPacket(Packet *packet) {
     // Either packet has a bit error, or an *artificial* link collision probability applies
-    if (packet->hasBitError() || (uniform(0, 1) < pLinkCollision)) {
+    if (packet->hasBitError() || artificiallyDropAppPacket(packet)) {
         EV << "Received " << packet
                 << " contains bit errors or collision, dropping it\n";
         PacketDropDetails details;

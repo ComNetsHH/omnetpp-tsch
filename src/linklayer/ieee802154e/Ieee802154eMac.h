@@ -86,6 +86,8 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
         : MacProtocolBase()
         , nbTxFrames(0)
         , nbRxFrames(0)
+        , udpSentCtn(0)
+        , udpDroppedCtn(0)
         , nbMissedAcks(0)
         , nbRecvdAcks(0)
         , nbDroppedFrames(0)
@@ -200,6 +202,9 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
     long nbBackoffs;
     double backoffValues;
     /*@}*/
+
+    int udpSentCtn;
+    int udpDroppedCtn;
 
     /** @brief MAC states
      * see states diagram.
@@ -487,7 +492,7 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
 
     // Util
     list<MacAddress> neighbors; // list of neighbors MAC addresses
-    bool artificialPacketDrop();
+    bool artificiallyDropAppPacket(Packet *packet);
 
   private:
     /** @brief Copy constructor is not allowed.

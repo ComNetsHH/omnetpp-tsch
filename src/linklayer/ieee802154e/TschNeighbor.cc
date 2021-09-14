@@ -218,7 +218,6 @@ void TschNeighbor::removeFirstPacketFromQueue(){
 }
 
 
-
 TschCSMA* TschNeighbor::getCurrentTschCSMA(){
     return this->backoffTable.find(currentNeighborKey)->second;
 }
@@ -237,6 +236,7 @@ void TschNeighbor::reset() {
     this->currentVirtualLinkIDKey = -2;
     this->currentNeighborKey.setAddress(inet::MacAddress::UNSPECIFIED_ADDRESS.str().c_str());
 }
+
 void TschNeighbor::setDedicated(bool value){
     this->dedicated = value;
 }

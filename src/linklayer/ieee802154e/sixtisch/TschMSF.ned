@@ -46,6 +46,7 @@ simple TschMSF like TschSF
 		double queueUtilUpperThresh = default(0.95);
 		
 		int maxRetries = default(3); // 6P request retry threshold
+		int initialNumCells = default(1); // number of cells to schedule with RPL preferred parent initially
 		
 		int trackFailed6pAddByNum = default(0); // sequence number of specific 6P ADD request to track 
 		
