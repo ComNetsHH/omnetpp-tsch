@@ -151,19 +151,13 @@ class TschNeighbor : public cSimpleModule, protected cListener
          * @param macaddress a inet::MacAddress argument to search for that MacAddress in the queue
          * @return Summed-up size of the normal and priority queue with the input MacAddress or 0 if the queue with that MacAddress is not found
          */
-        int checkQueueSizeAt(inet::MacAddress macAddress);
-        /**
-         * Determines the total queue size of a specific neighbor identified by its MAC address
-         * @param macaddress a inet::MacAddress argument to search for that MacAddress in the queue
-         * @return Summed-up size of the normal and priority queue with the input MacAddress or 0 if the queue with that MacAddress is not found
-         */
-        int checkVirtualQueueSizeAt(MacAddress macAddress,int virtualLinkID);
+        int checkTotalQueueSizeAt(inet::MacAddress macAddress);
+
         /**
          * A public member function to return the size of the currently used neighbor queue
          * @return Size of the currently used queue
          */
         int getCurrentNeighborQueueSize();
-
 
         int getCurrentVirtualLinkIDKey();
         /**
@@ -206,12 +200,7 @@ class TschNeighbor : public cSimpleModule, protected cListener
          * @param value a bool to set the dedicated variable
          */
         void setDedicated(bool);
-        /**
-         * A public member function taking one std::vector<inet::MacAddress > selecting an alternative and appropriate queue and returning a true in case one is found.
-         * @param tempMacDedicated a std::vector<inet::MacAddress > which represents all neighbors which met the criteria of having no dedicated link, not in backoff and the queue is not empty
-         * @return True if one is found otherwise false
-         */
-        bool checkAndselectQueue(std::vector<inet::MacAddress >,TschSlotframe* sf);
+
         /**
          * A public member function taking one std::string to select the selection method for the checkAndselectQueue function.
          * @param type a std::string which represents the selection method for the checkAndselectQueue (Set in the TschNeighbor.ned)
@@ -276,28 +265,15 @@ class TschNeighbor : public cSimpleModule, protected cListener
          */
         void clearQueue();
 
+        void setVirtualQueue(MacAddress macAddr, int linkId);
+
+        int getVirtualQueueSizeAt(MacAddress macAddress, int virtualLinkId);
+
     protected:
         virtual void refreshDisplay() const override;
         virtual int numInitStages() const override { return NUM_INIT_STAGES; }
         virtual void initialize(int stage) override;
         virtual void handleMessage(cMessage *) override;
-
-        /**
-         * returns if mac is a suitable neighbor (not broadcast & not in backoff & no tx links scheduled)
-         */
-        bool _isSuitable(inet::MacAddress mac, TschSlotframe* sf);
-        /**
-         * returns if mac is a suitable neighbor (not broadcast & not in backoff)
-         */
-        bool _isSuitableRelaxed(inet::MacAddress mac);
-        /**
-         * returns if entry has packets in queue
-         */
-        bool _hasPacketsInQueue(decltype(macToQueueMap)::value_type entry, int queue);
-        /**
-         * returns if b has a fuller queue than a
-         */
-        bool _hasFullerQueue(decltype(macToQueueMap)::value_type a, decltype(macToQueueMap)::value_type b, int queue);
 };
 }
 #endif /* LINKLAYER_IEEE802154E_TSCHNEIGHBOR_H_ */

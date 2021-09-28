@@ -100,6 +100,12 @@ simple Ieee802154eMac extends MacProtocolBase like IMacProtocol
         double pLinkCollision = default(-1);
         // when MAC starts to apply artifical packet drops
         double lossyLinkTimeout @unit(s) = default(60s);
+        
+        // Hybrid Priority Queuing Weight Round Robin scheduler parameters
+        int wrrWeigthNp = default(4); // weight of normal priority (NP) traffic 
+        int wrrWeigthBe = default(1); // weight of best-effort (BE) traffic
+        bool wrrEnabled = default(false);
+        
 
         @class(Ieee802154eMac);
         @signal[linkBroken](type=inet::Packet);

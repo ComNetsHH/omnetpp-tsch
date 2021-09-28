@@ -124,6 +124,8 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
         , ackMessage(nullptr)
         , SeqNrParent()
         , SeqNrChild()
+        , wrr_be_ctn(0)
+        , wrr_np_ctn(0)
     {
     }
 
@@ -493,6 +495,34 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
     // Util
     list<MacAddress> neighbors; // list of neighbors MAC addresses
     bool artificiallyDropAppPacket(Packet *packet);
+
+
+    /**
+     * Determine whether a packet belongs to IPv6, IPv6 Neighbor Discovery or RPL control packets based on its name
+     *
+     * @param packetName name of the packet to check its affiliation
+     */
+    bool isControlPacket(std::string packetName);
+
+    //
+    // Hybrid Priority Queueing
+    //
+
+    // Weighted Round Robin (WRR) scheduler parameters
+    bool wrr_enabled;
+    int w_np;       // weight of normal priority (NP) packets
+    int wrr_np_ctn; // counter for number of NP packets transmitted
+    int w_be;       // weight of best-effort (BE) packets
+    int wrr_be_ctn; // counter for number of BE packets transmitted
+
+    /**
+     * Select one of the virtual queues on the link with neighbor following the priorities and
+     * WRR weights. The packet taken from the selected queue is transmitted in the current cell
+     *
+     * @param neighbor MAC address of the neighbor with whom the current active cell (based on ASN) is scheduled
+     */
+    int selectVirtualQueue(MacAddress neighbor);
+
 
   private:
     /** @brief Copy constructor is not allowed.
