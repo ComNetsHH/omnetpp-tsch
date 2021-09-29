@@ -30,10 +30,11 @@ simple Ipv6NeighbourDiscoveryWireless extends Ipv6NeighbourDiscovery like IIpv6N
     @signal[naSolicitedPacketSent](type=int);
     @signal[naUnsolicitedPacketSent](type=int);
     @signal[nsPacketSent](type=int);
+    @signal[raPacketSent](type=int);
     
     @statistic[naSolicitedSent](title="Sent solicited NA packets"; source=naSolicitedPacketSent; record=count, vector; interpolationmode=none);
     @statistic[naUnsolicitedSent](title="Sent unsolicited NA packets"; source=naUnsolicitedPacketSent; record=count, vector; interpolationmode=none);
     @statistic[nsPacketsSent](title="Sent NS packets"; source=nsPacketSent; record=count, vector; interpolationmode=none);
-    
+    @statistic[raPacketsSent](title="Sent RA packets"; source=raPacketSent; record=count, vector; interpolationmode=none);
 }
 

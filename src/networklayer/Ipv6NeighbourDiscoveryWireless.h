@@ -36,10 +36,12 @@ protected:
             const Ipv6NeighbourSolicitation *ns, InterfaceEntry *ie) override;
 
     virtual void sendUnsolicitedNa(InterfaceEntry *ie) override;
+    virtual void createAndSendRaPacket(const Ipv6Address& destAddr, InterfaceEntry *ie) override;
 
     simsignal_t naSolicitedPacketSent;
     simsignal_t naUnsolicitedPacketSent;
     simsignal_t nsPacketSent;
+    simsignal_t raPacketSent;
 };
 
 }

@@ -30,6 +30,7 @@ void Ipv6NeighbourDiscoveryWireless::initialize(int stage)
         naSolicitedPacketSent = registerSignal("naSolicitedPacketSent");
         naUnsolicitedPacketSent = registerSignal("naUnsolicitedPacketSent");
         nsPacketSent = registerSignal("nsPacketSent");
+        raPacketSent = registerSignal("raPacketSent");
     }
 }
 
@@ -51,6 +52,12 @@ void Ipv6NeighbourDiscoveryWireless::sendSolicitedNa(Packet *packet,
 {
     Ipv6NeighbourDiscovery::sendSolicitedNa(packet, ns, ie);
     emit(naSolicitedPacketSent, 1);
+}
+
+void Ipv6NeighbourDiscoveryWireless::createAndSendRaPacket(const Ipv6Address& destAddr, InterfaceEntry *ie) {
+    Ipv6NeighbourDiscovery::createAndSendRaPacket(destAddr, ie);
+
+    emit(raPacketSent, 1);
 }
 
 
