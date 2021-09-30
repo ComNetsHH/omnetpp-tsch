@@ -154,14 +154,21 @@ int TschLinkInfo::addCell(uint64_t nodeId, cellLocation_t cell,
                             uint8_t linkOption) {
     Enter_Method_Silent();
 
-    if (!linkInfoExists(nodeId)) {
+    if (!linkInfoExists(nodeId) || isCellAlreadyScheduled(cell.timeOffset, nodeId))
         return -EINVAL;
-    }
 
     std::tuple<cellLocation_t, uint8_t> cellTuple = std::make_tuple(cell, linkOption);
     linkInfo[nodeId].scheduledCells.push_back(cellTuple);
 
     return 0;
+}
+
+bool TschLinkInfo::isCellAlreadyScheduled(offset_t slotOffset, uint64_t neighborId) {
+    for (auto link : linkInfo[neighborId].scheduledCells)
+        if (std::get<0>(link).timeOffset == slotOffset)
+            return true;
+
+    return false;
 }
 
 int TschLinkInfo::addCells(uint64_t nodeId, const std::vector<cellLocation_t> &cellList, uint8_t linkOption)

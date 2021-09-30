@@ -354,6 +354,8 @@ private:
 
     bool matchingTimeOffset(std::tuple<cellLocation_t, uint8_t> const& obj,
                                       offset_t timeOffset);
+
+    bool isCellAlreadyScheduled(offset_t slotOffset, uint64_t neighborId);
 };
 
 #endif /*__WAIC_TSCHLINKINFO_H_*/

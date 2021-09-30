@@ -1352,7 +1352,7 @@ uint8_t Tsch6topSublayer::getCellOption(uint8_t cellOptions) {
 simtime_t Tsch6topSublayer::getAbsoluteTimeout(int timeout) {
     /* since simtime_t is always counted in (fractions of) seconds,
        we need to convert timeout first */
-    return simTime() + SimTime(timeout,SIMTIME_MS);
+    return simTime() + SimTime(timeout, SIMTIME_MS);
 }
 
 uint8_t Tsch6topSublayer::prepLinkForRequest(uint64_t destId, simtime_t absoluteTimeout) {

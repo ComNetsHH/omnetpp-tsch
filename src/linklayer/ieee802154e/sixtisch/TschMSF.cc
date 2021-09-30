@@ -449,7 +449,8 @@ void TschMSF::handleMessage(cMessage* msg) {
             else
                 // This one just plainly sends the message out, without scheduling a retransmit attempt
                 send6topRequest(ctrlInfo);
-            break;
+            delayed6pReq = nullptr;
+            return;
         }
         case DELAY_TEST: {
             long *rankPtr = (long*) msg->getContextPointer();
@@ -917,8 +918,11 @@ void TschMSF::addCells(uint64_t nodeId, int numCells, uint8_t cellOptions, int d
 
     if (delay > 0) {
         // already in progress
-        if (delayed6pReq)
+        if (delayed6pReq) {
+            EV_DETAIL << "Detected another delayed 6P request already in progress" << endl;
             return;
+        }
+
         delayed6pReq = new cMessage("SEND_6P_DELAYED", SEND_6P_REQ);
         auto ctrlInfo = new SfControlInfo(nodeId);
         ctrlInfo->set6pCmd(CMD_ADD);
