@@ -41,7 +41,7 @@ simple Ipv6NeighbourDiscoveryWireless extends Ipv6NeighbourDiscovery like IIpv6N
         @statistic[nudInitiated](title="Initiated Neighbor Unreachability Detections"; source=nudInitiated; record=count, vector; interpolationmode=none);
     
         bool raEnabled = default(false); // Router Advertisements partially overlap with DIOs and can generally be disabled
-        // upper bound for the delay between NS packet generation and passing it to the IP layer,
+        // UPPER BOUND for the delay between NS packet generation and passing it to the IP layer,
         // note there's no expiry time for a NS packet, so this shouldn't cause any issues with validation,
         // but helps spread out in time NS packets from multiple neighbors
         double nsForwardingDelay @unit("s") = default(0);

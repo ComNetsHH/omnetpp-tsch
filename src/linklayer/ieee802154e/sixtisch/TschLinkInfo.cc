@@ -224,8 +224,10 @@ std::vector<cellLocation_t> TschLinkInfo::getCellLocations(uint64_t nodeId) {
         return {};
 
     std::vector<cellLocation_t> res = {};
+    // DO NOT delete the auto-cell, since it may just leave remaining queued packets there for a long time
     for (auto cell_tuple: linkInfo[nodeId].scheduledCells)
-        res.push_back(std::get<0>(cell_tuple));
+        if (!getCellOptions_isSHARED(std::get<1>(cell_tuple)))
+            res.push_back(std::get<0>(cell_tuple));
 
     return res;
 }

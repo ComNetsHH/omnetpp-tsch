@@ -43,7 +43,8 @@ TschMSF::TschMSF() :
     isSink(false),
     num6pAddSent(0),
     delayed6pReq(nullptr),
-    numFailedTracked6p(0)
+    numFailedTracked6p(0),
+    numClearRcv(0)
 {
 }
 TschMSF::~TschMSF() {
@@ -110,6 +111,7 @@ void TschMSF::initialize(int stage) {
         WATCH(numLinkResets);
         WATCH(num6pAddSent);
         WATCH(numFailedTracked6p);
+        WATCH(numClearRcv);
 
         rpl->subscribe("parentChanged", this);
         rpl->subscribe("rankUpdated", this);
@@ -829,6 +831,7 @@ void TschMSF::handleSuccessResponse(uint64_t sender, tsch6pCmd_t cmd, int numCel
             clearCellStats(cellList);
             clearScheduleWithNode(sender);
             pTschLinkInfo->resetLink(sender, MSG_RESPONSE);
+            numClearRcv++;
             break;
         }
         default: EV_DETAIL << "Unsupported 6P command" << endl;
@@ -856,6 +859,8 @@ void TschMSF::clearScheduleWithNode(uint64_t sender)
         pTsch6p->updateSchedule(*ctrlMsg);
     } else
         delete ctrlMsg;
+
+    scheduleAutoCell(sender); // Try to schedule an auto cell (if needed) for remaining packets in the queue
 }
 
 

@@ -37,7 +37,7 @@ protected:
     class Ipv6NdPacketInfo : public cObject {
         public:
             Ipv6NdPacketInfo() {}
-            Ipv6NdPacketInfo(Packet *pkt, Ipv6Address destAddr, Ipv6Address srcAddr, int ie)
+            Ipv6NdPacketInfo(Packet *pkt, const Ipv6Address &destAddr, const Ipv6Address &srcAddr, int ie)
             {
                 this->msgPtr = pkt;
                 this->destAddr = destAddr;
@@ -103,6 +103,9 @@ protected:
     virtual void processNaForIncompleteNceState(const Ipv6NeighbourAdvertisement *na, Neighbour *nce) override;
     virtual void processIpv6Datagram(Packet *packet) override;
     virtual void processNaForOtherNceStates(const Ipv6NeighbourAdvertisement *na, Neighbour *nce) override;
+
+    // FIXME: Utility method, to be removed, see implementation
+    static bool isTentativeAddr(Ipv6Address addr);
 
     simsignal_t naSolicitedPacketSent;
     simsignal_t naUnsolicitedPacketSent;
