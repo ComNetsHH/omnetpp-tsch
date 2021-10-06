@@ -104,9 +104,6 @@ protected:
     virtual void processIpv6Datagram(Packet *packet) override;
     virtual void processNaForOtherNceStates(const Ipv6NeighbourAdvertisement *na, Neighbour *nce) override;
 
-    // FIXME: Utility method, to be removed, see implementation
-    static bool isTentativeAddr(Ipv6Address addr);
-
     simsignal_t naSolicitedPacketSent;
     simsignal_t naUnsolicitedPacketSent;
     simsignal_t nsPacketSent;

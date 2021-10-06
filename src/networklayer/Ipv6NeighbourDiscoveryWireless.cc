@@ -70,10 +70,6 @@ void Ipv6NeighbourDiscoveryWireless::createAndSendRaPacket(const Ipv6Address& de
     emit(raPacketSent, 1);
 }
 
-bool Ipv6NeighbourDiscoveryWireless::isTentativeAddr(Ipv6Address addr) {
-    return addr.str().rfind("ff", 0) == 0;
-}
-
 void Ipv6NeighbourDiscoveryWireless::handleMessage(cMessage *msg) {
     if (msg->isSelfMessage() && msg->getKind() == WIND_SEND_DELAYED) {
         auto controlInfo = check_and_cast<Ipv6NdPacketInfo*> (msg->getControlInfo());
