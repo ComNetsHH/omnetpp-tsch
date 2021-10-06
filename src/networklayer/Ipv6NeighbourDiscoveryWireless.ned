@@ -32,12 +32,19 @@ simple Ipv6NeighbourDiscoveryWireless extends Ipv6NeighbourDiscovery like IIpv6N
         @signal[naUnsolicitedPacketSent](type=int);
         @signal[nsPacketSent](type=int);
         @signal[raPacketSent](type=int);
+        @signal[nudInitiated](type=int);
         
         @statistic[naSolicitedSent](title="Sent solicited NA packets"; source=naSolicitedPacketSent; record=count, vector; interpolationmode=none);
         @statistic[naUnsolicitedSent](title="Sent unsolicited NA packets"; source=naUnsolicitedPacketSent; record=count, vector; interpolationmode=none);
         @statistic[nsPacketsSent](title="Sent NS packets"; source=nsPacketSent; record=count, vector; interpolationmode=none);
         @statistic[raPacketsSent](title="Sent RA packets"; source=raPacketSent; record=count, vector; interpolationmode=none);
+        @statistic[nudInitiated](title="Initiated Neighbor Unreachability Detections"; source=nudInitiated; record=count, vector; interpolationmode=none);
     
         bool raEnabled = default(false); // Router Advertisements partially overlap with DIOs and can generally be disabled
+        // upper bound for the delay between NS packet generation and passing it to the IP layer,
+        // note there's no expiry time for a NS packet, so this shouldn't cause any issues with validation,
+        // but helps spread out in time NS packets from multiple neighbors
+        double nsForwardingDelay @unit("s") = default(0);
+        double nceExpiryOverride @unit("s") = default(90000s); // override default lifetime duration of Neighbor Cache Entry
 }
 
