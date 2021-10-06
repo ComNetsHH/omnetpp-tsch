@@ -47,6 +47,14 @@ void Ipv6NeighbourDiscoveryWireless::sendUnsolicitedNa(InterfaceEntry *ie)
     emit(naUnsolicitedPacketSent, 1);
 }
 
+void Ipv6NeighbourDiscoveryWireless::createRaTimer(InterfaceEntry *ie)
+{
+    if (par("raEnabled").boolValue())
+        Ipv6NeighbourDiscovery::createRaTimer(ie);
+    else
+        EV_DETAIL << "Skipping RA timer" << endl;
+}
+
 void Ipv6NeighbourDiscoveryWireless::sendSolicitedNa(Packet *packet,
             const Ipv6NeighbourSolicitation *ns, InterfaceEntry *ie)
 {

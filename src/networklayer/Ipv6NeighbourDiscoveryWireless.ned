@@ -25,16 +25,19 @@ import inet.networklayer.contract.IIpv6NeighbourDiscovery;
 //
 simple Ipv6NeighbourDiscoveryWireless extends Ipv6NeighbourDiscovery like IIpv6NeighbourDiscovery
 {
-    @class(tsch::Ipv6NeighbourDiscoveryWireless);
+    parameters:
+        @class(tsch::Ipv6NeighbourDiscoveryWireless);
+        
+        @signal[naSolicitedPacketSent](type=int);
+        @signal[naUnsolicitedPacketSent](type=int);
+        @signal[nsPacketSent](type=int);
+        @signal[raPacketSent](type=int);
+        
+        @statistic[naSolicitedSent](title="Sent solicited NA packets"; source=naSolicitedPacketSent; record=count, vector; interpolationmode=none);
+        @statistic[naUnsolicitedSent](title="Sent unsolicited NA packets"; source=naUnsolicitedPacketSent; record=count, vector; interpolationmode=none);
+        @statistic[nsPacketsSent](title="Sent NS packets"; source=nsPacketSent; record=count, vector; interpolationmode=none);
+        @statistic[raPacketsSent](title="Sent RA packets"; source=raPacketSent; record=count, vector; interpolationmode=none);
     
-    @signal[naSolicitedPacketSent](type=int);
-    @signal[naUnsolicitedPacketSent](type=int);
-    @signal[nsPacketSent](type=int);
-    @signal[raPacketSent](type=int);
-    
-    @statistic[naSolicitedSent](title="Sent solicited NA packets"; source=naSolicitedPacketSent; record=count, vector; interpolationmode=none);
-    @statistic[naUnsolicitedSent](title="Sent unsolicited NA packets"; source=naUnsolicitedPacketSent; record=count, vector; interpolationmode=none);
-    @statistic[nsPacketsSent](title="Sent NS packets"; source=nsPacketSent; record=count, vector; interpolationmode=none);
-    @statistic[raPacketsSent](title="Sent RA packets"; source=raPacketSent; record=count, vector; interpolationmode=none);
+        bool raEnabled = default(false); // Router Advertisements partially overlap with DIOs and can generally be disabled
 }
 
