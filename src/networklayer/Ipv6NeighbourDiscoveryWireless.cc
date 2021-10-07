@@ -74,7 +74,11 @@ void Ipv6NeighbourDiscoveryWireless::handleMessage(cMessage *msg) {
     if (msg->isSelfMessage() && msg->getKind() == WIND_SEND_DELAYED) {
         auto controlInfo = check_and_cast<Ipv6NdPacketInfo*> (msg->getControlInfo());
 
-        EV_DETAIL << "Sending NS delayed" << endl;
+        EV_DETAIL << "Sending NS delayed"
+                << "dest: " << controlInfo->getDestAddr() << endl
+                << "src: " << controlInfo->getSrcAddr() <<  endl
+                << "ie id: " << controlInfo->getInterfaceId() << endl;
+
         Ipv6NeighbourDiscovery::sendPacketToIpv6Module(
             controlInfo->getMsgPtr(), controlInfo->getDestAddr(), controlInfo->getSrcAddr(), controlInfo->getInterfaceId());
 
@@ -188,6 +192,85 @@ void Ipv6NeighbourDiscoveryWireless::processNaForOtherNceStates(const Ipv6Neighb
     }
 }
 
+
+void Ipv6NeighbourDiscoveryWireless::assignLinkLocalAddress(cMessage *timerMsg) {
+    //Node has booted up. Start assigning a link-local address for each
+    //interface in this node.
+    for (int i = 0; i < ift->getNumInterfaces(); i++) {
+        InterfaceEntry *ie = ift->getInterface(i);
+
+        //Skip the loopback interface.
+        if (ie->isLoopback())
+            continue;
+
+        Ipv6Address linkLocalAddr = ie->getProtocolData<Ipv6InterfaceData>()->getLinkLocalAddress();
+        if (linkLocalAddr.isUnspecified()) {
+            //if no link local address exists for this interface, we assign one to it.
+            EV_INFO << "No link local address exists. Forming one" << endl;
+            linkLocalAddr = Ipv6Address().formLinkLocalAddress(ie->getInterfaceToken());
+            EV_DETAIL << "Formed link local address (and assigned permanent) - " << linkLocalAddr << endl;
+            ie->getProtocolData<Ipv6InterfaceData>()->assignAddress(linkLocalAddr, true, SIMTIME_ZERO, SIMTIME_ZERO);
+            makeTentativeAddressPermanent(linkLocalAddr, ie);
+        }
+    }
+    delete timerMsg;
+}
+
+void Ipv6NeighbourDiscoveryWireless::initiateAddressResolution(const Ipv6Address& dgSrcAddr, Neighbour *nce)
+{
+    const Key *nceKey = nce->nceKey;
+    InterfaceEntry *ie = ift->getInterfaceById(nceKey->interfaceID);
+    Ipv6Address neighbourAddr = nceKey->address;
+    int ifID = nceKey->interfaceID;
+
+    //RFC2461: Section 7.2.2
+    //When a node has a unicast packet to send to a neighbor, but does not
+    //know the neighbor's link-layer address, it performs address
+    //resolution.  For multicast-capable interfaces this entails creating a
+    //Neighbor Cache entry in the INCOMPLETE state(already created if not done yet)
+    //WEI-If entry already exists, we still have to ensure that its state is INCOMPLETE.
+    nce->reachabilityState = Ipv6NeighbourCache::INCOMPLETE;
+
+    //and transmitting a Neighbor Solicitation message targeted at the
+    //neighbor.  The solicitation is sent to the solicited-node multicast
+    //address "corresponding to"(or "derived from") the target address.
+    //(in this case, the target address is the address we are trying to resolve)
+    EV_INFO << "Preparing to send NS to solicited-node multicast group\n";
+    EV_INFO << "on the next hop interface\n";
+    Ipv6Address nsDestAddr = neighbourAddr.formSolicitedNodeMulticastAddress();    //for NS datagram
+    Ipv6Address nsTargetAddr = neighbourAddr;    //for the field within the NS
+    Ipv6Address nsSrcAddr;
+
+    /*If the source address of the packet prompting the solicitation is the
+       same as one of the addresses assigned to the outgoing interface,*/
+    if (ie->getProtocolData<Ipv6InterfaceData>()->hasAddress(dgSrcAddr))
+        /*that address SHOULD be placed in the IP Source Address of the outgoing
+           solicitation.*/
+        nsSrcAddr = dgSrcAddr;
+    else
+        /*Otherwise, any one of the addresses assigned to the interface
+           should be used.*/
+        nsSrcAddr = ie->getProtocolData<Ipv6InterfaceData>()->getPreferredAddress();
+    ASSERT(ifID != -1);
+    //Sending NS on specified interface.
+    createAndSendNsPacket(nsTargetAddr, nsDestAddr, nsSrcAddr, ie);
+    nce->numOfARNSSent = 1;
+    nce->nsSrcAddr = nsSrcAddr;
+
+    /*While awaiting a response, the sender SHOULD retransmit Neighbor Solicitation
+       messages approximately every RetransTimer milliseconds, even in the absence
+       of additional traffic to the neighbor. Retransmissions MUST be rate-limited
+       to at most one solicitation per neighbor every RetransTimer milliseconds.*/
+    cMessage *msg = new cMessage("arTimeout", MK_AR_TIMEOUT);    //AR msg timer
+    nce->arTimer = msg;
+    msg->setContextPointer(nce);
+
+    auto arTimeout = simTime() + ie->getProtocolData<Ipv6InterfaceData>()->_getRetransTimer() + par("nsForwardingDelay");
+    EV_DETAIL << "AR timeout scheduled at " << arTimeout << "s" << endl;
+
+    // Increase the timeout value if extra delays are used for NS packet forwarding!
+    scheduleAt(arTimeout, msg);
+}
 
 void Ipv6NeighbourDiscoveryWireless::createAndSendNsPacket(const Ipv6Address& nsTargetAddr, const Ipv6Address& dgDestAddr,
                 const Ipv6Address& dgSrcAddr, InterfaceEntry *ie)
@@ -378,13 +461,18 @@ void Ipv6NeighbourDiscoveryWireless::sendPacketToIpv6Module(Packet *msg, const I
         Ipv6NeighbourDiscovery::sendPacketToIpv6Module(msg, destAddr, srcAddr, interfaceId);
     else
     {
-        EV_DETAIL << "Preparing to send WiND delayed" << endl;
+        EV_DETAIL << "Preparing WiND delayed\n"
+                << "dest: " << destAddr << endl
+                << "src: " << srcAddr << endl
+                << "ie id:" << interfaceId << endl
+                << "delay: " << delay << endl;
+
         auto selfmsg = new cMessage("WiND delayed packet");
         auto controlInfo = new Ipv6NdPacketInfo(msg, destAddr, srcAddr, interfaceId);
         selfmsg->setControlInfo(controlInfo);
         selfmsg->setKind(WIND_SEND_DELAYED);
 
-        scheduleAt(simTime() + SimTime(nsFwdDelay, SIMTIME_S), selfmsg);
+        scheduleAt(simTime() + SimTime(delay, SIMTIME_S), selfmsg);
     }
 }
 

@@ -25,7 +25,8 @@ using namespace inet;
 
 namespace tsch {
 
-#define WIND_SEND_DELAYED                  8 // self-msg kind, see Ipv6NeighbourDiscovery.h
+#define WIND_SEND_DELAYED              8 // self-msg kind, see Ipv6NeighbourDiscovery.h
+#define MK_AR_TIMEOUT                  7 // self-msg kind from Ipv6NeighbourDiscovery.cc, cannot be included normally since it's in the source file
 
 // Minor delays added for EACH packet forwarded to IP layer
 #define WIND_MICRO_DELAY_MIN               0.3
@@ -103,6 +104,8 @@ protected:
     virtual void processNaForIncompleteNceState(const Ipv6NeighbourAdvertisement *na, Neighbour *nce) override;
     virtual void processIpv6Datagram(Packet *packet) override;
     virtual void processNaForOtherNceStates(const Ipv6NeighbourAdvertisement *na, Neighbour *nce) override;
+    virtual void assignLinkLocalAddress(cMessage *timerMsg) override;
+    virtual void initiateAddressResolution(const Ipv6Address& dgSrcAddr, Neighbour *nce) override;
 
     simsignal_t naSolicitedPacketSent;
     simsignal_t naUnsolicitedPacketSent;
