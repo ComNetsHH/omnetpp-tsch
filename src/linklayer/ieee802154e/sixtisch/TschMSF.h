@@ -340,7 +340,7 @@ class TschMSF: public TschSF, public cListener {
     cMessage *delayed6pReq;
 
     bool hasStarted;
-    bool disable;
+    bool isDisabled;
 
     /** Parameter variables, see NED */
     bool showTxCells;

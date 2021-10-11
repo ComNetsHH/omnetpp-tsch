@@ -63,7 +63,7 @@ void TschMSF::initialize(int stage) {
         pRelocatePdrThres = par("relocatePdrThresh");
         pCellListRedundancy = par("cellListRedundancy").intValue();
         pNumMinimalCells = par("numMinCells").intValue();
-        disable = par("disable").boolValue();
+        isDisabled = par("disable").boolValue();
         pCellIncrement = par("cellsToAdd").intValue();
         pSend6pDelayed = par("send6pDelayed").boolValue();
         pHousekeepingPeriod = par("housekeepingPeriod").intValue();
@@ -82,7 +82,7 @@ void TschMSF::initialize(int stage) {
 
         schedule = check_and_cast<TschSlotframe*>(getModuleByPath("^.^.schedule"));
 
-        if (disable)
+        if (isDisabled)
             return;
 
         hostNode = getModuleByPath("^.^.^.^.");
@@ -201,7 +201,7 @@ void TschMSF::finish() {
 void TschMSF::start() {
     Enter_Method_Silent();
 
-    if (disable)
+    if (isDisabled)
         return;
 
     tsch6topCtrlMsg* msg = new tsch6topCtrlMsg();
@@ -539,7 +539,15 @@ void TschMSF::send6topRequest(SfControlInfo *ctrlInfo) {
 
 
 void TschMSF::scheduleMinimalCells(int numMinimalCells, int slotframeLength) {
-    EV_DETAIL << "Scheduling minimal cells for broadcast messages: " << endl;
+    if (numMinimalCells > slotframeLength) {
+        std::ostringstream out;
+        out << "More minimal cells requested (" << numMinimalCells << ") than the slotframe length (" << slotframeLength << ")" << endl;
+
+        throw cRuntimeError(out.str().c_str());
+    }
+
+
+    EV_DETAIL << "Scheduling " << numMinimalCells << " minimal cells for broadcast messages: " << endl;
     auto ctrlMsg = new tsch6topCtrlMsg();
     auto macBroadcast = inet::MacAddress::BROADCAST_ADDRESS.getInt();
     ctrlMsg->setDestId(macBroadcast);
@@ -549,10 +557,10 @@ void TschMSF::scheduleMinimalCells(int numMinimalCells, int slotframeLength) {
     std::vector<cellLocation_t> cellList = {};
 
     int minCellPeriod = floor(slotframeLength / numMinimalCells);
-    EV_DETAIL << "Min cells period - " << minCellPeriod << endl;
+    EV_DETAIL << "Minimal cell period - " << minCellPeriod << endl;
 
-    for (offset_t i = 0; i < numMinimalCells; i++)
-        cellList.push_back({i * minCellPeriod, 0});
+    for (auto i = 0; i < numMinimalCells; i++)
+        cellList.push_back({(offset_t) (i * minCellPeriod), 0});
 
     ctrlMsg->setNewCells(cellList);
     pTschLinkInfo->addLink(macBroadcast, false, 0, 0);
@@ -797,11 +805,8 @@ void TschMSF::handleSuccessResponse(uint64_t sender, tsch6pCmd_t cmd, int numCel
             if (!cellList.size()) {
                 EV_DETAIL << "Seems ADD to " << MacAddress(sender) << " failed" << endl;
 
-                if (num6pAddSent == par("trackFailed6pAddByNum").intValue()) {
-//                    auto details = new TransactionFailDetails(EMPTY_CELLLIST, MacAddress(sender));
-//                    emit(failed6pAdd, (cObject*) details);
+                if (num6pAddSent == par("trackFailed6pAddByNum").intValue())
                     numFailedTracked6p++;
-                }
 
                 return;
             }
@@ -815,7 +820,7 @@ void TschMSF::handleSuccessResponse(uint64_t sender, tsch6pCmd_t cmd, int numCel
             // FIXME: commented out for Lukas's evaluation
 //            pMaxNumCells = 2 * ((int) pTschLinkInfo->getDedicatedCells(sender).size()) + par("maxNumCells").intValue();
 
-            EV_DETAIL << "6P ADD succeeded, " << cellList << " added" << endl;
+            EV_DETAIL << "6P ADD succeeded, " << cellList << "cells added" << endl;
             break;
         }
         case CMD_DELETE: {
