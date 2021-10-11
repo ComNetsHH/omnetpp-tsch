@@ -546,7 +546,6 @@ void TschMSF::scheduleMinimalCells(int numMinimalCells, int slotframeLength) {
         throw cRuntimeError(out.str().c_str());
     }
 
-
     EV_DETAIL << "Scheduling " << numMinimalCells << " minimal cells for broadcast messages: " << endl;
     auto ctrlMsg = new tsch6topCtrlMsg();
     auto macBroadcast = inet::MacAddress::BROADCAST_ADDRESS.getInt();
