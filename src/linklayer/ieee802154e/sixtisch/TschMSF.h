@@ -30,6 +30,9 @@
 #include "inet/networklayer/common/InterfaceTable.h"
 
 
+using namespace std;
+
+
 class TschMSF: public TschSF, public cListener {
     public:
 
@@ -199,6 +202,8 @@ class TschMSF: public TschSF, public cListener {
     virtual void handleSuccessResponse(uint64_t sender, tsch6pCmd_t lastKnownCmd, int numCells, std::vector<cellLocation_t> cellList);
 
     virtual void handleSuccessRelocate(uint64_t sender, std::vector<cellLocation_t> cellList);
+    virtual void handleSuccessAdd(uint64_t sender, int numCells, vector<cellLocation_t> cellList);
+
     void handleRplRankUpdate(long rank, int numHosts, double lambda);
 
     /**
@@ -444,6 +449,8 @@ class TschMSF: public TschSF, public cListener {
     simsignal_t queueUtilization;
 
     simsignal_t failed6pAdd; // tracks number of failed 6P ADD requests
+
+    simsignal_t neighborNotFoundError; // tracks unknown error where node's schedule is not cleared properly
 
     enum transactionFailReason_t {
         TIMEOUT,

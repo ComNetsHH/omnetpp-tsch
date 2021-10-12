@@ -44,7 +44,10 @@ void TschLinkInfo::initialize(int stage) {
 //    for (auto li : linkInfo)
 //        WATCH_VECTOR(std::get<1>(li).scheduledCells);
 
+    numScheduleClears = 0;
+
     WATCH_MAP(linkInfo);
+    WATCH(numScheduleClears);
 }
 
 bool TschLinkInfo::linkInfoExists(uint64_t nodeId) {
@@ -390,6 +393,7 @@ void TschLinkInfo::clearCells(uint64_t nodeId) {
         linkInfo[nodeId].scheduledCells.end()
     );
 
+    numScheduleClears++;
 }
 
 void TschLinkInfo::deleteCells(uint64_t nodeId, const std::vector<cellLocation_t> &cellList, uint8_t linkOption) {

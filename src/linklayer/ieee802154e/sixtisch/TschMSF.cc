@@ -70,6 +70,7 @@ void TschMSF::initialize(int stage) {
         pHousekeepingDisabled = par("disableHousekeeping").boolValue();
         internalEvent = new cMessage("SF internal event", UNDEFINED);
         queueUtilization = registerSignal("queueUtilization");
+        neighborNotFoundError = registerSignal("neighborNotFoundError");
         failed6pAdd = registerSignal("failed6pAdd");
     } else if (stage == 5) {
         interfaceModule = dynamic_cast<InterfaceTable *>(getParentModule()->getParentModule()->getParentModule()->getParentModule()->getSubmodule("interfaceTable", 0));
@@ -241,7 +242,7 @@ void TschMSF::handleMaxCellsReached(cMessage* msg) {
         return;
 
     EV_DETAIL << "MAX_NUM_CELLS reached, assessing cell usage with " << *neighborMac << ":"
-            << endl << "Currently scheduled cells: \n" << pTschLinkInfo->getCells(neighborId) << endl;
+            << endl << "Currently scheduled TX cells: \n" << pTschLinkInfo->getDedicatedCells(neighborId) << endl;
 
     double usage = (double) nbrStatistic[neighborId].NumCellsUsed / nbrStatistic[neighborId].NumCellsElapsed;
 
@@ -792,34 +793,37 @@ void TschMSF::refreshDisplay() const {
 
 }
 
-void TschMSF::handleSuccessResponse(uint64_t sender, tsch6pCmd_t cmd, int numCells,
-        std::vector<cellLocation_t> cellList)
+void TschMSF::handleSuccessAdd(uint64_t sender, int numCells, vector<cellLocation_t> cellList) {
+    // No cells were added if 6P SUCCESS responds with an empty CELL_LIST
+    if (!cellList.size()) {
+        EV_DETAIL << "Seems ADD to " << MacAddress(sender) << " failed" << endl;
+
+        if (num6pAddSent == par("trackFailed6pAddByNum").intValue())
+            numFailedTracked6p++;
+
+        return;
+    }
+
+    // if we successfully scheduled dedicated TX we don't need an auto, shared TX cell anymore
+    removeAutoTxCell(sender);
+
+    // FIXME: magic numbers
+//            pMaxNumCells = pow(2, (int) pTschLinkInfo->getDedicatedCells(sender).size()) * par("maxNumCells").intValue();
+
+    // FIXME: commented out for Lukas's evaluation
+//            pMaxNumCells = 2 * ((int) pTschLinkInfo->getDedicatedCells(sender).size()) + par("maxNumCells").intValue();
+
+    EV_DETAIL << "6P ADD succeeded, " << cellList << "cells added" << endl;
+}
+
+void TschMSF::handleSuccessResponse(uint64_t sender, tsch6pCmd_t cmd, int numCells, vector<cellLocation_t> cellList)
 {
     if (pTschLinkInfo->getLastKnownType(sender) != MSG_RESPONSE)
         return;
 
     switch (cmd) {
         case CMD_ADD: {
-            // No cells were added if 6P SUCCESS responds with an empty CELL_LIST
-            if (!cellList.size()) {
-                EV_DETAIL << "Seems ADD to " << MacAddress(sender) << " failed" << endl;
-
-                if (num6pAddSent == par("trackFailed6pAddByNum").intValue())
-                    numFailedTracked6p++;
-
-                return;
-            }
-
-            // if we successfully scheduled dedicated TX we don't need an auto, shared TX cell anymore
-            removeAutoTxCell(sender);
-
-            // FIXME: magic numbers
-//            pMaxNumCells = pow(2, (int) pTschLinkInfo->getDedicatedCells(sender).size()) * par("maxNumCells").intValue();
-
-            // FIXME: commented out for Lukas's evaluation
-//            pMaxNumCells = 2 * ((int) pTschLinkInfo->getDedicatedCells(sender).size()) + par("maxNumCells").intValue();
-
-            EV_DETAIL << "6P ADD succeeded, " << cellList << "cells added" << endl;
+            handleSuccessAdd(sender, numCells, cellList);
             break;
         }
         case CMD_DELETE: {
@@ -864,7 +868,7 @@ void TschMSF::clearScheduleWithNode(uint64_t sender)
     } else
         delete ctrlMsg;
 
-    scheduleAutoCell(sender); // Try to schedule an auto cell (if needed) for remaining packets in the queue
+    scheduleAutoCell(sender); // Try to schedule an auto cell (if needed) to flush remaining packets in the queue
 }
 
 
@@ -1185,6 +1189,7 @@ void TschMSF::receiveSignal(cComponent *src, simsignal_t id, long value, cObject
 
     if (neighbor == 0) {
         EV_WARN << "could not find neighbor for cell " << linkStr << endl;
+        emit(neighborNotFoundError, 1);
         return;
     }
 

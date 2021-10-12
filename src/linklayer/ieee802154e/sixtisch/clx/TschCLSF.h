@@ -19,10 +19,10 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+using namespace std;
+
 #ifndef LINKLAYER_IEEE802154E_SIXTISCH_TSCHCLSF_H_
 #define LINKLAYER_IEEE802154E_SIXTISCH_TSCHCLSF_H_
-
-using namespace std;
 
 #include "TschCLSF.h"
 #include "../TschMSF.h"
@@ -55,14 +55,16 @@ private:
 
     offset_t chooseCrossLayerChOffset();
     vector<offset_t> getAvailableSlotsInRange(int start, int end, int pad);
-    vector<cellLocation_t> getNonDaisyChained(vector<cellLocation_t> cellList);
+    vector<cellLocation_t> getNonDaisyChainedCells(vector<cellLocation_t> cellList);
 
     // Functions overriden from the MSF
     virtual void deleteCells(uint64_t nodeId, int numCells) override;
     virtual int createCellList(uint64_t destId, vector<cellLocation_t> &cellList, int numCells) override;
     virtual void handleSuccessRelocate(uint64_t sender, vector<cellLocation_t> cellList) override;
+    virtual void handleSuccessAdd(uint64_t sender, int numCells, vector<cellLocation_t> cellList) override;
     virtual void relocateCells(uint64_t neighbor, vector<cellLocation_t> relocCells) override;
     virtual void handlePacketEnqueued(uint64_t destId) override;
+    virtual void checkDaisyChained();
 
     // Signals handling
     void receiveSignal(cComponent *src, simsignal_t id, long value, cObject *details) override;

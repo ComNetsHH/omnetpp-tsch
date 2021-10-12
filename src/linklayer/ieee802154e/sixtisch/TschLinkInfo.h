@@ -325,6 +325,8 @@ private:
     /** Gate to send timeout notifications to 6P */
     GateId sublayerControlOut;
 
+    int numScheduleClears;
+
     /**
      * Information about all links maintained by this node, indexed by nodeId.
      * Contains one entry per neighbor.

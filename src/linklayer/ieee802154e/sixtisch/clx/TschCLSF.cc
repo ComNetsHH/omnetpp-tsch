@@ -81,6 +81,7 @@ void TschCLSF::handlePacketEnqueued(uint64_t dest) {
 
     bool scheduleInconsistency = false;
 
+    // TODO: solve this properly
     for (auto cell : txCells) {
         if (!schedule->getLinkByCellCoordinates(cell.timeOffset, cell.channelOffset)) {
             EV_WARN << "TX cell at [ " << cell.timeOffset << ", "
@@ -157,7 +158,7 @@ void TschCLSF::handleSuccessRelocate(uint64_t sender, std::vector<cellLocation_t
         EV_WARN << "Received empty RELOCATE response during daisy-chaining, attempting again" << endl;
 
         if (num6pRelocateAttempts > maxNum6pAttempts) {
-            EV_DETAIL << "Maxinum number of 6P RELOCATE attempted, daisy-chaining failed" << endl;
+            EV_DETAIL << "Maximum number of 6P RELOCATE attempted, daisy-chaining failed" << endl;
             isDaisyChainFailed = true;
             return;
         }
@@ -176,7 +177,7 @@ void TschCLSF::handleSuccessRelocate(uint64_t sender, std::vector<cellLocation_t
         ctrlInfo->setCellList(dedicatedCells);
         selfMsg->setControlInfo(ctrlInfo);
 
-        auto delay = uniform(10, 20);
+        auto delay = uniform(10, 20); // FIXME: magic numbers
 
         scheduleAt(simTime() + delay, selfMsg);
         num6pRelocateAttempts++;
@@ -364,6 +365,32 @@ void TschCLSF::setBranchChannelOffset(int chOf) {
     EV_DETAIL << "Received branch-specific channel offset: " << chOf << " from RPL" << endl;
 }
 
+void TschCLSF::handleSuccessAdd(uint64_t sender, int numCells,  vector<cellLocation_t> cellList) {
+    // No cells were added if 6P SUCCESS responds with an empty CELL_LIST
+    if (!cellList.size()) {
+        EV_DETAIL << "Seems ADD to " << MacAddress(sender) << " failed" << endl;
+
+        if (num6pAddSent == par("trackFailed6pAddByNum").intValue())
+            numFailedTracked6p++;
+
+        return;
+    }
+
+    // if we successfully scheduled dedicated TX we don't need an auto, shared TX cell anymore
+    removeAutoTxCell(sender);
+
+    // FIXME: magic numbers
+//            pMaxNumCells = pow(2, (int) pTschLinkInfo->getDedicatedCells(sender).size()) * par("maxNumCells").intValue();
+
+    // FIXME: commented out for Lukas's evaluation
+//            pMaxNumCells = 2 * ((int) pTschLinkInfo->getDedicatedCells(sender).size()) + par("maxNumCells").intValue();
+
+    EV_DETAIL << "6P ADD succeeded, " << cellList << "cells added" << endl;
+
+    if (isCrossLayerInfoAvailable())
+        checkDaisyChained();
+}
+
 void TschCLSF::handleDaisyChaining(SlotframeChunk advertisedChunk) {
     if (!isValidSlotframeChunk(advertisedChunk)) {
         EV_WARN << "Cannot proceed with daisy-chaining, invalid chunk slotframe chunk provided - " << advertisedChunk << endl;
@@ -386,6 +413,14 @@ void TschCLSF::handleDaisyChaining(SlotframeChunk advertisedChunk) {
     crossLayerSlotRange.start = advertisedChunk.start;
     crossLayerSlotRange.end = advertisedChunk.end;
 
+    checkDaisyChained();
+}
+
+void TschCLSF::checkDaisyChained()
+{
+    if (isDaisyChained)
+        return;
+
     auto dedicatedCells = pTschLinkInfo->getDedicatedCells(rplParentId);
 
     if (!dedicatedCells.size()) {
@@ -393,7 +428,7 @@ void TschCLSF::handleDaisyChaining(SlotframeChunk advertisedChunk) {
         isDaisyChained = true;
         return;
     } else {
-        auto nonDaisyChained = getNonDaisyChained(dedicatedCells);
+        auto nonDaisyChained = getNonDaisyChainedCells(dedicatedCells);
 
         if (!nonDaisyChained.size()) {
             EV_DETAIL << "No cells require relocation" << endl;
@@ -418,7 +453,7 @@ void TschCLSF::handleDaisyChaining(SlotframeChunk advertisedChunk) {
     }
 }
 
-vector<cellLocation_t> TschCLSF::getNonDaisyChained(vector<cellLocation_t> cellList) {
+vector<cellLocation_t> TschCLSF::getNonDaisyChainedCells(vector<cellLocation_t> cellList) {
     if (!isCrossLayerInfoAvailable()) {
         EV_WARN << "Cannot determine whether cells have to be relocated, no CL info available!" << endl;
         return cellList;
