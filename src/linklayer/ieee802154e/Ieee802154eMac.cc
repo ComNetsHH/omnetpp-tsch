@@ -123,9 +123,6 @@ void Ieee802154eMac::initialize(int stage) {
         slotendTimer = new cMessage("timer-slotend");
         macState = IDLE_1;
         txAttempts = 0;
-
-        pPrioAppData = par("prioritizeApplicationData").boolValue();
-
         statisticTemplate = getProperties()->get("statisticTemplate", "nbStats");
 
     } else if (stage == INITSTAGE_LINK_LAYER) {
@@ -155,6 +152,8 @@ void Ieee802154eMac::initialize(int stage) {
         schedule = dynamic_cast<TschSlotframe*>(getModuleByPath("^.schedule"));
         neighbor = dynamic_cast<TschNeighbor*>(getModuleByPath("^.neighbor"));
 
+
+
         // Use XML schedule only if SF is disabled
         auto sf = getModuleByPath("^.sixtischInterface.sf");
         if (sf->par("disable").boolValue()) {
@@ -176,7 +175,9 @@ void Ieee802154eMac::initialize(int stage) {
         for (auto nbrId : nbrs)
             neighbors.push_back(MacAddress(nbrId));
 
+
         WATCH_LIST(neighbors);
+        WATCH_MAP(packetsIncorrectlyReceived);
 
         auto timeoutVal = par("lossyLinkTimeout").doubleValue();
         if (timeoutVal)
@@ -381,10 +382,6 @@ int Ieee802154eMac::getVirtualLinkId(TschLink* link) {
     return vl ? vl->getVirtualLink() : 0;
 }
 
-TschLink* Ieee802154eMac::selectActiveLink(std::vector<TschLink*> links) {
-    return selectActiveLink(links, false);
-}
-
 vector<tuple<int, int>> Ieee802154eMac::getQueueSizes(MacAddress nbrAddr, vector<int> virtuaLinkIds)
 {
     vector<tuple<int, int>> queueSizes;
@@ -405,7 +402,7 @@ double Ieee802154eMac::getQueueUtilization(MacAddress nbrAddr, int virtualLinkId
     return numEnqPackets / (double) neighbor->getQueueLength();
 }
 
-TschLink* Ieee802154eMac::selectActiveLink(std::vector<TschLink*> links, bool prioAppData) {
+TschLink* Ieee802154eMac::selectActiveLink(std::vector<TschLink*> links) {
     if ((int) links.size() == 1)
         return links.back();
 
@@ -581,7 +578,7 @@ void Ieee802154eMac::updateStatusIdle(t_mac_event event, cMessage *msg) {
         //currentAsn = asn.getAsn(simTime());
 //        currentLink = schedule->getLinkFromASN(currentAsn);
 
-        currentLink = selectActiveLink(schedule->getLinksFromASN(currentAsn), pPrioAppData);
+        currentLink = selectActiveLink(schedule->getLinksFromASN(currentAsn));
 
         if (!currentLink)
             return;
@@ -698,9 +695,9 @@ void Ieee802154eMac::configureRadio(Hz centerFrequency /*= NAN*/,
     sendDown(request);
 }
 
-void Ieee802154eMac::flushQueue() {
+void Ieee802154eMac::flushQueue(MacAddress neighborAddr, int vlinkId) {
+    neighbor->flushQueue(neighborAddr, vlinkId); // TODO: access TschNeighbor directly
 }
-
 
 void Ieee802154eMac::attachSignal(Packet *mac, simtime_t_cref startTime) {
     simtime_t duration = mac->getBitLength() / bitrate;
@@ -1101,30 +1098,30 @@ void Ieee802154eMac::startTimer(t_mac_timer timer) {
         auto next = schedule->getASNofNextLink(currentAsn);
         auto at = (next - currentAsn) * macTsTimeslotLength;
 
-        EV_DETAIL << "(startTimer) slotTimer value=" << at << endl;
+        EV_DEBUG << "(startTimer) slotTimer value=" << at << endl;
         scheduleAt(simTime() + at, slotTimer);
     } else if (timer == TIMER_CCA) {
         simtime_t ccaTime = rxSetupTime + ccaDetectionTime;
-        EV_DETAIL << "(startTimer) ccaTimer value=" << ccaTime
+        EV_DEBUG << "(startTimer) ccaTimer value=" << ccaTime
                          << "(rxSetupTime,ccaDetectionTime:" << rxSetupTime
                          << "," << ccaDetectionTime << ")." << endl;
         scheduleAt(simTime() + rxSetupTime + ccaDetectionTime, ccaTimer);
     } else if (timer == TIMER_SIFS) {
         assert(useMACAcks);
-        EV_DETAIL << "(startTimer) sifsTimer value=" << macTsTxAckDelay << endl;
+        EV_DEBUG << "(startTimer) sifsTimer value=" << macTsTxAckDelay << endl;
         scheduleAt(simTime() + macTsTxAckDelay, sifsTimer);
     } else if (timer == TIMER_RX_ACK) {
         assert(useMACAcks);
 //        EV_DETAIL << "(startTimer) rxAckTimer value=" << macAckWaitDuration
 //                                 << endl;
-        EV_DETAIL << "(startTimer) rxAckTimer value=" << macTsRxAckDelay + macTsAckWait + macTsMaxAck
+        EV_DEBUG << "(startTimer) rxAckTimer value=" << macTsRxAckDelay + macTsAckWait + macTsMaxAck
                          << endl;
         //scheduleAt(simTime() + macAckWaitDuration, rxAckTimer);
         scheduleAt(simTime() + macTsRxAckDelay + macTsAckWait + macTsMaxAck, rxAckTimer);
     } else if (timer == TIMER_HOPPING) {
         //assert(useMACAcks); TODO verify if channel hopping is enabled?
         // or always on and rely on TschHopping class to disable?
-        EV_DETAIL << "(startTimer) hoppingTimer value=" << channelSwitchingTime
+        EV_DEBUG << "(startTimer) hoppingTimer value=" << channelSwitchingTime
                          << endl;
         scheduleAt(simTime() + channelSwitchingTime, hoppingTimer);
     } else if (timer == TIMER_SLOTEND) {
@@ -1133,7 +1130,7 @@ void Ieee802154eMac::startTimer(t_mac_timer timer) {
         // TODO This value should not be calculated this way,
         // but due to the fact that mactsCcaOffset and macTsRxOffset are not considered
         // it should be around 0.48
-        EV_DETAIL << "(startTimer) slotendTimer value="
+        EV_DEBUG << "(startTimer) slotendTimer value="
                          << (macTsTimeslotLength * 0.48) << endl;
         scheduleAt(simTime() + (macTsTimeslotLength * 0.48), slotendTimer);
     } else {
@@ -1145,8 +1142,6 @@ void Ieee802154eMac::startTimer(t_mac_timer timer) {
  * Binds timers to events and executes FSM.
  */
 void Ieee802154eMac::handleSelfMessage(cMessage *msg) {
-    EV_DETAIL << "timer routine." << endl;
-
     // TEST message kind for simulating lossy links
     if (msg->getKind() == MAC_ENABLE_DROPS) {
         pLinkCollision = par("pLinkCollision").doubleValue();
@@ -1193,6 +1188,20 @@ bool Ieee802154eMac::artificiallyDropAppPacket(Packet *packet) {
     return false;
 }
 
+void Ieee802154eMac::recordIncorrectlyReceived(Packet *packet) {
+    const auto& csmaHeader = packet->peekAtFront<Ieee802154eMacHeader>();
+    const MacAddress& src = csmaHeader->getSrcAddr();
+    const MacAddress& dest = csmaHeader->getDestAddr();
+
+    auto macAddrPair = new MacHeaderAddresses(src, dest);
+    auto storedEntry = packetsIncorrectlyReceived.find( *macAddrPair );
+
+    if (storedEntry == packetsIncorrectlyReceived.end())
+        packetsIncorrectlyReceived.insert( pair<MacHeaderAddresses, int>(*macAddrPair, 1) );
+    else
+        storedEntry->second++;
+}
+
 /**
  * Compares the address of this Host with the destination address in
  * frame. Generates the corresponding event.
@@ -1204,6 +1213,7 @@ void Ieee802154eMac::handleLowerPacket(Packet *packet) {
                 << " contains bit errors or collision, dropping it\n";
         PacketDropDetails details;
         details.setReason(INCORRECTLY_RECEIVED);
+        recordIncorrectlyReceived(packet);
         emit(packetDroppedSignal, packet, &details);
         delete packet;
         return;
@@ -1290,15 +1300,11 @@ void Ieee802154eMac::handleLowerPacket(Packet *packet) {
             else if (neighbor->getCurrentNeighborQueueSize() != 0) {
                 // message is an ack and it is for us.
                 // Is it from the right node ?
-                Packet *firstPacket =
-                        static_cast<Packet *>(neighbor->getCurrentNeighborQueueFirstPacket());
-                const auto& csmaHeader = firstPacket->peekAtFront<
-                        Ieee802154eMacHeader>();
+                Packet *firstPacket = static_cast<Packet *>(neighbor->getCurrentNeighborQueueFirstPacket());
+                const auto& csmaHeader = firstPacket->peekAtFront<Ieee802154eMacHeader>();
                 if (src == csmaHeader->getDestAddr()) {
                     nbRecvdAcks++;
-
                     emitSignal(NBRECVDACKS);
-
                     executeMac(EV_ACK_RECEIVED, packet);
                 } else {
                     EV

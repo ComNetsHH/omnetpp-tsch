@@ -101,9 +101,24 @@ class TschMSF: public TschSF, public cListener {
     TschMSF();
     ~TschMSF();
 
-    struct NbrStatistic {
-        uint8_t NumCellsElapsed;
-        uint8_t NumCellsUsed;
+//    struct NbrStatistic {
+//        uint8_t numCellsElapsed;
+//        uint8_t numCellsUsed;
+//    };
+
+    class NbrStatistic: public cObject {
+
+        public:
+            uint8_t numCellsElapsed;
+            uint8_t numCellsUsed;
+//            cMessage* maxNumCellsMsg;
+
+            NbrStatistic() { // uint64_t neighborId
+                this->numCellsElapsed = 0;
+                this->numCellsUsed = 0;
+//                this->maxNumCellsMsg = new cMessage("MAX_NUM_CELLS", REACHED_MAXNUMCELLS);
+//                maxNumCellsMsg->setContextPointer(new MacAddress(neighborId));
+            }
     };
 
     struct CellStatistic {
@@ -248,7 +263,6 @@ class TschMSF: public TschSF, public cListener {
     void recordPDR(cMessage* msg) override {}
 
     void receiveSignal(cComponent *src, simsignal_t id, cObject *value, cObject *details) override;
-    void receiveSignal(cComponent *src, simsignal_t id, unsigned long value, cObject *details) override;
     void receiveSignal(cComponent *src, simsignal_t id, long value, cObject *details) override;
 
     /**
@@ -332,9 +346,12 @@ class TschMSF: public TschSF, public cListener {
      */
     std::map<uint64_t, std::vector<offset_t>> reservedTimeOffsets;
 
-    std::map<uint64_t, NbrStatistic> nbrStatistic;
+    std::map<uint64_t, NbrStatistic*> nbrStatistic;
+    std::map<uint64_t, cMessage*> maxNumCellsMessages;
+
     std::vector<uint64_t> oneHopRplChildren;
     std::map<cellLocation_t, CellStatistic> cellStatistic;
+
     int numInconsistenciesDetected;
     int numLinkResets;
     int numClearRcv;

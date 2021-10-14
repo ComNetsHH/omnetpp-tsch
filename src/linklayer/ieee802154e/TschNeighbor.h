@@ -170,6 +170,9 @@ class TschNeighbor : public cSimpleModule, protected cListener
          * @param addr a inet::MacAddress argument to the set the selected queue
          */
         void setSelectedQueue(MacAddress macAddr, int linkID);
+
+        void flushQueue(MacAddress neighbor, int vlinkId);
+
         /**
          * A public member function to get the total number of all packets in all queues
          * @return Total packets

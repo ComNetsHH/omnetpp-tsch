@@ -93,9 +93,6 @@ simple Ieee802154eMac extends MacProtocolBase like IMacProtocol
         // The path to the Radio module  //FIXME remove default value
         string radioModule = default("^.^.radio");
         
-        // See header explanation for pPrioAppData
-        bool prioritizeApplicationData = default(false);
-        
         // TEST parameters for simulating lossy links
         double pLinkCollision = default(-1);
         // when MAC starts to apply artifical packet drops
@@ -104,8 +101,7 @@ simple Ieee802154eMac extends MacProtocolBase like IMacProtocol
         // Hybrid Priority Queuing Weight Round Robin scheduler parameters
         int wrrWeigthNp = default(4); // weight of normal priority (NP) traffic 
         int wrrWeigthBe = default(1); // weight of best-effort (BE) traffic
-        bool wrrEnabled = default(false);
-        
+        bool wrrEnabled = default(false);     
 
         @class(Ieee802154eMac);
         @signal[linkBroken](type=inet::Packet);

@@ -167,6 +167,13 @@ void TschNeighbor::removeFirstPacketFromQueue(){
     }
 }
 
+void TschNeighbor::flushQueue(MacAddress neighbor, int vlinkId) {
+    auto neighborQueueInfo = this->macToQueueMap.find(neighbor);
+    auto virtualQueue = neighborQueueInfo->second->find(vlinkId);
+    virtualQueue->second->clear();
+    EV_DETAIL << "Flushed the queue with virtual link ID " << vlinkId << " for " << neighbor << endl;
+}
+
 TschCSMA* TschNeighbor::getCurrentTschCSMA(){
     return this->backoffTable.find(currentNeighborKey)->second;
 }

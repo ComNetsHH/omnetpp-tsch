@@ -89,17 +89,16 @@ int TschLinkInfo::addLink(uint64_t nodeId, bool inTransaction,
 
     linkInfo[nodeId].tom->setNodeId(nodeId);
 
-    if (inTransaction) {
+    if (inTransaction)
         startTimeoutTimer(nodeId, transactionTimeout);
-    }
 
     return 0;
 }
 
 void TschLinkInfo::resetLink(uint64_t nodeId, tsch6pMsg_t lastKnownType) {
+    resetSeqNum(nodeId);
     abortTransaction(nodeId);
     clearCells(nodeId);
-    resetSeqNum(nodeId);
     setLastKnownType(nodeId, lastKnownType);
     setLastLinkOption(nodeId, MAC_LINKOPTIONS_NONE);
 }
@@ -139,11 +138,10 @@ int TschLinkInfo::abortTransaction(uint64_t nodeId) {
     }
 
     if (linkInfo[nodeId].inTransaction) {
-        EV_DETAIL << "Aborting " << getLastKnownCommand(nodeId) << " with " << inet::MacAddress(nodeId) << endl;
+        EV_DETAIL << "Closing " << getLastKnownCommand(nodeId) << " with " << inet::MacAddress(nodeId) << endl;
         if (linkInfo[nodeId].tom) {
             linkInfo[nodeId].tom->setSeqNum(linkInfo[nodeId].lastKnownSeqNum);
             cancelEvent(linkInfo[nodeId].tom);
-            EV_DETAIL << "Cancelled timeout event" << endl;
         }
         linkInfo[nodeId].inTransaction = false;
         linkInfo[nodeId].relocationCells.clear();
@@ -153,8 +151,7 @@ int TschLinkInfo::abortTransaction(uint64_t nodeId) {
     return 0;
 }
 
-int TschLinkInfo::addCell(uint64_t nodeId, cellLocation_t cell,
-                            uint8_t linkOption) {
+int TschLinkInfo::addCell(uint64_t nodeId, cellLocation_t cell, uint8_t linkOption) {
     Enter_Method_Silent();
 
     if (!linkInfoExists(nodeId) || isCellAlreadyScheduled(cell.timeOffset, nodeId))
@@ -384,6 +381,8 @@ void TschLinkInfo::clearCells(uint64_t nodeId) {
 //
 //    return;
 
+    EV_DETAIL << "Before erasure:\n" << linkInfo[nodeId].scheduledCells << endl;
+
     linkInfo[nodeId].scheduledCells.erase(
         std::remove_if( linkInfo[nodeId].scheduledCells.begin(), linkInfo[nodeId].scheduledCells.end(),
             [] (decltype(linkInfo[nodeId].scheduledCells)::value_type link) -> bool {
@@ -392,6 +391,8 @@ void TschLinkInfo::clearCells(uint64_t nodeId) {
         ),
         linkInfo[nodeId].scheduledCells.end()
     );
+
+    EV_DETAIL << "After:\n" << linkInfo[nodeId].scheduledCells << endl;
 
     numScheduleClears++;
 }

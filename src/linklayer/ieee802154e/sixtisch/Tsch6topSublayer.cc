@@ -464,17 +464,17 @@ Packet* Tsch6topSublayer::handleRequestMsg(Packet* pkt,
         return createErrorResponse(sender, seqNum, RC_RESET, data->getTimeout());
     }
 
-//    if (seqNum != 0 && seqNum != (pTschLinkInfo->getLastKnownSeqNum(sender))) {
-//        /* schedule inconsistency detected (sequence number!) */
-//        EV_WARN << "Received seqNum - " << unsigned(seqNum) << ", expected - "
-//                << unsigned(pTschLinkInfo->getLastKnownSeqNum(sender)) << endl;
-//
-//        // The Draft mandates that we should send a RC_SEQNUM response but handling
-//        // those is a bit underspecified for 2-2way transactions so I'm going
-//        // to do it this way for now.
-//        pTschSF->handleInconsistency(sender, seqNum);
-//        return response;
-//    }
+    if (seqNum != 0 && seqNum != (pTschLinkInfo->getLastKnownSeqNum(sender))) {
+        /* schedule inconsistency detected (sequence number!) */
+        EV_WARN << "Received seqNum - " << unsigned(seqNum) << ", expected - "
+                << unsigned(pTschLinkInfo->getLastKnownSeqNum(sender)) << endl;
+
+        // The Draft mandates that we should send a RC_SEQNUM response but handling
+        // those is a bit underspecified for 2-2way transactions so I'm going
+        // to do it this way for now.
+        pTschSF->handleInconsistency(sender, seqNum);
+        return response;
+    }
 
     if (cmd == CMD_SIGNAL) {
         /* SIGNALs currently don't behave like fully-fledged requests so
@@ -1292,9 +1292,12 @@ void Tsch6topSublayer::updateSchedule(tsch6topCtrlMsg msg) {
         schedule->addLink(tl);
     }
 
+
+    auto dest = msg.getDestId();
+
     for (auto cell : msg.getDeleteCells())
     {
-        if ( !schedule->removeLinkAtCell(cell) )
+        if ( !schedule->removeLinkAtCell(cell, dest) )
             EV_DETAIL << "Link at " << cell << " doesn't exist" << endl;
         else
             EV_DETAIL << "Link at " << cell << " deleted" << endl;

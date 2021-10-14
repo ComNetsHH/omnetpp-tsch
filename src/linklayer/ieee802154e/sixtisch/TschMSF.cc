@@ -244,18 +244,22 @@ void TschMSF::handleMaxCellsReached(cMessage* msg) {
     EV_DETAIL << "MAX_NUM_CELLS reached, assessing cell usage with " << *neighborMac << ":"
             << endl << "Currently scheduled TX cells: \n" << pTschLinkInfo->getDedicatedCells(neighborId) << endl;
 
-    double usage = (double) nbrStatistic[neighborId].NumCellsUsed / nbrStatistic[neighborId].NumCellsElapsed;
+    double usage = (double) nbrStatistic[neighborId]->numCellsUsed / nbrStatistic[neighborId]->numCellsElapsed;
 
     EV_DETAIL << printCellUsage(neighborMac->str(), usage) << endl;
 
-    if (usage >= pLimNumCellsUsedHigh && !isLossyLink())
+    if (usage >= pLimNumCellsUsedHigh
+            && !isLossyLink()) // Avoid attempts to schedule more cells if the lossy-link imitation has started
+    {
         addCells(neighborId, pCellIncrement, MAC_LINKOPTIONS_TX, pSend6pDelayed ? uniform(1, 3) : 0);
+    }
+
     if (usage <= pLimNumCellsUsedLow)
         deleteCells(neighborId, 1);
 
     // reset values
-    nbrStatistic[neighborId].NumCellsUsed = 0; //intrand(pMaxNumCells >> 1);
-    nbrStatistic[neighborId].NumCellsElapsed = 0;
+    nbrStatistic[neighborId]->numCellsUsed = 0; //intrand(pMaxNumCells >> 1);
+    nbrStatistic[neighborId]->numCellsElapsed = 0;
 
     delete neighborMac;
 }
@@ -806,12 +810,10 @@ void TschMSF::handleSuccessAdd(uint64_t sender, int numCells, vector<cellLocatio
 
     // if we successfully scheduled dedicated TX we don't need an auto, shared TX cell anymore
     removeAutoTxCell(sender);
+    pMaxNumCells = 10 * ((int) pTschLinkInfo->getDedicatedCells(sender).size()) + par("maxNumCells").intValue(); // TODO: investigate the best scaling factor
 
-    // FIXME: magic numbers
-//            pMaxNumCells = pow(2, (int) pTschLinkInfo->getDedicatedCells(sender).size()) * par("maxNumCells").intValue();
-
-    // FIXME: commented out for Lukas's evaluation
-//            pMaxNumCells = 2 * ((int) pTschLinkInfo->getDedicatedCells(sender).size()) + par("maxNumCells").intValue();
+    if (pMaxNumCells > par("maxNumTx").intValue())
+        pMaxNumCells = par("maxNumTx").intValue(); // RFC limit
 
     EV_DETAIL << "6P ADD succeeded, " << cellList << "cells added" << endl;
 }
@@ -835,10 +837,12 @@ void TschMSF::handleSuccessResponse(uint64_t sender, tsch6pCmd_t cmd, int numCel
             handleSuccessRelocate(sender, cellList);
             break;
         }
+        // TODO: Investigate in detail what happens to sequence numbers after CLEAR
         case CMD_CLEAR: {
-            clearCellStats(cellList);
             clearScheduleWithNode(sender);
             pTschLinkInfo->resetLink(sender, MSG_RESPONSE);
+            scheduleAutoCell(sender);
+            mac->flushQueue(MacAddress(sender), -2); // FIXME: should be a constant!
             numClearRcv++;
             break;
         }
@@ -854,12 +858,12 @@ void TschMSF::handleSuccessRelocate(uint64_t sender, std::vector<cellLocation_t>
         EV_DETAIL << cellList.size() << " successfully relocated" << endl;
 }
 
-void TschMSF::clearScheduleWithNode(uint64_t sender)
+void TschMSF::clearScheduleWithNode(uint64_t neighborId)
 {
     auto ctrlMsg = new tsch6topCtrlMsg();
-    ctrlMsg->setDestId(sender);
-    std::vector<cellLocation_t> deletable = pTschLinkInfo->getCellLocations(sender);
-    EV_DETAIL << "Clearing schedule with " << MacAddress(sender) << endl;
+    ctrlMsg->setDestId(neighborId);
+    std::vector<cellLocation_t> deletable = pTschLinkInfo->getCellLocations(neighborId);
+    EV_DETAIL << "Clearing schedule with " << MacAddress(neighborId) << endl;
 
     if (deletable.size()) {
         EV_DETAIL << "Found cells to delete: " << deletable << endl;
@@ -868,7 +872,18 @@ void TschMSF::clearScheduleWithNode(uint64_t sender)
     } else
         delete ctrlMsg;
 
-    scheduleAutoCell(sender); // Try to schedule an auto cell (if needed) to flush remaining packets in the queue
+    if (nbrStatistic.find(neighborId) != nbrStatistic.end()) {
+        nbrStatistic[neighborId]->numCellsElapsed = 0;
+        nbrStatistic[neighborId]->numCellsUsed = 0;
+        // TODO: cancel the scheduled
+//        cancelEvent(nbrStatistic[neighborId]->maxNumCellsMsg);
+
+//        if (maxNumCellsMessages[neighborId]) {
+//            cancelEvent(maxNumCellsMessages[neighborId]);
+//            EV_DETAIL << "Cancelled MAX_NUM_CELLS message to " << MacAddress(neighborId);
+//        }
+
+    }
 }
 
 
@@ -897,9 +912,10 @@ void TschMSF::handleResponse(uint64_t sender, tsch6pReturn_t code, int numCells,
         }
         // Handle all other return codes (RC_RESET, RC_ERROR, RC_VERSION, RC_SFID, ...) as a generic error
         default: {
-            clearCellStats(cellList);
             clearScheduleWithNode(sender);
             pTschLinkInfo->resetLink(sender, MSG_RESPONSE);
+            scheduleAutoCell(sender); // Schedule an auto cell to flush remaining packets in the queue
+            mac->flushQueue(MacAddress(sender), -2); // FIXME: should be a constant!
             numLinkResets++;
         }
     }
@@ -1017,7 +1033,6 @@ void TschMSF::receiveSignal(cComponent *src, simsignal_t id, cObject *value, cOb
     Enter_Method_Silent();
 
     std::string signalName = getSignalName(id);
-//    EV_DETAIL << "got signal " << signalName;
 
     static std::vector<std::string> namesNeigh = {}; //{"nbSlot-neigh-", "nbTxFrames-neigh-", "nbRxFrames-neigh-"};
     static std::vector<std::string> namesLink = {"nbSlot-link-", "nbTxFrames-link-", "nbRecvdAcks-link-"};
@@ -1081,11 +1096,12 @@ void TschMSF::handlePacketEnqueued(uint64_t dest) {
 
     auto txCells = pTschLinkInfo->getCellsByType(dest, MAC_LINKOPTIONS_TX);
 
-    EV_DETAIL << "Received MAC notification for a packet "
-            << MacAddress(dest) << ",\ncells scheduled to this neighbor: " << txCells << endl;
+    EV_DETAIL << "Received MAC notification for a packet addressed to "
+            << MacAddress(dest) << ", TX cells: " << txCells << endl;
 
     bool scheduleInconsistency = false;
 
+    // TODO: investigate the exact reason why/where this happens in the first place
     for (auto cell : txCells) {
         if (!schedule->getLinkByCellCoordinates(cell.timeOffset, cell.channelOffset)) {
             EV_WARN << "TX cell at [ " << cell.timeOffset << ", "
@@ -1099,27 +1115,20 @@ void TschMSF::handlePacketEnqueued(uint64_t dest) {
         auto dedicatedCells = pTschLinkInfo->getDedicatedCells(dest);
 
         if (!dedicatedCells.size() && !pTschLinkInfo->inTransaction(dest)) {
+            auto timeout = uniform(1, 3);  // FIXME: magic numbers, was 2-5
+
             EV_DETAIL << "No dedicated TX cell found to this node, and " <<
-                    "we are currently not in transaction with it, attempting to add one TX cell" << endl;
+                    "we are currently not in transaction with it, attempting to add one TX cell in "
+                    << timeout << "s" << endl;
             // heuristics - do not send 6P ADD request immediately, cause simultaneous
             // bi-directional transactions are not yet supported
-            addCells(dest, 1, MAC_LINKOPTIONS_TX, uniform(2, 5)); // FIXME: magic numbers
+            addCells(dest, 1, MAC_LINKOPTIONS_TX, timeout);
         }
     }
 
     // If the node's just a neighbor, schedule an auto cell if there's no cell at all
     if (!txCells.size() || scheduleInconsistency)
         scheduleAutoCell(dest);
-}
-
-void TschMSF::receiveSignal(cComponent *src, simsignal_t id, unsigned long value, cObject *details)
-{
-    Enter_Method_Silent();
-    if (!hasStarted)
-        return;
-
-    std::string signalName = getSignalName(id);
-    EV_DETAIL << "Got signal - " << signalName << endl;
 }
 
 void TschMSF::receiveSignal(cComponent *src, simsignal_t id, long value, cObject *details)
@@ -1130,7 +1139,6 @@ void TschMSF::receiveSignal(cComponent *src, simsignal_t id, long value, cObject
         return;
 
     std::string signalName = getSignalName(id);
-    EV_DETAIL << "Got signal - " << signalName << endl;
 
     if (std::strcmp(signalName.c_str(), "parentChanged") == 0) {
         auto rplControlInfo = (RplGenericControlInfo*) details;
@@ -1214,17 +1222,30 @@ void TschMSF::updateCellTxStats(cellLocation_t cell, std::string statType) {
 
 void TschMSF::updateNeighborStats(uint64_t neighbor, std::string statType) {
     if (nbrStatistic.find(neighbor) == nbrStatistic.end())
-        nbrStatistic.insert({neighbor, {0, 0}});
+        nbrStatistic.insert({neighbor, new NbrStatistic()});
 
     if (statType == "nbSlot") {
-        nbrStatistic[neighbor].NumCellsElapsed++;
-        EV_DETAIL << "NumCellsElapsed for " << MacAddress(neighbor) << " now at " << +(nbrStatistic[neighbor].NumCellsElapsed) << endl;
+        nbrStatistic[neighbor]->numCellsElapsed++;
+        EV_DETAIL << "NumCellsElapsed for " << MacAddress(neighbor) << " now at " << +(nbrStatistic[neighbor]->numCellsElapsed) << endl;
     } else if (statType == "nbTxFrames") {
-        nbrStatistic[neighbor].NumCellsUsed++;
-        EV_DETAIL << "NumCellsUsed for " << MacAddress(neighbor) << " now at " << +(nbrStatistic[neighbor].NumCellsUsed) << endl;
+        nbrStatistic[neighbor]->numCellsUsed++;
+        EV_DETAIL << "NumCellsUsed for " << MacAddress(neighbor) << " now at " << +(nbrStatistic[neighbor]->numCellsUsed) << endl;
     }
 
-    if (nbrStatistic[neighbor].NumCellsElapsed >= pMaxNumCells) {
+    if (nbrStatistic[neighbor]->numCellsElapsed >= pMaxNumCells) {
+
+//        if (maxNumCellsMessages.find(neighbor) == maxNumCellsMessages.end()) {
+//            auto maxNumCellMsg = new cMessage("MAX_NUM_CELLS", REACHED_MAXNUMCELLS);
+//            maxNumCellMsg->setContextPointer(new MacAddress(neighbor));
+//            maxNumCellsMessages[neighbor] = maxNumCellMsg;
+//            EV_DETAIL << "Added a new entry to maxNumCellMessages, pointer to the message: " << maxNumCellsMessages[neighbor] << endl;
+////
+////            maxNumCellsMessages.insert({neighbor, });
+////            maxNumCellsMessages[neighbor]->setContextPointer(new MacAddress(neighbor));
+//        }
+//
+//        scheduleAt(simTime(), maxNumCellsMessages[neighbor]);
+
         cMessage* selfMsg = new cMessage();
         selfMsg->setKind(REACHED_MAXNUMCELLS);
         selfMsg->setContextPointer(new MacAddress(neighbor));

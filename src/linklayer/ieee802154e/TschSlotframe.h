@@ -221,7 +221,7 @@ class TschSlotframe : public cSimpleModule, protected cListener, public ILifecyc
      *
      * @return true is returned if the link was removed, false otherwise
      */
-    bool removeLinkAtCell(cellLocation_t cell);
+    bool removeLinkAtCell(cellLocation_t cell, uint64_t neighborId);
 
     /**
      * Checks if there is a link scheduled for the given Macaddress

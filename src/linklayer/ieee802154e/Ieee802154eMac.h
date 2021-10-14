@@ -180,6 +180,7 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
     list<uint64_t> getNeighborsInRange(); // get list of neighbors based on maximum communication range
 
     vector<tuple<int, int>> getQueueSizes(MacAddress neighbor, vector<int> virtualLinkIds = {-1, 0});
+    virtual void flushQueue(MacAddress neighborAddr, int vlinkId);
 
     /**
      * Compute queue utilization as number of packets in queue / queue size
@@ -370,10 +371,6 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
     /** @brief Stores if the MAC expects Acks for Unicast packets.*/
     bool useMACAcks;
 
-    // Prioritize dedicated TX cells used for application traffic in case several
-    // cells are scheduled at the same slot offset
-    bool pPrioAppData;
-
     /** @brief Defines the backoff method to be used.*/
     backoff_methods backoffMethod;
 
@@ -423,12 +420,40 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
 
     double pLinkCollision;
 
+    class MacHeaderAddresses : public cObject {
+        private:
+            MacAddress src;
+            MacAddress dest;
+
+        public:
+            MacHeaderAddresses() {}
+            MacHeaderAddresses(MacAddress src, MacAddress dest) {
+                this->src = src;
+                this->dest = dest;
+            }
+
+            friend ostream& operator<<(ostream& os, MacHeaderAddresses mc)
+            {
+                os << mc.src << " =>" << mc.dest;
+                return os;
+            }
+
+            friend bool operator< (const MacHeaderAddresses& mc1, const MacHeaderAddresses& mc2) {
+                return mc1.src < mc2.src;
+            }
+            friend bool operator== (const MacHeaderAddresses& mc1, const MacHeaderAddresses& mc2) {
+                return mc1.src == mc2.src && mc1.dest == mc2.dest;
+            }
+    };
+
+    map<MacHeaderAddresses, int> packetsIncorrectlyReceived;
+
+    void recordIncorrectlyReceived(Packet *packet);
+
   protected:
-    /** @brief Generate new interface address*/
+    /** @brief Generate new interface addres*/
     virtual void configureInterfaceEntry() override;
     virtual void handleCommand(omnetpp::cMessage *msg) {}
-
-    virtual void flushQueue();
 
     virtual void emitSignal(signal_names signalName);
 
@@ -479,7 +504,6 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
      *  @return link selected to be active for current ASN
      */
     TschLink* selectActiveLink(std::vector<TschLink*> links);
-    TschLink* selectActiveLink(std::vector<TschLink*> links, bool prioAppData);
 
     virtual void decapsulate(inet::Packet *packet);
 

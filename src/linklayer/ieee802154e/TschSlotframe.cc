@@ -412,9 +412,9 @@ int64_t TschSlotframe::getASNofNextLink(int64_t asn)
     return -1; // should never happen
 }
 
-bool TschSlotframe::removeLinkAtCell(cellLocation_t cell) {
+bool TschSlotframe::removeLinkAtCell(cellLocation_t cell, uint64_t neighborId) {
     for (auto it = links.begin(); it != links.end(); ++it)
-        if ( (*it)->getSlotOffset() == cell.timeOffset && (*it)->getChannelOffset() == cell.channelOffset )
+        if ( (*it)->getSlotOffset() == cell.timeOffset && (*it)->getChannelOffset() == cell.channelOffset && (*it)->getAddr().getInt() == neighborId )
         {
             links.erase(it);
             return true;
