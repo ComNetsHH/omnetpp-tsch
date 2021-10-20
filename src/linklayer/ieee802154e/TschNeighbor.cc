@@ -103,7 +103,7 @@ bool TschNeighbor::add2Queue(Packet *packet,MacAddress macAddr, int virtualLinkI
 }
 
 
-int TschNeighbor::checkTotalQueueSizeAt(MacAddress macAddress) {
+int TschNeighbor::getTotalQueueSizeAt(MacAddress macAddress) {
     auto macToQueueEntry = this->macToQueueMap.find(macAddress);
     if (macToQueueEntry != this->macToQueueMap.end()) {
         int queueSize= 0;
@@ -169,7 +169,13 @@ void TschNeighbor::removeFirstPacketFromQueue(){
 
 void TschNeighbor::flushQueue(MacAddress neighbor, int vlinkId) {
     auto neighborQueueInfo = this->macToQueueMap.find(neighbor);
+    if (neighborQueueInfo == this->macToQueueMap.end())
+        return;
+
     auto virtualQueue = neighborQueueInfo->second->find(vlinkId);
+    if (virtualQueue == neighborQueueInfo->second->end())
+        return;
+
     virtualQueue->second->clear();
     EV_DETAIL << "Flushed the queue with virtual link ID " << vlinkId << " for " << neighbor << endl;
 }
@@ -260,11 +266,13 @@ std::map<int, std::list<inet::Packet *>*>* TschNeighbor::createVirtualQueue(){
     return new std::map<int, std::list<inet::Packet *>*>;
 }
 
-void TschNeighbor::printQueue(){
-    EV_DETAIL << ".........................." << endl;
-
+void TschNeighbor::printQueue() {
     for (auto outer = this->macToQueueMap.begin(); outer != this->macToQueueMap.end(); ++outer)
     {
+
+        if (getTotalQueueSizeAt(outer->first) == 0)
+            continue;
+
         EV_DETAIL << "The MacAddress: " << outer->first << " queue:" << endl;
 
         for (auto inner = outer->second->begin(); inner != outer->second->end(); ++inner) {
@@ -273,9 +281,10 @@ void TschNeighbor::printQueue(){
                 EV_DETAIL << "virtualLinkID " << inner->first << " has " << inner->second->size() << " packets" << endl;
         }
     }
-
-    EV_DETAIL << ".........................." << endl;
 }
+
+
+
 void TschNeighbor::clearQueue(){
     for (auto itrOuter = this->macToQueueMap.begin();
             itrOuter != this->macToQueueMap.end(); ++itrOuter) {

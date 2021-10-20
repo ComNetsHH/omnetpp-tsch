@@ -66,9 +66,9 @@ TschSlotframe::~TschSlotframe()
         delete elem;
 }
 
-TschLink* TschSlotframe::getLinkByCellCoordinates(offset_t slotOf, offset_t chOf) {
+TschLink* TschSlotframe::getLinkByCellCoordinates(offset_t slotOf, offset_t chOf, MacAddress neighborAddr) {
     for (auto link : links) {
-        if (link->getChannelOffset() == chOf && link->getSlotOffset() == slotOf)
+        if (link->getChannelOffset() == chOf && link->getSlotOffset() == slotOf && link->getAddr() == neighborAddr)
             return link;
     }
     return nullptr;
@@ -451,6 +451,19 @@ std::vector<TschLink*> TschSlotframe::getDedicatedLinksForNeighbor(inet::MacAddr
 
     return nbrLinks;
 }
+
+
+bool TschSlotframe::removeAutoLinkToNeighbor(inet::MacAddress neigbhorMac) {
+    for (auto const& l: links)
+        if (l->getAddr() == neigbhorMac && l->isAuto() && l->isTx())
+        {
+            internalRemoveLink(l);
+            return true;
+        }
+
+    return false;
+}
+
 
 void TschSlotframe::xmlSchedule(){
     inet::TschParser tp;

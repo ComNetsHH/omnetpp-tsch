@@ -158,7 +158,7 @@ void TschMSF::scheduleAutoCell(uint64_t neighbor) {
 
     if (sharedCells.size()) {
         auto sharedCellLoc = sharedCells.back();
-        if (schedule->getLinkByCellCoordinates(sharedCellLoc.timeOffset, sharedCellLoc.channelOffset))
+        if (schedule->getLinkByCellCoordinates(sharedCellLoc.timeOffset, sharedCellLoc.channelOffset, MacAddress(neighbor)))
         {
             EV_DETAIL << "Already scheduled, aborting" << endl;
             return;
@@ -215,9 +215,9 @@ void TschMSF::start() {
 }
 
 std::string TschMSF::printCellUsage(std::string neighborMac, double usage) {
-    std::string usageInfo = std::string(" Usage to/from neighbor ") + neighborMac
+    std::string usageInfo = std::string("Cell utilization with") + neighborMac
             + std::string(usage >= pLimNumCellsUsedHigh ? " exceeds upper" : "")
-            + std::string(usage <= pLimNumCellsUsedLow ? " below lower" : "")
+            + std::string(usage <= pLimNumCellsUsedLow ? " is below lower" : "")
             + std::string((usage < pLimNumCellsUsedHigh && usage > pLimNumCellsUsedLow) ? " within" : "")
             + std::string(" limit with ") + std::to_string(usage);
 
@@ -241,8 +241,8 @@ void TschMSF::handleMaxCellsReached(cMessage* msg) {
     if (neighborId == pNodeId)
         return;
 
-    EV_DETAIL << "MAX_NUM_CELLS reached, assessing cell usage with " << *neighborMac << ":"
-            << endl << "Currently scheduled TX cells: \n" << pTschLinkInfo->getDedicatedCells(neighborId) << endl;
+    EV_DETAIL << "MAX_NUM_CELLS reached, assessing cell usage with " << *neighborMac
+            << ", currently scheduled TX cells: " << pTschLinkInfo->getDedicatedCells(neighborId) << endl;
 
     double usage = (double) nbrStatistic[neighborId]->numCellsUsed / nbrStatistic[neighborId]->numCellsElapsed;
 
@@ -253,8 +253,7 @@ void TschMSF::handleMaxCellsReached(cMessage* msg) {
     {
         addCells(neighborId, pCellIncrement, MAC_LINKOPTIONS_TX, pSend6pDelayed ? uniform(1, 3) : 0);
     }
-
-    if (usage <= pLimNumCellsUsedLow)
+    else if (usage <= pLimNumCellsUsedLow)
         deleteCells(neighborId, 1);
 
     // reset values
@@ -580,22 +579,13 @@ void TschMSF::scheduleMinimalCells(int numMinimalCells, int slotframeLength) {
 
 
 void TschMSF::removeAutoTxCell(uint64_t neighbor) {
-    std::vector<cellLocation_t> cellList;
+    if (MacAddress(neighbor) == MacAddress::BROADCAST_ADDRESS)
+        return;
 
-    // TODO: Check correctness of this auto cell search
-    for (auto &cell: pTschLinkInfo->getCells(neighbor))
-        if (std::get<1>(cell) != 0xFF && getCellOptions_isAUTO(std::get<1>(cell)))
-            cellList.push_back(std::get<0>(cell));
+    pTschLinkInfo->deleteCells(neighbor, pTschLinkInfo->getSharedCellsWith(neighbor),
+            MAC_LINKOPTIONS_TX | MAC_LINKOPTIONS_SHARED | MAC_LINKOPTIONS_SRCAUTO);
 
-    if (cellList.size()) {
-        EV_DETAIL << "Removing auto TX cell " << cellList << " to neighbor " << MacAddress(neighbor) << endl;
-        auto ctrlMsg = new tsch6topCtrlMsg();
-        ctrlMsg->setDestId(neighbor);
-        pTschLinkInfo->deleteCells(neighbor, cellList, MAC_LINKOPTIONS_TX | MAC_LINKOPTIONS_SHARED | MAC_LINKOPTIONS_SRCAUTO);
-        ctrlMsg->setDeleteCells(cellList);
-        pTsch6p->updateSchedule(*ctrlMsg);
-        delete ctrlMsg;
-    }
+    pTsch6p->schedule->removeAutoLinkToNeighbor(MacAddress(neighbor));
 }
 
 tsch6pSFID_t TschMSF::getSFID() {
@@ -841,8 +831,8 @@ void TschMSF::handleSuccessResponse(uint64_t sender, tsch6pCmd_t cmd, int numCel
         case CMD_CLEAR: {
             clearScheduleWithNode(sender);
             pTschLinkInfo->resetLink(sender, MSG_RESPONSE);
-            scheduleAutoCell(sender);
             mac->flushQueue(MacAddress(sender), -2); // FIXME: should be a constant!
+            scheduleAutoCell(sender);
             numClearRcv++;
             break;
         }
@@ -914,8 +904,8 @@ void TschMSF::handleResponse(uint64_t sender, tsch6pReturn_t code, int numCells,
         default: {
             clearScheduleWithNode(sender);
             pTschLinkInfo->resetLink(sender, MSG_RESPONSE);
-            scheduleAutoCell(sender); // Schedule an auto cell to flush remaining packets in the queue
             mac->flushQueue(MacAddress(sender), -2); // FIXME: should be a constant!
+            scheduleAutoCell(sender); // Schedule an auto cell to flush remaining packets in the queue
             numLinkResets++;
         }
     }
@@ -1103,10 +1093,13 @@ void TschMSF::handlePacketEnqueued(uint64_t dest) {
 
     // TODO: investigate the exact reason why/where this happens in the first place
     for (auto cell : txCells) {
-        if (!schedule->getLinkByCellCoordinates(cell.timeOffset, cell.channelOffset)) {
-            EV_WARN << "TX cell at [ " << cell.timeOffset << ", "
+        if (!schedule->getLinkByCellCoordinates(cell.timeOffset, cell.channelOffset, MacAddress(dest))) {
+            std::ostringstream ostream;
+            ostream << "TX cell at [ " << cell.timeOffset << ", "
                     << cell.channelOffset << " ] missing from the schedule!" << endl;
+
             scheduleInconsistency = true;
+            throw cRuntimeError(ostream.str().c_str());
         }
     }
 
@@ -1196,9 +1189,16 @@ void TschMSF::receiveSignal(cComponent *src, simsignal_t id, long value, cObject
     auto options = pTschLinkInfo->getCellOptions(neighbor, cell);
 
     if (neighbor == 0) {
-        EV_WARN << "could not find neighbor for cell " << linkStr << endl;
-        emit(neighborNotFoundError, 1);
-        return;
+        std::ostringstream out;
+
+        out << "could not find neighbor for cell " << linkStr << endl;
+        throw cRuntimeError(out.str().c_str());
+//
+//        EV_WARN << "could not find neighbor for cell " << linkStr << endl;
+//        bubble("could not find neighbor for cell");
+//
+//        emit(neighborNotFoundError, 1);
+//        return;
     }
 
     if (options != 0xFF && getCellOptions_isTX(options))

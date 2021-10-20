@@ -63,8 +63,8 @@ class TschLinkInfo: public cSimpleModule
 
         friend std::ostream& operator<<(std::ostream& os, NodeLinkInfo_t const& info)
         {
-            os << "scheduled: " << info.scheduledCells << "; lastCmd/Type: "
-                    << info.lastKnownCommand << " / " << info.lastKnownType << endl;
+            os << info.scheduledCells << "; last Cmd/Type: "
+                    << info.lastKnownCommand << "/" << info.lastKnownType << endl;
             return os;
         }
 

@@ -151,7 +151,7 @@ class TschNeighbor : public cSimpleModule, protected cListener
          * @param macaddress a inet::MacAddress argument to search for that MacAddress in the queue
          * @return Summed-up size of the normal and priority queue with the input MacAddress or 0 if the queue with that MacAddress is not found
          */
-        int checkTotalQueueSizeAt(inet::MacAddress macAddress);
+        int getTotalQueueSizeAt(inet::MacAddress macAddress);
 
         /**
          * A public member function to return the size of the currently used neighbor queue

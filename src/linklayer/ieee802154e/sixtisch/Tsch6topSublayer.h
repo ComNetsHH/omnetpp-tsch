@@ -173,6 +173,9 @@ public:
      */
     void updateSchedule(tsch6topCtrlMsg msg);
 
+    /** TSCH schedule */
+    TschSlotframe *schedule;
+
 protected:
     /**
      * @brief handles a lower ctrl message.
@@ -245,8 +248,6 @@ private:
 
     /** Identifier of pTschSF. */
     tsch6pSFID_t pSFID;
-    /** The Scheduling Function of the mac layer*/
-    TschSlotframe *schedule;
 
     /** The time at which the SF actively starts sending requests */
     simtime_t pSFStarttime;

@@ -399,6 +399,10 @@ void TschLinkInfo::clearCells(uint64_t nodeId) {
 
 void TschLinkInfo::deleteCells(uint64_t nodeId, const std::vector<cellLocation_t> &cellList, uint8_t linkOption) {
     Enter_Method_Silent();
+
+    if (cellList.empty())
+        return;
+
     EV_DETAIL << "Deleting cells scheduled with " << inet::MacAddress(nodeId) << " : " << cellList << endl;
 
     if (!linkInfoExists(nodeId)) {
@@ -407,8 +411,6 @@ void TschLinkInfo::deleteCells(uint64_t nodeId, const std::vector<cellLocation_t
     }
 
     cellVector *scheduledCells = &(linkInfo[nodeId].scheduledCells); // TODO: replace with a proper getter method
-
-    EV_DETAIL << "Scheduled cells before erasure:\n" << *scheduledCells << endl;
 
     auto it = cellList.begin();
     for(; it != cellList.end(); ++it)

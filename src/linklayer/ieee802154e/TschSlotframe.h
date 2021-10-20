@@ -126,7 +126,7 @@ class TschSlotframe : public cSimpleModule, protected cListener, public ILifecyc
 
     virtual LinkVector getLinks() const { return links; }
 
-    TschLink* getLinkByCellCoordinates(offset_t slotOf, offset_t chOf);
+    TschLink* getLinkByCellCoordinates(offset_t slotOf, offset_t chOf, MacAddress neighborAddr);
 
     /**
      * Returns the kth link.
@@ -232,6 +232,7 @@ class TschSlotframe : public cSimpleModule, protected cListener, public ILifecyc
 
     std::vector<TschLink*> allTxLinks(inet::MacAddress macAddress);
     std::vector<TschLink*> getDedicatedLinksForNeighbor(inet::MacAddress neigbhorMac);
+    bool removeAutoLinkToNeighbor(inet::MacAddress neigbhorMac);
 
     void xmlSchedule();
 

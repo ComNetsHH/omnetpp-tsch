@@ -393,7 +393,7 @@ vector<tuple<int, int>> Ieee802154eMac::getQueueSizes(MacAddress nbrAddr, vector
 }
 
 double Ieee802154eMac::getQueueUtilization(MacAddress nbrAddr) {
-    return neighbor->checkTotalQueueSizeAt(nbrAddr) / (double) neighbor->getQueueLength();
+    return neighbor->getTotalQueueSizeAt(nbrAddr) / (double) neighbor->getQueueLength();
 }
 
 double Ieee802154eMac::getQueueUtilization(MacAddress nbrAddr, int virtualLinkId) {
@@ -410,7 +410,7 @@ TschLink* Ieee802154eMac::selectActiveLink(std::vector<TschLink*> links) {
     // First look for a DEDICATED TX link
     for (auto link : links) {
         if (link->isTx() && link->getAddr() != MacAddress::BROADCAST_ADDRESS
-                && neighbor->checkTotalQueueSizeAt(link->getAddr()) > 0)
+                && neighbor->getTotalQueueSizeAt(link->getAddr()) > 0)
         {
             EV_DETAIL << "Found unicast TX link with non-empty queue: " << link << endl;
             return link;
@@ -421,7 +421,7 @@ TschLink* Ieee802154eMac::selectActiveLink(std::vector<TschLink*> links) {
     for (auto link : links) {
         if (link->isTx() && link->isAuto()
                 && link->getAddr() != MacAddress::BROADCAST_ADDRESS
-                && neighbor->checkTotalQueueSizeAt(link->getAddr()) > 0)
+                && neighbor->getTotalQueueSizeAt(link->getAddr()) > 0)
         {
             EV_DETAIL << "Found auto TX link with non-empty queue: " << link << endl;
             return link;
@@ -430,7 +430,7 @@ TschLink* Ieee802154eMac::selectActiveLink(std::vector<TschLink*> links) {
 
     // Finally check if there's ANY TX - shared, broadcast - link with packets in queue
     for (auto link : links) {
-        if (link->isTx() && neighbor->checkTotalQueueSizeAt(link->getAddr()) > 0)
+        if (link->isTx() && neighbor->getTotalQueueSizeAt(link->getAddr()) > 0)
         {
             EV_DETAIL << "Found shared TX link with non-empty queue: " << link << endl;
             return link;
@@ -585,21 +585,22 @@ void Ieee802154eMac::updateStatusIdle(t_mac_event event, cMessage *msg) {
 
         currentChannel = hopping->channel(currentAsn, currentLink->getChannelOffset());
         auto freq = hopping->channelToCenterFrequency(currentChannel);
-        int currentVirtualLinkID = selectVirtualQueue(currentLink->getAddr());
-        auto queueSize = neighbor->getVirtualQueueSizeAt(currentLink->getAddr(), currentVirtualLinkID);
+
         EV_DETAIL << currentLink->str() << endl;
 
         // unconditionally emit a signal at slot start when we already have link infos
         emitSignal(NBSLOT);
 
         neighbor->reset();
-        EV_DETAIL << "We are in ASN " << currentAsn << " queue size " << queueSize
-                << " channel " << currentChannel << " frequency " << freq << endl;
-        EV_DETAIL << "This Node is: " << interfaceEntry->getMacAddress() << endl;
-        neighbor->printQueue();
+        EV_DETAIL << "ASN #" << currentAsn << ", channel " << currentChannel
+                << ", frequency " << freq << ", MAC: " << interfaceEntry->getMacAddress() << endl;
 
         if (currentLink->isTx())
         {
+            int currentVirtualLinkID = selectVirtualQueue(currentLink->getAddr());
+            auto queueSize = neighbor->getVirtualQueueSizeAt(currentLink->getAddr(), currentVirtualLinkID);
+            neighbor->printQueue();
+
             if (queueSize > 0) {
 
                 neighbor->setVirtualQueue(currentLink->getAddr(), currentVirtualLinkID);
@@ -633,34 +634,11 @@ void Ieee802154eMac::updateStatusIdle(t_mac_event event, cMessage *msg) {
             }
             // Its a transmission link (and shared and with broadcast address) but the specific queue is empty,
             // else it would be impossible to reach this point
-            else if (currentLink->isShared() && currentLink->getAddr().isBroadcast()) {
-
+            else if (currentLink->isShared() && currentLink->getAddr().isBroadcast())
+            {
                 updateMacState(RECEIVEFRAME_6);
                 startTimer(TIMER_SLOTEND);
                 configureRadio(freq, IRadio::RADIO_MODE_RECEIVER);
-
-//
-//
-//                // Check if a non shared link can use the unused shared slotframe to transmit packets
-//                std::vector<inet::MacAddress> tempMacDedicated;
-//
-//                // Fill the temporary vector with the MacAddress of dedicated links from the schedule
-//                tempMacDedicated = schedule->getMacDedicated();
-//
-//                //Check if the specific queue are filled and select one
-//                if (neighbor->checkAndselectQueue(tempMacDedicated, schedule))
-//                {
-//                    updateMacState(CCA_3);
-//                    startTimer(TIMER_CCA);
-//                    configureRadio(freq, IRadio::RADIO_MODE_RECEIVER);
-//                }
-//                // Nothing to send -> RX
-//                else if (currentLink->isRx())
-//                {
-//                    updateMacState(RECEIVEFRAME_6);
-//                    startTimer(TIMER_SLOTEND);
-//                    configureRadio(freq, IRadio::RADIO_MODE_RECEIVER);
-//                }
             }
         }
         // Nothing to send -> RX
