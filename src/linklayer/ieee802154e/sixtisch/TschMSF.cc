@@ -981,8 +981,8 @@ void TschMSF::deleteCells(uint64_t nodeId, int numCells) {
     if (!dedicated.size()) {
         EV_DETAIL << "No dedicated cells found" << endl;
         // If neighbor is not a parent or we are the sink, no need to hold onto this auto cell
-        if (nodeId != rplParentId || isSink)
-            removeAutoTxCell(nodeId);
+//        if (nodeId != rplParentId || isSink)
+//            removeAutoTxCell(nodeId);
         return;
     }
 
