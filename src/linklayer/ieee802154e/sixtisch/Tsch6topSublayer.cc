@@ -522,7 +522,13 @@ Packet* Tsch6topSublayer::handleRequestMsg(Packet* pkt,
         /* We don't know this node yet, add link info for it */
         pTschLinkInfo->addLink(sender, true, timeout, seqNum);
         pTschLinkInfo->setLastKnownCommand(sender, cmd);
-    } else if (seqNum == 0) {
+    } else if (seqNum == 0) { // TODO: Check if this clause makes sense at all!
+        /* EXPERIMENTAL: first clear the schedule! */
+        auto clearMsg = new tsch6topCtrlMsg();
+        clearMsg->setDestId(sender);
+        clearMsg->setDeleteCells(pTschLinkInfo->getCellLocations(sender)); // delete all scheduled cells except for auto
+        updateSchedule(*clearMsg);
+
         /* node has been reset, clear all existing link information. */
         pTschLinkInfo->resetLink(sender, MSG_REQUEST);
         pTschLinkInfo->setInTransaction(sender, timeout);
@@ -753,10 +759,10 @@ Packet* Tsch6topSublayer::handleResponseMsg(Packet* pkt, inet::IntrusivePtr<cons
     } else if (returnCode == RC_SUCCESS) {
         std::vector<cellLocation_t> cellList = data->getCellList();
         auto cellOption = pTschLinkInfo->getLastLinkOption(sender);
-        tsch6pCmd_t command = pTschLinkInfo->getLastKnownCommand(sender);
+        tsch6pCmd_t lastCmd = pTschLinkInfo->getLastKnownCommand(sender);
         std::vector<cellLocation_t> deleteCells = {};
 
-        switch (command) {
+        switch (lastCmd) {
             case CMD_ADD:
                 pTschLinkInfo->addCells(sender, cellList, cellOption);
                 break;
@@ -773,7 +779,7 @@ Packet* Tsch6topSublayer::handleResponseMsg(Packet* pkt, inet::IntrusivePtr<cons
                 pTschLinkInfo->relocateCells(sender, cellList, cellOption);
                 break;
             default:
-                EV_ERROR << "unknown or unexpected command - " << command << endl;
+                EV_ERROR << "unknown or unexpected command - " << lastCmd << endl;
         }
 
         /* let SF know the transaction it initiated was a success */
@@ -786,7 +792,7 @@ Packet* Tsch6topSublayer::handleResponseMsg(Packet* pkt, inet::IntrusivePtr<cons
 
         // TODO: Change to directly update TschSlotframe instead of using msg
         tsch6topCtrlMsg *msg = new tsch6topCtrlMsg();
-        if (command == CMD_DELETE)
+        if (lastCmd == CMD_DELETE)
             setCtrlMsg_PatternUpdate(msg, sender, cellOption, emptyCellList, cellList, data->getTimeout());
         else
             setCtrlMsg_PatternUpdate(msg, sender, cellOption, cellList, deleteCells, data->getTimeout());
@@ -915,8 +921,10 @@ void Tsch6topSublayer::receiveSignal(cComponent *source, simsignal_t signalID, c
     /* PatternUpdate is no longer needed */
     pendingPatternUpdates[destId]->setDestId(-1);
 
-    if (result != nullptr)
+    if (result != nullptr) {
+        result->setDestId(destId);
         updateSchedule(*result);
+    }
 
     pTschSF->recordPDR(nullptr); // TODO call with meaningful parameters
 }
@@ -1292,8 +1300,10 @@ void Tsch6topSublayer::updateSchedule(tsch6topCtrlMsg msg) {
         schedule->addLink(tl);
     }
 
-
     auto dest = msg.getDestId();
+
+    if (!dest)
+        throw cRuntimeError("Trying to update the schedule but MAC address of the neighbor on this link is not specified!");
 
     for (auto cell : msg.getDeleteCells())
     {

@@ -142,7 +142,12 @@ void TschMSF::scheduleAutoRxCell(InterfaceToken euiAddr) {
     if (overlappingMinCells.size()) {
         EV_DETAIL << "Auto RX cell conflicts with minimal cell at " << autoRxCell.timeOffset
                 << " slotOffset, deleting this minimal cell to avoid scheduling issues" << endl;
-        ctrlMsg->setDeleteCells(overlappingMinCells);
+
+        auto ctrlDelete = new tsch6topCtrlMsg();
+        ctrlDelete->setDeleteCells(overlappingMinCells);
+        ctrlDelete->setDestId(MacAddress::BROADCAST_ADDRESS.getInt());
+        ctrlDelete->setCellOptions(MAC_LINKOPTIONS_RX | MAC_LINKOPTIONS_TX | MAC_LINKOPTIONS_SHARED);
+        pTsch6p->updateSchedule(*ctrlDelete);
     }
 
     pTsch6p->updateSchedule(*ctrlMsg);
@@ -819,6 +824,7 @@ void TschMSF::handleSuccessResponse(uint64_t sender, tsch6pCmd_t cmd, int numCel
             break;
         }
         case CMD_DELETE: {
+            EV_DETAIL << "Deleted cells: " << cellList << endl;
             // remove cell statistics for cells that have been deleted
             clearCellStats(cellList);
             break;
@@ -858,6 +864,7 @@ void TschMSF::clearScheduleWithNode(uint64_t neighborId)
     if (deletable.size()) {
         EV_DETAIL << "Found cells to delete: " << deletable << endl;
         ctrlMsg->setDeleteCells(deletable);
+        ctrlMsg->setDestId(neighborId);
         pTsch6p->updateSchedule(*ctrlMsg);
     } else
         delete ctrlMsg;

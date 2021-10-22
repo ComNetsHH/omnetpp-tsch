@@ -412,7 +412,7 @@ TschLink* Ieee802154eMac::selectActiveLink(std::vector<TschLink*> links) {
         if (link->isTx() && link->getAddr() != MacAddress::BROADCAST_ADDRESS
                 && neighbor->getTotalQueueSizeAt(link->getAddr()) > 0)
         {
-            EV_DETAIL << "Found unicast TX link with non-empty queue: " << link << endl;
+            EV_DETAIL << "Found unicast TX link with non-empty queue: " << link->str() << endl;
             return link;
         }
     }
@@ -423,7 +423,7 @@ TschLink* Ieee802154eMac::selectActiveLink(std::vector<TschLink*> links) {
                 && link->getAddr() != MacAddress::BROADCAST_ADDRESS
                 && neighbor->getTotalQueueSizeAt(link->getAddr()) > 0)
         {
-            EV_DETAIL << "Found auto TX link with non-empty queue: " << link << endl;
+            EV_DETAIL << "Found auto TX link with non-empty queue: " << link->str() << endl;
             return link;
         }
     }
@@ -432,7 +432,7 @@ TschLink* Ieee802154eMac::selectActiveLink(std::vector<TschLink*> links) {
     for (auto link : links) {
         if (link->isTx() && neighbor->getTotalQueueSizeAt(link->getAddr()) > 0)
         {
-            EV_DETAIL << "Found shared TX link with non-empty queue: " << link << endl;
+            EV_DETAIL << "Found shared TX link with non-empty queue: " << link->str() << endl;
             return link;
         }
     }
@@ -452,13 +452,12 @@ TschLink* Ieee802154eMac::selectActiveLink(std::vector<TschLink*> links) {
 
     TschLink* activeRxLink;
 
-    if ( (int) rxLinks.size() == 1)
+    if ((int) rxLinks.size() == 1)
         activeRxLink = rxLinks.back();
     else
         activeRxLink = rxLinks[intrand(rxLinks.size())];
 
-    EV_DETAIL << "Found " << rxLinks.size() << " RX links: "
-            << rxLinks << ",\nselected active: " << activeRxLink << endl;
+    EV_DETAIL << "Selected active: " << activeRxLink->str() << endl;
 
     return activeRxLink;
 }
