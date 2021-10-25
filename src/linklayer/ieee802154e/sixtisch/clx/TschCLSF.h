@@ -63,7 +63,6 @@ private:
     virtual void handleSuccessRelocate(uint64_t sender, vector<cellLocation_t> cellList) override;
     virtual void handleSuccessAdd(uint64_t sender, int numCells, vector<cellLocation_t> cellList) override;
     virtual void relocateCells(uint64_t neighbor, vector<cellLocation_t> relocCells) override;
-    virtual void handlePacketEnqueued(uint64_t destId) override;
     virtual void checkDaisyChained();
 
     // Signals handling

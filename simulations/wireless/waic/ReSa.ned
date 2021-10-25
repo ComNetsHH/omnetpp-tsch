@@ -43,7 +43,7 @@ network ReSa
         int numBM = default(1);
         int numWAS = default(1);
     submodules:
-        configurator: RplNetConfigurator {
+        configurator: Ipv6FlatNetworkConfigurator {
             parameters:
                 @display("p=32.45,3.1166666;is=s");
         }

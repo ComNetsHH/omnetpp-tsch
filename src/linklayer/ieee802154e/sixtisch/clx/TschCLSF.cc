@@ -69,66 +69,6 @@ void TschCLSF::refreshDisplay() const {
     hostNode->getDisplayString().setTagArg("t", 0, out.str().c_str());
 }
 
-
-void TschCLSF::handlePacketEnqueued(uint64_t dest) {
-    if (MacAddress(dest) == MacAddress::BROADCAST_ADDRESS)
-        return;
-
-    auto txCells = pTschLinkInfo->getCellsByType(dest, MAC_LINKOPTIONS_TX);
-
-    EV_DETAIL << "Received MAC notification for a packet "
-            << MacAddress(dest) << ",\ncells scheduled to this neighbor: " << txCells << endl;
-
-    bool scheduleInconsistency = false;
-
-    // TODO: solve this properly
-    for (auto cell : txCells) {
-        if (!schedule->getLinkByCellCoordinates(cell.timeOffset, cell.channelOffset)) {
-            EV_WARN << "TX cell at [ " << cell.timeOffset << ", "
-                    << cell.channelOffset << " ] missing from the schedule!" << endl;
-            scheduleInconsistency = true;
-        }
-    }
-
-    // Heuristic, checking if there's a dedicated cell to preferred parent whenever a packet is enqueued
-//    if (rplParentId == dest) {
-//        auto dedicatedCells = pTschLinkInfo->getDedicatedCells(dest);
-//
-//        if (!dedicatedCells.size() && !pTschLinkInfo->inTransaction(dest)) {
-//            EV_DETAIL << "No dedicated TX cell found to preferred parent, and " <<
-//                    "we are currently not in transaction with him, attempting to add one TX cell" << endl;
-//            addCells(dest, 1);
-//        }
-//    }
-
-    // If the node's just a neighbor, schedule an auto cell if there's no cell at all
-    if (!txCells.size() || scheduleInconsistency)
-        scheduleAutoCell(dest);
-
-    if (isCrossLayerInfoAvailable()) {
-
-        if (dest == rplParentId) {
-            auto dedicatedCells = pTschLinkInfo->getDedicatedCells(dest);
-
-            if (!dedicatedCells.size() && !pTschLinkInfo->inTransaction(dest)) {
-                EV_DETAIL << "No dedicated TX cell found to pref. parent and " <<
-                        "we are currently not in transaction with it, attempting to add one TX cell" << endl;
-                addCells(dest, 1);
-            }
-        }
-
-    } else {
-        auto dedicatedCells = pTschLinkInfo->getDedicatedCells(dest);
-
-        if (!dedicatedCells.size() && !pTschLinkInfo->inTransaction(dest)) {
-            EV_DETAIL << "No dedicated TX cell found to pref. parent and " <<
-                    "we are currently not in transaction with it, attempting to add one TX cell" << endl;
-            addCells(dest, 1);
-        }
-    }
-
-}
-
 offset_t TschCLSF::chooseCrossLayerChOffset() {
     // FIXME: Magic numbers
     int start = crossLayerChOffset - 2;
@@ -155,10 +95,10 @@ void TschCLSF::handleSuccessRelocate(uint64_t sender, std::vector<cellLocation_t
     }
 
     if (!cellList.size()) {
-        EV_WARN << "Received empty RELOCATE response during daisy-chaining, attempting again" << endl;
+        EV_WARN << "Received empty RELOCATE response during daisy-chaining" << endl;
 
         if (num6pRelocateAttempts > maxNum6pAttempts) {
-            EV_DETAIL << "Maximum number of 6P RELOCATE attempted, daisy-chaining failed" << endl;
+            EV_DETAIL << "Maximum number relocates attempted, daisy-chaining is considered failed" << endl;
             isDaisyChainFailed = true;
             return;
         }
@@ -166,7 +106,7 @@ void TschCLSF::handleSuccessRelocate(uint64_t sender, std::vector<cellLocation_t
         auto dedicatedCells = pTschLinkInfo->getDedicatedCells(sender);
 
         if (!dedicatedCells.size()) {
-            EV_DETAIL << "No dedicated cells found to relocate, daisy-chaining finished" << endl;
+            EV_DETAIL << "No dedicated cells found to relocate, daisy-chaining is considered finished" << endl;
             isDaisyChained = true;
             return;
         }
@@ -177,11 +117,15 @@ void TschCLSF::handleSuccessRelocate(uint64_t sender, std::vector<cellLocation_t
         ctrlInfo->setCellList(dedicatedCells);
         selfMsg->setControlInfo(ctrlInfo);
 
-        auto delay = uniform(10, 20); // FIXME: magic numbers
-
-        scheduleAt(simTime() + delay, selfMsg);
+//        auto delay = uniform(10, 20); // FIXME: magic numbers
         num6pRelocateAttempts++;
-        EV_DETAIL << "Preparing to send 6P RELOCATE in " << delay << " s, at " << simTime() + delay << endl;
+
+        auto timeoutVal = pow(2, uniform(0, num6pRelocateAttempts));
+
+        scheduleAt(simTime() + timeoutVal, selfMsg);
+
+        EV_DETAIL << "Preparing to send 6P RELOCATE in " << timeoutVal
+                << " s, at " << simTime() + timeoutVal << endl;
     }
     else
     {
@@ -366,27 +310,8 @@ void TschCLSF::setBranchChannelOffset(int chOf) {
 }
 
 void TschCLSF::handleSuccessAdd(uint64_t sender, int numCells,  vector<cellLocation_t> cellList) {
-    // No cells were added if 6P SUCCESS responds with an empty CELL_LIST
-    if (!cellList.size()) {
-        EV_DETAIL << "Seems ADD to " << MacAddress(sender) << " failed" << endl;
 
-        if (num6pAddSent == par("trackFailed6pAddByNum").intValue())
-            numFailedTracked6p++;
-
-        return;
-    }
-
-    // if we successfully scheduled dedicated TX we don't need an auto, shared TX cell anymore
-    removeAutoTxCell(sender);
-
-    // FIXME: magic numbers
-//            pMaxNumCells = pow(2, (int) pTschLinkInfo->getDedicatedCells(sender).size()) * par("maxNumCells").intValue();
-
-    // FIXME: commented out for Lukas's evaluation
-//            pMaxNumCells = 2 * ((int) pTschLinkInfo->getDedicatedCells(sender).size()) + par("maxNumCells").intValue();
-
-    EV_DETAIL << "6P ADD succeeded, " << cellList << "cells added" << endl;
-
+    TschMSF::handleSuccessAdd(sender, numCells, cellList);
     if (isCrossLayerInfoAvailable())
         checkDaisyChained();
 }

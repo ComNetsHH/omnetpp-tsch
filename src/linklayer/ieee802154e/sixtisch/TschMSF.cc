@@ -1096,8 +1096,6 @@ void TschMSF::handlePacketEnqueued(uint64_t dest) {
     EV_DETAIL << "Received MAC notification for a packet addressed to "
             << MacAddress(dest) << ", TX cells: " << txCells << endl;
 
-    bool scheduleInconsistency = false;
-
     // TODO: investigate the exact reason why/where this happens in the first place
     for (auto cell : txCells) {
         if (!schedule->getLinkByCellCoordinates(cell.timeOffset, cell.channelOffset, MacAddress(dest))) {
@@ -1105,7 +1103,6 @@ void TschMSF::handlePacketEnqueued(uint64_t dest) {
             ostream << "TX cell at [ " << cell.timeOffset << ", "
                     << cell.channelOffset << " ] missing from the schedule!" << endl;
 
-            scheduleInconsistency = true;
             throw cRuntimeError(ostream.str().c_str());
         }
     }
@@ -1117,8 +1114,8 @@ void TschMSF::handlePacketEnqueued(uint64_t dest) {
         if (!dedicatedCells.size() && !pTschLinkInfo->inTransaction(dest)) {
             auto timeout = uniform(1, 3);  // FIXME: magic numbers, was 2-5
 
-            EV_DETAIL << "No dedicated TX cell found to this node, and " <<
-                    "we are currently not in transaction with it, attempting to add one TX cell in "
+            EV_DETAIL << "No dedicated TX cell found to this node, and "
+                    << "we are currently not in transaction with it, attempting to add one TX cell in "
                     << timeout << "s" << endl;
             // heuristics - do not send 6P ADD request immediately, cause simultaneous
             // bi-directional transactions are not yet supported
@@ -1126,8 +1123,8 @@ void TschMSF::handlePacketEnqueued(uint64_t dest) {
         }
     }
 
-    // If the node's just a neighbor, schedule an auto cell if there's no cell at all
-    if (!txCells.size() || scheduleInconsistency)
+    // Ensure minimal connectivity
+    if (!txCells.size())
         scheduleAutoCell(dest);
 }
 

@@ -523,7 +523,7 @@ Packet* Tsch6topSublayer::handleRequestMsg(Packet* pkt,
         pTschLinkInfo->addLink(sender, true, timeout, seqNum);
         pTschLinkInfo->setLastKnownCommand(sender, cmd);
     } else if (seqNum == 0) { // TODO: Check if this clause makes sense at all!
-        /* EXPERIMENTAL: first clear the schedule! */
+        /* EXPERIMENTAL: first clear the schedule, only then the TschLinkInfo! */
         auto clearMsg = new tsch6topCtrlMsg();
         clearMsg->setDestId(sender);
         clearMsg->setDeleteCells(pTschLinkInfo->getCellLocations(sender)); // delete all scheduled cells except for auto
@@ -587,9 +587,6 @@ Packet* Tsch6topSublayer::handleRequestMsg(Packet* pkt,
         case CMD_DELETE: {
             std::vector<cellLocation_t> cellList = data->getCellList();
             EV_DETAIL << "DELETE cells: " << cellList << endl;
-
-            /* all cells currently scheduled on this link */
-            cellVector sharedCells = pTschLinkInfo->getCells(sender); // TODO: investigate why is this not used
 
             if (cellList.size() < numCells) {
                 EV_ERROR << "Cell list size is smaller than number of cells requested" << endl;
@@ -888,7 +885,7 @@ void Tsch6topSublayer::receiveSignal(cComponent *source, simsignal_t signalID, c
         auto cellsToDelete = pendingPatternUpdate->getDeleteCells();
         auto cellOptions = pendingPatternUpdate->getCellOptions();
 
-        EV_DETAIL << "Cells to add: " << cellsToAdd << "to delete: " << cellsToDelete << endl;
+        EV_DETAIL << "Cells to add: " << cellsToAdd << "\nto delete: " << cellsToDelete << endl;
 
         // TODO: using handleResponse() is a bit hacky since we're the ones who
         // sent the response, we're just handling the fact that it was ACKed
@@ -898,7 +895,6 @@ void Tsch6topSublayer::receiveSignal(cComponent *source, simsignal_t signalID, c
 
         // TODO: wenn reloc: cells in reloccellist aus ptschlinkinfo entfernen
         pTschLinkInfo->addCells(destId, cellsToAdd, cellOptions);
-
         if (cellsToDelete.size())
             pTschLinkInfo->deleteCells(destId, cellsToDelete, cellOptions);
 
@@ -1271,8 +1267,6 @@ tsch6topCtrlMsg* Tsch6topSublayer::setCtrlMsg_PatternUpdate(
                             std::vector<cellLocation_t> deleteCells,
                             simtime_t timeout)
 {
-    // TODO: Check if such nullptr handling is really appropriate here or expection should be thrown,
-    // introduced this during MSF mobility handling debug
     if (!msg)
         msg = new tsch6topCtrlMsg();
 
@@ -1287,6 +1281,16 @@ tsch6topCtrlMsg* Tsch6topSublayer::setCtrlMsg_PatternUpdate(
 }
 
 void Tsch6topSublayer::updateSchedule(tsch6topCtrlMsg msg) {
+    auto dest = msg.getDestId();
+
+    if (!dest) {
+        std::ostringstream out;
+        out << "Trying to update the schedule but MAC address of the neighbor on this link is not specified! - "
+                << dest << "\ncells to add: " << msg.getNewCells() << "\nto delete: " << msg.getDeleteCells() << endl;
+        throw cRuntimeError(out.str().c_str());
+    }
+
+
     for (cellLocation_t cell : msg.getNewCells()) {
         TschLink *tl = schedule->createLink();
         tl->setAddr(inet::MacAddress(msg.getDestId()));
@@ -1299,11 +1303,6 @@ void Tsch6topSublayer::updateSchedule(tsch6topCtrlMsg msg) {
         tl->setSlotOffset(cell.timeOffset);
         schedule->addLink(tl);
     }
-
-    auto dest = msg.getDestId();
-
-    if (!dest)
-        throw cRuntimeError("Trying to update the schedule but MAC address of the neighbor on this link is not specified!");
 
     for (auto cell : msg.getDeleteCells())
     {
