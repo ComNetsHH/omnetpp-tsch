@@ -51,13 +51,6 @@
 using namespace inet;
 using namespace std;
 
-enum LINK_PRIORITY {
-    LINK_PRIORITY_CONTROL = -2,
-    LINK_PRIORITY_HIGH = -1,
-    LINK_PRIORITY_NORMAL = 0,
-    LINK_PRIORITY_LOW = 1
-};
-
 namespace tsch {
 
 /**
@@ -147,6 +140,8 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
 
     virtual bool isUpperMessage(cMessage *message) override;
 
+    virtual bool isControlPacket(Packet *packet);
+
     /** @brief Handle messages from lower layer */
     virtual void handleLowerPacket(inet::Packet *packet) override;
 
@@ -181,6 +176,7 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
 
     vector<tuple<int, int>> getQueueSizes(MacAddress neighbor, vector<int> virtualLinkIds = {-1, 0});
     virtual void flushQueue(MacAddress neighborAddr, int vlinkId);
+    virtual void flush6pQueue(MacAddress neighborAddr);
 
     /**
      * Compute queue utilization as number of packets in queue / queue size

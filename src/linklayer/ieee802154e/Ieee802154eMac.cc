@@ -34,6 +34,7 @@
 
 #include "Ieee802154eMac.h"
 #include "inet/common/FindModule.h"
+#include "TschVirtualLink.h"
 #include "inet/common/INETMath.h"
 #include "inet/common/INETUtils.h"
 #include "inet/common/ModuleAccess.h"
@@ -295,6 +296,16 @@ bool Ieee802154eMac::isUpperMessage(cMessage *message)
     return (message->getArrivalGateId() == upperLayerInGateId) || (message->getArrivalGateId() == sixTopSublayerInGateId);
 }
 
+bool Ieee802154eMac::isControlPacket(Packet *packet) {
+    std::string packetName(packet->getFullName());
+
+    // FIXME: make a list of control packet names a constant somewhere
+    return packetName.find("DAO") != std::string::npos
+            || packetName.find("DIO") != std::string::npos
+            || packetName.find("NA") != std::string::npos
+            || packetName.find("NS") != std::string::npos;
+}
+
 /**
  * Encapsulates the message to be transmitted and pass it on
  * to the FSM main method for further processing.
@@ -317,6 +328,9 @@ void Ieee802154eMac::handleUpperPacket(Packet *packet) {
         linkId = virtualLinkTagInd->getVirtualLinkID();
         EV_DETAIL << "virtual link ID set from tag IND = " << linkId << endl;
     }
+
+    if (isControlPacket(packet))
+        linkId = LINK_PRIO_CONTROL;
 
     macPkt->setVirtualLinkID(linkId);
     assert(headerLength % 8 == 0);
@@ -674,6 +688,10 @@ void Ieee802154eMac::configureRadio(Hz centerFrequency /*= NAN*/,
 
 void Ieee802154eMac::flushQueue(MacAddress neighborAddr, int vlinkId) {
     neighbor->flushQueue(neighborAddr, vlinkId); // TODO: access TschNeighbor directly
+}
+
+void Ieee802154eMac::flush6pQueue(MacAddress neighborAddr) {
+    neighbor->flush6pQueue(neighborAddr); // TODO: access TschNeighbor directly
 }
 
 void Ieee802154eMac::attachSignal(Packet *mac, simtime_t_cref startTime) {

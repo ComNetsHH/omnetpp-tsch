@@ -9,12 +9,10 @@ simple TschMSF like TschSF
         @signal[rplParentChanged](type=unsigned long);
         @signal[queueUtilization](type=double);
         @signal[failed6pAdd];
-        @signal[neighborNotFoundError];
         
         @statistic[rplParentChanged](title="Number of rpl parents changed"; source="rplParentChanged"; record=count; interpolationmode=none);
         @statistic[queueUtilization](title="Queue utilization"; source=queueUtilization; record=mean?, vector?; interpolationmode=none);
         @statistic[failed6pAdd](title="Failed 6P ADD requests"; source=failed6pAdd; record=count, vector?; interpolationmode=none);
-        @statistic[neighborNotFoundError](title="Neighbor not found errors"; source=neighborNotFoundError; record=count, vector?; interpolationmode=none);
         
         // the time after which an active, unfinished transaction expires
         // (needs to be defined by every SF as per the 6P standard)
@@ -33,12 +31,9 @@ simple TschMSF like TschSF
         int cellsToAdd = default(1); // number of cells to add with neighbor if cell usage is excessive
         bool disable = default(false);
         // determines whether auto TX cells to neighbors are scheduled on demand (per transmission), or globally during initialization stage
-        bool autoCellOnDemand = default(true); // WARNING: may lead to cell collisions (adding AUTO cell on top of dedicated cell)  
+        bool clearQueueOnReset = default(false); // if enabled, completely flushes regular queue with a neighbor when the link is reset    
         bool disableHousekeeping = default(false);
-        bool showDedicatedTxCells = default(true); // show scheduled TX cells coordinates above node pictorgram
-    	bool showTxCellCount = default(false); // instead of displaying TX cells coordinates, show their count only
-        bool showQueueUtilization = default(false); // displays queue utilization for preferred parent (if available)
-        
+             
      	bool handleRankUpdates = default(false); // TEST parameter, only needed for delay-testing scenarios 
 
 		double startTime @unit("s") = default(uniform(1s, 2s));
@@ -51,6 +46,12 @@ simple TschMSF like TschSF
 		int initialNumCells = default(1); // number of cells to schedule with RPL preferred parent initially
 		
 		int trackFailed6pAddByNum = default(0); // sequence number of specific 6P ADD request to track 
+		
+		// UI params
+        bool showDedicatedTxCells = default(true); // show scheduled TX cells coordinates above node pictorgram
+    	bool showTxCellCount = default(false); // instead of displaying TX cells coordinates, show their count only
+        bool showQueueUtilization = default(false); // displays queue utilization for preferred parent (if available)
+        bool showLinkResets = default(false); // display number of link resets
 		
 		// custom parameter to add random delay before 6P requests to minimize
 		// probability of simulatenous transactions in both directions between two nodes

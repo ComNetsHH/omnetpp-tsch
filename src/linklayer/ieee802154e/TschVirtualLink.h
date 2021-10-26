@@ -26,6 +26,13 @@
 
 #include "TschLink.h"
 
+typedef enum VirtualLinkPriorities {
+    LINK_PRIO_CONTROL = -2,
+    LINK_PRIO_HIGH = -1,
+    LINK_PRIO_NORMAL = 0,
+    LINK_PRIO_LOW = 1
+} linkPrio_t;
+
 namespace tsch {
 
 class TschVirtualLink: public TschLink {

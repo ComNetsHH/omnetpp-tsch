@@ -20,9 +20,11 @@
  */
 
 #include "TschNeighbor.h"
+#include "TschVirtualLink.h"
 #include "inet/common/INETUtils.h"
 #include <iostream>
 #include <algorithm>
+#include <list>
 #include <array>
 
 namespace tsch{
@@ -177,7 +179,28 @@ void TschNeighbor::flushQueue(MacAddress neighbor, int vlinkId) {
         return;
 
     virtualQueue->second->clear();
+
     EV_DETAIL << "Flushed the queue with virtual link ID " << vlinkId << " for " << neighbor << endl;
+}
+
+void TschNeighbor::flush6pQueue(MacAddress neighbor) {
+    auto neighborQueueInfo = this->macToQueueMap.find(neighbor);
+    if (neighborQueueInfo == this->macToQueueMap.end())
+        return;
+
+    auto virtualQueue = neighborQueueInfo->second->find(LINK_PRIO_CONTROL);
+    if (virtualQueue == neighborQueueInfo->second->end())
+        return;
+
+    EV_DETAIL << "control queue before: " << printPacketQueue(virtualQueue->second) << endl;
+
+    virtualQueue->second->remove_if(
+            [](Packet *pkt) {
+                std::string pktName(pkt->getFullName());
+                return pktName.find("6top") != std::string::npos;
+            });
+
+    EV_DETAIL << "control queue after:  " << printPacketQueue(virtualQueue->second) << endl;
 }
 
 TschCSMA* TschNeighbor::getCurrentTschCSMA(){

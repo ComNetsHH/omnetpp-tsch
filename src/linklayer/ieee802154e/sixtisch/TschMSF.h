@@ -352,12 +352,14 @@ class TschMSF: public TschSF, public cListener {
     std::vector<uint64_t> oneHopRplChildren;
     std::map<cellLocation_t, CellStatistic> cellStatistic;
 
+    // Stats
     int numInconsistenciesDetected;
     int numLinkResets;
     int numClearRcv;
     int num6pAddSent;
     int numFailedTracked6p;
     double util; // queue utilization with preferred parent
+    double uplinkCellUtil; // cell utilization with pref. parent
 
     cMessage *delayed6pReq;
 
@@ -368,6 +370,7 @@ class TschMSF: public TschSF, public cListener {
     bool showTxCells;
     bool showQueueUtilization;
     bool showTxCellCount;
+    bool showLinkResets;
 
     cellLocation_t autoRxCell;
 

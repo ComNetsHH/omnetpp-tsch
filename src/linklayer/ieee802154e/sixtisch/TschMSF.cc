@@ -23,9 +23,11 @@
 #include "RplDefs.h"
 #include "Tsch6tischComponents.h"
 #include "../Ieee802154eMac.h"
+#include "../TschVirtualLink.h"
 #include <omnetpp.h>
 #include <random>
 #include <algorithm>
+#include <queue>
 
 using namespace tsch;
 using namespace std;
@@ -44,7 +46,9 @@ TschMSF::TschMSF() :
     num6pAddSent(0),
     delayed6pReq(nullptr),
     numFailedTracked6p(0),
-    numClearRcv(0)
+    numClearRcv(0),
+    uplinkCellUtil(0),
+    showLinkResets(false)
 {
 }
 TschMSF::~TschMSF() {
@@ -90,6 +94,7 @@ void TschMSF::initialize(int stage) {
         showTxCells = par("showDedicatedTxCells").boolValue();
         showQueueUtilization = par("showQueueUtilization").boolValue();
         showTxCellCount = par("showTxCellCount").boolValue();
+        showLinkResets = par("showLinkResets").boolValue();
 
         /** Schedule minimal cells for broadcast control traffic [RFC8180, 4.1] */
         scheduleMinimalCells(pNumMinimalCells, pSlotframeLength);
@@ -104,6 +109,7 @@ void TschMSF::initialize(int stage) {
         }
 
         isSink = rpl->par("isRoot");
+        delayed6pReq = new cMessage("SEND_6P_DELAYED", SEND_6P_REQ);
 
         WATCH(numInconsistenciesDetected);
         WATCH(pMaxNumCells);
@@ -113,6 +119,7 @@ void TschMSF::initialize(int stage) {
         WATCH(num6pAddSent);
         WATCH(numFailedTracked6p);
         WATCH(numClearRcv);
+        WATCH_PTR(delayed6pReq);
 
         rpl->subscribe("parentChanged", this);
         rpl->subscribe("rankUpdated", this);
@@ -249,14 +256,16 @@ void TschMSF::handleMaxCellsReached(cMessage* msg) {
     EV_DETAIL << "MAX_NUM_CELLS reached, assessing cell usage with " << *neighborMac
             << ", currently scheduled TX cells: " << pTschLinkInfo->getDedicatedCells(neighborId) << endl;
 
-    double usage = (double) nbrStatistic[neighborId]->numCellsUsed / nbrStatistic[neighborId]->numCellsElapsed;
+    auto usage = (double) nbrStatistic[neighborId]->numCellsUsed / nbrStatistic[neighborId]->numCellsElapsed;
+
+    if (neighborId == rplParentId)
+        uplinkCellUtil = usage;
 
     EV_DETAIL << printCellUsage(neighborMac->str(), usage) << endl;
 
-    if (usage >= pLimNumCellsUsedHigh
-            && !isLossyLink()) // Avoid attempts to schedule more cells if the lossy-link imitation has started
+    if (usage >= pLimNumCellsUsedHigh && !isLossyLink()) // Avoid attempts to schedule more cells if the lossy-link imitation has started
     {
-        addCells(neighborId, pCellIncrement, MAC_LINKOPTIONS_TX, pSend6pDelayed ? uniform(1, 3) : 0);
+        addCells(neighborId, pCellIncrement, MAC_LINKOPTIONS_TX, pSend6pDelayed ? uniform(1, 3) : 0); // FIXME: magic numbers
     }
     else if (usage <= pLimNumCellsUsedLow)
         deleteCells(neighborId, 1);
@@ -455,12 +464,11 @@ void TschMSF::handleMessage(cMessage* msg) {
 
             // If this 6P request needs to be retransmitted, this check would means
             // that the first attempt has already failed and we have to retry more
+            // TODO: make separation between these two methods more clear, or just merge the two
             if (ctrlInfo->getRtxCtn())
                 addCells(ctrlInfo);
             else
-                // This one just plainly sends the message out, without scheduling a retransmit attempt
-                send6topRequest(ctrlInfo);
-            delayed6pReq = nullptr;
+                send6topRequest(ctrlInfo); // This just sends the request out without checking for RTX
             return;
         }
         case DELAY_TEST: {
@@ -763,32 +771,36 @@ void TschMSF::refreshDisplay() const {
     if (!rplParentId)
         return;
 
+    std::ostringstream out;
+
     if (showTxCells || showTxCellCount) {
         std::vector<cellLocation_t> txCells = {};
         txCells = pTschLinkInfo->getDedicatedCells(rplParentId);
 
-        std::ostringstream outCells;
 
         // Paint dedicated TX cell(s) in red if overlapping cells are detected
         if (hasOverlapping)
             hostNode->getDisplayString().setTagArg("t", 2, "#fc2803");
 
         if (showTxCellCount)
-            outCells << "TX cells: " << txCells.size();
+            out << "TX: " << txCells.size();
         else {
             std::sort(txCells.begin(), txCells.end(),
                 [](const cellLocation_t c1, const cellLocation_t c2) { return c1.timeOffset < c2.timeOffset; });
-            outCells << txCells;
+            out << txCells;
         }
-
-        hostNode->getDisplayString().setTagArg(showQueueUtilization ? "tt" : "t", 0, outCells.str().c_str());
     }
 
     if (showQueueUtilization) {
         std::ostringstream outUtil;
         outUtil << mac->getQueueUtilization(MacAddress(rplParentId));
-        hostNode->getDisplayString().setTagArg("t", 0, outUtil.str().c_str()); // show queue utilization above nodes
+        hostNode->getDisplayString().setTagArg("tt", 0, outUtil.str().c_str()); // show queue utilization above nodes
     }
+
+    if (showLinkResets)
+        out << ", R:" << numLinkResets;
+
+    hostNode->getDisplayString().setTagArg("t", 0, out.str().c_str());
 
 }
 
@@ -836,8 +848,17 @@ void TschMSF::handleSuccessResponse(uint64_t sender, tsch6pCmd_t cmd, int numCel
         // TODO: Investigate in detail what happens to sequence numbers after CLEAR
         case CMD_CLEAR: {
             clearScheduleWithNode(sender);
+            if (delayed6pReq)
+                cancelEvent(delayed6pReq);
+
+            delayed6pReq = new cMessage("SEND_6P_DELAYED", SEND_6P_REQ);
+
             pTschLinkInfo->resetLink(sender, MSG_RESPONSE);
-            mac->flushQueue(MacAddress(sender), -2); // FIXME: should be a constant!
+//            mac->flush6pQueue(MacAddress(sender));
+            mac->flushQueue(MacAddress(sender), LINK_PRIO_CONTROL);
+
+            if (par("clearQueueOnReset").boolValue())
+                mac->flushQueue(MacAddress(sender), LINK_PRIO_NORMAL);
             scheduleAutoCell(sender);
             numClearRcv++;
             break;
@@ -910,8 +931,19 @@ void TschMSF::handleResponse(uint64_t sender, tsch6pReturn_t code, int numCells,
         // Handle all other return codes (RC_RESET, RC_ERROR, RC_VERSION, RC_SFID, ...) as a generic error
         default: {
             clearScheduleWithNode(sender);
+            if (delayed6pReq)
+                cancelEvent(delayed6pReq);
+
+            // Reset the msg, since otherwise it might retain previous control info, which is somehow undeletable
+            delayed6pReq = new cMessage("SEND_6P_DELAYED", SEND_6P_REQ);
+
             pTschLinkInfo->resetLink(sender, MSG_RESPONSE);
-            mac->flushQueue(MacAddress(sender), -2); // FIXME: should be a constant!
+            // TODO: investigate why this works worse than just erasing the entire queue
+//            mac->flush6pQueue(MacAddress(sender));
+            mac->flushQueue(MacAddress(sender), LINK_PRIO_CONTROL);
+
+            if (par("clearQueueOnReset").boolValue())
+                mac->flushQueue(MacAddress(sender), LINK_PRIO_NORMAL);
             scheduleAutoCell(sender); // Schedule an auto cell to flush remaining packets in the queue
             numLinkResets++;
         }
@@ -944,17 +976,15 @@ void TschMSF::addCells(uint64_t nodeId, int numCells, uint8_t cellOptions, int d
 
     if (delay > 0) {
         // already in progress
-        if (delayed6pReq) {
+        if (delayed6pReq && delayed6pReq->isScheduled()) {
             EV_DETAIL << "Detected another delayed 6P request already in progress" << endl;
             return;
         }
 
-        delayed6pReq = new cMessage("SEND_6P_DELAYED", SEND_6P_REQ);
         auto ctrlInfo = new SfControlInfo(nodeId);
         ctrlInfo->set6pCmd(CMD_ADD);
         ctrlInfo->setNumCells(numCells);
         ctrlInfo->setCellOptions(cellOptions);
-
         delayed6pReq->setControlInfo(ctrlInfo);
         scheduleAt(simTime() + SimTime(delay, SIMTIME_S), delayed6pReq);
         EV_DETAIL << "6P ADD will be sent out after " << delay << " seconds timeout" << endl;
@@ -1112,7 +1142,7 @@ void TschMSF::handlePacketEnqueued(uint64_t dest) {
         auto dedicatedCells = pTschLinkInfo->getDedicatedCells(dest);
 
         if (!dedicatedCells.size() && !pTschLinkInfo->inTransaction(dest)) {
-            auto timeout = uniform(1, 3);  // FIXME: magic numbers, was 2-5
+            auto timeout = uniform(0, 2);  // FIXME: magic numbers, was 1-3
 
             EV_DETAIL << "No dedicated TX cell found to this node, and "
                     << "we are currently not in transaction with it, attempting to add one TX cell in "

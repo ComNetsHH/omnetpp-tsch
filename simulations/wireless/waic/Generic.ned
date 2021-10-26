@@ -41,7 +41,7 @@ network Generic
         int numHosts = default(30);
         double lambda = default(1); // optional parameter for multi-hop delay testing 
     submodules:
-        configurator: RplNetConfigurator {
+        configurator: Ipv6FlatNetworkConfigurator {
             parameters:
                 @display("p=27.91269,1.9802921;is=s");
         }

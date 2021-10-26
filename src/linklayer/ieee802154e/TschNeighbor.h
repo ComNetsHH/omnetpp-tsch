@@ -172,6 +172,7 @@ class TschNeighbor : public cSimpleModule, protected cListener
         void setSelectedQueue(MacAddress macAddr, int linkID);
 
         void flushQueue(MacAddress neighbor, int vlinkId);
+        void flush6pQueue(MacAddress neighbor);
 
         /**
          * A public member function to get the total number of all packets in all queues
@@ -271,6 +272,21 @@ class TschNeighbor : public cSimpleModule, protected cListener
         void setVirtualQueue(MacAddress macAddr, int linkId);
 
         int getVirtualQueueSizeAt(MacAddress macAddress, int virtualLinkId);
+
+        friend std::ostream& operator<<(std::ostream& out, Queue q) {
+            for (auto pkt : *q)
+                out << pkt->getFullName() << endl;
+            return out;
+        }
+
+        std::string printPacketQueue(Queue q) {
+            std::ostringstream out;
+
+            for (auto pkt : *q)
+                out << pkt->getFullName() << endl;
+
+            return out.str();
+        }
 
     protected:
         virtual void refreshDisplay() const override;
