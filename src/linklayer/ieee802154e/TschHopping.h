@@ -34,12 +34,8 @@ using namespace inet;
 
 class TschHopping: public omnetpp::cSimpleModule, public IChannelPlan
 {
-    protected:
-        typedef std::vector<int> PatternVector;
-    private:
-        PatternVector pattern;
-        units::values::Hz centerFrequency;
     public:
+        typedef std::vector<int> PatternVector;
         TschHopping();
         virtual ~TschHopping();
 
@@ -63,6 +59,26 @@ class TschHopping: public omnetpp::cSimpleModule, public IChannelPlan
         virtual units::values::Hz getMaxCenterFrequency();
         virtual units::values::Hz getChannelSpacing() { return units::values::Hz(5.0e6); }
         virtual units::values::Hz channelToCenterFrequency(int channel);
+
+        std::string printPattern(PatternVector pv) {
+            std::ostringstream out;
+            for (auto el: pv)
+                out << el << ", ";
+
+            return out.str();
+        }
+
+        // TODO: why the heck does it not work??
+//        friend std::ostream& operator<<(std::ostream& out, const PatternVector& pv) {
+//            for (auto el: pv)
+//                out << el << ", ";
+//
+//            return out;
+//        }
+
+    private:
+        PatternVector pattern;
+        units::values::Hz centerFrequency;
 };
 
 } // namespace tsch

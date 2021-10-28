@@ -31,7 +31,6 @@ module SixtischInterface
 {
     parameters:
         bool stats = false;
-        int nbRadioChannels = default(0);
         string sfid = default("TschMSF");
         @display("i=block/ifcard;bgb=750,443");
     gates:

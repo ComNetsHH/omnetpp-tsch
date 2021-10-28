@@ -25,7 +25,12 @@
 #include "inet/common/InitStages.h"
 #include <omnetpp/cstringtokenizer.h>
 #include "inet/common/Units.h"
+#include <algorithm>
 #include <iostream>
+#include <list>
+#include <numeric>
+#include <random>
+#include <vector>
 
 namespace tsch {
 
@@ -37,14 +42,42 @@ TschHopping::TschHopping() {}
 
 TschHopping::~TschHopping() {}
 
+inline std::ostream& operator<<(std::ostream& out, std::list<int> l) {
+    for (auto el: l)
+        out << el << ", ";
+
+    return out;
+}
+
+inline std::ostream& operator<<(std::ostream& out, TschHopping::PatternVector pv) {
+    for (auto el: pv)
+        out << el << ", ";
+
+    return out;
+}
+
 void TschHopping::initialize(int stage)
 {
     cSimpleModule::initialize(stage);
 
     if (stage == inet::INITSTAGE_LOCAL) {
         const char *patternstr = par("pattern").stringValue();
-        pattern = omnetpp::cStringTokenizer(patternstr).asIntVector();
         centerFrequency = units::values::Hz(par("centerFrequency"));
+
+        if (par("useRandomPattern").boolValue()) {
+            int numChannels = par("nbRadioChannels").intValue();
+
+            std::list<int> l(numChannels);
+            std::iota(l.begin(), l.end(), 0);
+            std::copy(l.begin(), l.end(), std::back_inserter(pattern));
+            std::random_device rd;
+            std::mt19937 e{rd()};
+            std::shuffle(pattern.begin(), pattern.end(), e);
+
+            EV_DETAIL << "Shuffled hopping pattern: " << pattern << endl;
+        } else
+            pattern = omnetpp::cStringTokenizer(patternstr).asIntVector();
+
         // at least one channel in hopping sequence
         assert(pattern.size() >= 1);
     }

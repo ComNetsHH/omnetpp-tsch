@@ -26,7 +26,9 @@ package tsch.linklayer.ieee802154e;
 simple TschHopping
 {
     parameters:
+        int nbRadioChannels = default(0); // TODO: move this elsewhere to radio medium
         string pattern = default("11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26"); // ramp
+        bool useRandomPattern = default(true);
 //      string pattern = default("16 17 23 18 26 15 25 22 19 11 12 13 24 14 20 21"); // from contiki
 //      string pattern = default("11"); 											 // hopping disabled
 		double centerFrequency @unit(Hz) = default (2405 MHz); 

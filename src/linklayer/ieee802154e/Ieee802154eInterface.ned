@@ -58,10 +58,6 @@ module Ieee802154eInterface like IMacProtocol
             parameters:
                 @display("p=300,200");
         }
-        channelHopping: TschHopping {
-            parameters:
-                @display("p=300,300");
-        }
         neighbor: TschNeighbor {
             parameters:
                 @display("p=300,400");

@@ -651,7 +651,7 @@ void TschLinkInfo::startTimeoutTimer(uint64_t nodeId, simtime_t timeout) {
         cancelEvent(linkInfo[nodeId].tom);
     }
 
-    EV_DETAIL << "Scheduling timeout msg for transaction to " << inet::MacAddress(nodeId) << endl;
+    EV_DETAIL << "Scheduling timeout msg at " << timeout <<  "s for transaction to " << inet::MacAddress(nodeId) << endl;
 
     scheduleAt(timeout, linkInfo[nodeId].tom);
 }
