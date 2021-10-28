@@ -1159,7 +1159,7 @@ Packet* Tsch6topSublayer::createSuccessResponse(uint64_t destId, uint8_t seqNum,
 
     pkt->addTagIfAbsent<PacketProtocolTag>()->setProtocol(&Protocol::wiseRoute);
     auto virtualTag = pkt->addTagIfAbsent<VirtualLinkTagReq>();
-        virtualTag->setVirtualLinkID(-2);
+    virtualTag->setVirtualLinkID(-2);
     return pkt;
 }
 

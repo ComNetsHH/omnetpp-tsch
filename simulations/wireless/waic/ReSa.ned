@@ -32,6 +32,8 @@ import inet.node.inet.AdhocHost;
 import rpl.RplRouter;
 import rpl.configurator.RplNetConfigurator;
 import tsch.mobility.ReSaMobility;
+import tsch.linklayer.ieee802154e.TschHopping;
+
 network ReSa
 {
     parameters:
@@ -47,6 +49,7 @@ network ReSa
             parameters:
                 @display("p=32.45,3.1166666;is=s");
         }
+        channelHopping: TschHopping;
         radioMedium: <> like IRadioMedium {
             parameters:
                 @display("p=6.6,3.1166666;is=s");

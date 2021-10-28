@@ -43,7 +43,7 @@ void TschSpectrumSensing::initialize(int stage)
 {
     cSimpleModule::initialize(stage);
 
-    // we are within the 6top sublayer, with is between link and network layer.
+    // we are within the 6top sublayer, which is between link and network layer.
     // therefore we take the later stage of the two
     if (stage == inet::InitStages::INITSTAGE_NETWORK_CONFIGURATION) {
         sensingTimer = new cMessage("timer-sensing");
@@ -60,7 +60,7 @@ void TschSpectrumSensing::initialize(int stage)
             throw cRuntimeError("const_cast(): Cannot cast CommunicationCache");
         }
         ccaDetectionTime = SimTime(par("ccaDetectionTime").doubleValueInUnit("s"));
-        channelPlan = check_and_cast<IChannelPlan*>(getModuleFromPar<cModule>(par("channelPlanModule"), this));
+        channelPlan = check_and_cast<IChannelPlan*>(getModuleByPath("^.^.^.^.^.channelHopping"));
         measurementInterval = SimTime(par("measurementInterval").doubleValueInUnit("s"));
         sweepInterval = SimTime(par("sweepInterval").doubleValueInUnit("s"));
     }

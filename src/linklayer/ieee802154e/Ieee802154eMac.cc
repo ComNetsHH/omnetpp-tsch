@@ -149,11 +149,17 @@ void Ieee802154eMac::initialize(int stage) {
         }
         radio->setRadioMode(IRadio::RADIO_MODE_SLEEP);
 
-        hopping = dynamic_cast<TschHopping*>(getModuleByPath("^.channelHopping"));
+        hopping = dynamic_cast<TschHopping*>(getModuleByPath("^.^.^.^.channelHopping"));
+        if (!hopping)
+            throw cRuntimeError("channelHopping module not found");
+
         schedule = dynamic_cast<TschSlotframe*>(getModuleByPath("^.schedule"));
+        if (!schedule)
+            throw cRuntimeError("schedule module not found");
+
         neighbor = dynamic_cast<TschNeighbor*>(getModuleByPath("^.neighbor"));
-
-
+        if (!hopping)
+            throw cRuntimeError("neighbor module not found");
 
         // Use XML schedule only if SF is disabled
         auto sf = getModuleByPath("^.sixtischInterface.sf");

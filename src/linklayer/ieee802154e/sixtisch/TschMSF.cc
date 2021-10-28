@@ -57,7 +57,7 @@ TschMSF::~TschMSF() {
 void TschMSF::initialize(int stage) {
     if (stage == 0) {
         EV_DETAIL << "MSF initializing" << endl;
-        pNumChannels = getParentModule()->par("nbRadioChannels").intValue();
+        pNumChannels = getModuleByPath("^.^.^.^.^.channelHopping")->par("nbRadioChannels").intValue();
         pTschLinkInfo = (TschLinkInfo*) getParentModule()->getSubmodule("linkinfo");
         pTimeout = par("timeout").intValue();
         pMaxNumCells = par("maxNumCells");
