@@ -367,6 +367,8 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
     /** @brief Stores if the MAC expects Acks for Unicast packets.*/
     bool useMACAcks;
 
+    bool ignoreBitErrors;
+
     /** @brief Defines the backoff method to be used.*/
     backoff_methods backoffMethod;
 

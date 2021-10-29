@@ -102,6 +102,9 @@ simple Ieee802154eMac extends MacProtocolBase like IMacProtocol
         int wrrWeigthNp = default(4); // weight of normal priority (NP) traffic 
         int wrrWeigthBe = default(1); // weight of best-effort (BE) traffic
         bool wrrEnabled = default(false);     
+        
+        
+        bool ignoreBitErrors = default(false);
 
         @class(Ieee802154eMac);
         @signal[linkBroken](type=inet::Packet);

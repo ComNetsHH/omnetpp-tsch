@@ -100,6 +100,7 @@ void Ieee802154eMac::initialize(int stage) {
 
         w_np = par("wrrWeigthNp").intValue();
         w_be = par("wrrWeigthBe").intValue();
+        ignoreBitErrors = par("ignoreBitErrors").boolValue();
 
 
         //init parameters for backoff method
@@ -1209,9 +1210,9 @@ void Ieee802154eMac::recordIncorrectlyReceived(Packet *packet) {
  */
 void Ieee802154eMac::handleLowerPacket(Packet *packet) {
     // Either packet has a bit error, or an *artificial* link collision probability applies
-    if (packet->hasBitError() || artificiallyDropAppPacket(packet)) {
-        EV << "Received " << packet
-                << " contains bit errors or collision, dropping it\n";
+    if ( (packet->hasBitError() && !ignoreBitErrors) || artificiallyDropAppPacket(packet) )
+    {
+        EV << "Received " << packet << " contains bit errors or collision, dropping it\n";
         PacketDropDetails details;
         details.setReason(INCORRECTLY_RECEIVED);
         recordIncorrectlyReceived(packet);
