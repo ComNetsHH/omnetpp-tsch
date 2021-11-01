@@ -392,7 +392,7 @@ class TschMSF: public TschSF, public cListener {
      *
      * @param delay (optional) additional timeout before sending out the request message
      */
-    void addCells(uint64_t nodeId, int numCells, uint8_t cellOptions, int delay);
+    void addCells(uint64_t nodeId, int numCells, uint8_t cellOptions, double delay);
     void addCells(uint64_t nodeId, int numCells, uint8_t cellOptions) { addCells(nodeId, numCells, cellOptions, 0); };
     void addCells(uint64_t nodeId, int numCells) { addCells(nodeId, numCells, MAC_LINKOPTIONS_TX, 0); }
     void addCells(SfControlInfo *retryInfo);

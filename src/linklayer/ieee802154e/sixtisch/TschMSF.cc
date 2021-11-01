@@ -284,6 +284,7 @@ bool TschMSF::isLossyLink() {
 
 void TschMSF::addCells(SfControlInfo *retryInfo)
 {
+    throw cRuntimeError("Trying to retry 6P ADD in MSF!");
     auto numCells = retryInfo->getNumCells();
     auto nodeId = retryInfo->getNodeId();
     if (!pTschLinkInfo->inTransaction(nodeId)) {
@@ -469,7 +470,8 @@ void TschMSF::handleMessage(cMessage* msg) {
                 addCells(ctrlInfo);
             else
                 send6topRequest(ctrlInfo); // This just sends the request out without checking for RTX
-            return;
+            msg->removeControlInfo();
+            return; // do not delete the self-msg
         }
         case DELAY_TEST: {
             long *rankPtr = (long*) msg->getContextPointer();
@@ -848,10 +850,12 @@ void TschMSF::handleSuccessResponse(uint64_t sender, tsch6pCmd_t cmd, int numCel
         // TODO: Investigate in detail what happens to sequence numbers after CLEAR
         case CMD_CLEAR: {
             clearScheduleWithNode(sender);
-            if (delayed6pReq)
+            if (delayed6pReq) {
+                delayed6pReq->removeControlInfo();
                 cancelEvent(delayed6pReq);
+            }
 
-            delayed6pReq = new cMessage("SEND_6P_DELAYED", SEND_6P_REQ);
+//            delayed6pReq = new cMessage("SEND_6P_DELAYED", SEND_6P_REQ);
 
             pTschLinkInfo->resetLink(sender, MSG_RESPONSE);
 //            mac->flush6pQueue(MacAddress(sender));
@@ -931,11 +935,14 @@ void TschMSF::handleResponse(uint64_t sender, tsch6pReturn_t code, int numCells,
         // Handle all other return codes (RC_RESET, RC_ERROR, RC_VERSION, RC_SFID, ...) as a generic error
         default: {
             clearScheduleWithNode(sender);
-            if (delayed6pReq)
+            if (delayed6pReq) {
+                delayed6pReq->removeControlInfo();
                 cancelEvent(delayed6pReq);
+            }
 
             // Reset the msg, since otherwise it might retain previous control info, which is somehow undeletable
-            delayed6pReq = new cMessage("SEND_6P_DELAYED", SEND_6P_REQ);
+//            delayed6pReq = new cMessage("SEND_6P_DELAYED", SEND_6P_REQ);
+
 
             pTschLinkInfo->resetLink(sender, MSG_RESPONSE);
             // TODO: investigate why this works worse than just erasing the entire queue
@@ -966,7 +973,7 @@ int TschMSF::getTimeout() {
     return pTimeout;
 }
 
-void TschMSF::addCells(uint64_t nodeId, int numCells, uint8_t cellOptions, int delay) {
+void TschMSF::addCells(uint64_t nodeId, int numCells, uint8_t cellOptions, double delay) {
     if (numCells < 1) {
         EV_WARN << "Invalid number of cells requested - " << numCells << endl;
         return;
@@ -975,6 +982,7 @@ void TschMSF::addCells(uint64_t nodeId, int numCells, uint8_t cellOptions, int d
     EV_DETAIL << "Trying to add " << numCells << " cell(s) to " << MacAddress(nodeId) << endl;
 
     if (delay > 0) {
+        throw cRuntimeError("6P delayed packets are not allowed currently");
         // already in progress
         if (delayed6pReq && delayed6pReq->isScheduled()) {
             EV_DETAIL << "Detected another delayed 6P request already in progress" << endl;
@@ -986,8 +994,8 @@ void TschMSF::addCells(uint64_t nodeId, int numCells, uint8_t cellOptions, int d
         ctrlInfo->setNumCells(numCells);
         ctrlInfo->setCellOptions(cellOptions);
         delayed6pReq->setControlInfo(ctrlInfo);
-        scheduleAt(simTime() + SimTime(delay, SIMTIME_S), delayed6pReq);
-        EV_DETAIL << "6P ADD will be sent out after " << delay << " seconds timeout" << endl;
+        scheduleAt(simTime() + delay, delayed6pReq);
+        EV_DETAIL << "6P ADD will be sent out after " << delay << "s timeout" << endl;
         return;
     }
 
@@ -1149,7 +1157,8 @@ void TschMSF::handlePacketEnqueued(uint64_t dest) {
                     << timeout << "s" << endl;
             // heuristics - do not send 6P ADD request immediately, cause simultaneous
             // bi-directional transactions are not yet supported
-            addCells(dest, 1, MAC_LINKOPTIONS_TX, timeout);
+//            addCells(dest, 1, MAC_LINKOPTIONS_TX, timeout); // TODO: causes more than one 6P request being added to the queue
+            addCells(dest, 1, MAC_LINKOPTIONS_TX);
         }
     }
 
