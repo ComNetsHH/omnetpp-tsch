@@ -101,7 +101,7 @@ void Ieee802154eMac::initialize(int stage) {
         w_np = par("wrrWeigthNp").intValue();
         w_be = par("wrrWeigthBe").intValue();
         ignoreBitErrors = par("ignoreBitErrors").boolValue();
-
+        isSink = getModuleByPath("^.^.^.rpl")->par("isRoot").boolValue();
 
         //init parameters for backoff method
         std::string backoffMethodStr = par("backoffMethod").stdstringValue();
@@ -411,6 +411,10 @@ vector<tuple<int, int>> Ieee802154eMac::getQueueSizes(MacAddress nbrAddr, vector
         queueSizes.emplace_back(linkId, neighbor->getVirtualQueueSizeAt(nbrAddr, linkId));
 
     return queueSizes;
+}
+
+int Ieee802154eMac::getQueueSize(MacAddress nbrAddr) {
+    return neighbor->getTotalQueueSizeAt(nbrAddr);
 }
 
 double Ieee802154eMac::getQueueUtilization(MacAddress nbrAddr) {

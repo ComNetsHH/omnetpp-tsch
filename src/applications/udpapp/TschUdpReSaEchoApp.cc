@@ -3,7 +3,7 @@
 //
 //  Copyright (C) 2019  Institute of Communication Networks (ComNets),
 //                      Hamburg University of Technology (TUHH)
-//            (C) 2021  Gökay Apusoglu
+//            (C) 2021  Gï¿½kay Apusoglu
 //
 //  This program is free software: you can redistribute it and/or modify
 //  it under the terms of the GNU General Public License as published by
@@ -82,7 +82,8 @@ void TschUdpReSaEchoApp::socketDataArrived(UdpSocket *socket, Packet *pk)
 
 
     // send back
-    if (strncmp(pkName,"HAZARD",3)==0){
+    // TODO: set/get packet name dynamically
+    if (strncmp(pkName, "Hazard", 3) == 0) {
 
         rcvdPkNo++;
 

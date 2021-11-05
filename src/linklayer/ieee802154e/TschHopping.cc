@@ -88,6 +88,12 @@ int TschHopping::channel(int64_t asn, int channelOffset)
     ASSERT(asn >= 0);
     ASSERT(channelOffset >= 0);
 
+    if ((int) pattern.size() == 1) {
+        EV_DETAIL << "Seems channel hopping is disabled" << endl;
+        return channelOffset;
+    }
+
+
     return pattern[((asn + channelOffset) % pattern.size())];
 }
 
