@@ -188,6 +188,8 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
     double getQueueUtilization(MacAddress nbrAddr);
     double getQueueUtilization(MacAddress nbrAddr, int virtualLinkId);
 
+    int getQueueSize(MacAddress nbrAddr);
+
   protected:
     /** @name Different tracked statistics.*/
     /*@{*/
@@ -201,6 +203,8 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
     long nbBackoffs;
     double backoffValues;
     /*@}*/
+
+    bool isSink; // root of RPL DODAG
 
     int udpSentCtn;
     int udpDroppedCtn;

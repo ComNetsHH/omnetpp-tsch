@@ -668,6 +668,9 @@ Packet* Tsch6topSublayer::handleResponseMsg(Packet* pkt, inet::IntrusivePtr<cons
 {
     Packet* response = NULL;
 
+    if (!pkt || !hdr || !data)
+        return response;
+
     auto addresses = pkt->getTag<MacAddressInd>();
 
     std::vector<cellLocation_t> emptyCellList = {};
@@ -702,7 +705,8 @@ Packet* Tsch6topSublayer::handleResponseMsg(Packet* pkt, inet::IntrusivePtr<cons
         pTschSF->handleResponse(sender, RC_RESET, 0, emptyCellList);
 
         /* cancel any pending pattern update that we might have created */
-        pendingPatternUpdates[sender]->setDestId(-1);
+        if (pendingPatternUpdates[sender])
+            pendingPatternUpdates[sender]->setDestId(-1);
         return response;
     }
 
@@ -713,11 +717,13 @@ Packet* Tsch6topSublayer::handleResponseMsg(Packet* pkt, inet::IntrusivePtr<cons
         pTschSF->handleResponse(sender, returnCode, 0, emptyCellList);
 
         /* cancel any pending pattern update that we might have created */
-        pendingPatternUpdates[sender]->setDestId(-1);
+        if (pendingPatternUpdates[sender])
+            pendingPatternUpdates[sender]->setDestId(-1);
         return response;
     }
 
-    if (seqNum == pTschLinkInfo->getLastKnownSeqNum(sender) && MSG_RESPONSE == pTschLinkInfo->getLastKnownType(sender))
+    if (seqNum == pTschLinkInfo->getLastKnownSeqNum(sender)
+            && MSG_RESPONSE == pTschLinkInfo->getLastKnownType(sender))
     {
         /* pkt is duplicate, ignore */
         EV_DETAIL << "Received duplicate response, ignoring" << endl;

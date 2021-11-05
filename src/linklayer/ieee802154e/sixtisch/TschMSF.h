@@ -369,6 +369,7 @@ class TschMSF: public TschSF, public cListener {
     /** Parameter variables, see NED */
     bool showTxCells;
     bool showQueueUtilization;
+    bool showQueueSize;
     bool showTxCellCount;
     bool showLinkResets;
 

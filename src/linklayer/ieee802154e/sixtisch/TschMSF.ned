@@ -52,6 +52,7 @@ simple TschMSF like TschSF
     	bool showTxCellCount = default(false); // instead of displaying TX cells coordinates, show their count only
         bool showQueueUtilization = default(false); // displays queue utilization for preferred parent (if available)
         bool showLinkResets = default(false); // display number of link resets
+        bool showQueueSize = default(false);
 		
 		// custom parameter to add random delay before 6P requests to minimize
 		// probability of simulatenous transactions in both directions between two nodes

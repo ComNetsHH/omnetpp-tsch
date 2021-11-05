@@ -95,6 +95,7 @@ void TschMSF::initialize(int stage) {
         showQueueUtilization = par("showQueueUtilization").boolValue();
         showTxCellCount = par("showTxCellCount").boolValue();
         showLinkResets = par("showLinkResets").boolValue();
+        showQueueSize = par("showQueueSize").boolValue();
 
         /** Schedule minimal cells for broadcast control traffic [RFC8180, 4.1] */
         scheduleMinimalCells(pNumMinimalCells, pSlotframeLength);
@@ -161,16 +162,19 @@ void TschMSF::scheduleAutoRxCell(InterfaceToken euiAddr) {
     delete ctrlMsg;
 }
 
-void TschMSF::scheduleAutoCell(uint64_t neighbor) {
-    EV_DETAIL << "Trying to schedule an auto cell to " << MacAddress(neighbor) << endl;
+void TschMSF::scheduleAutoCell(uint64_t neighborId) {
+    if (neighborId == 0)
+        return;
+
+    EV_DETAIL << "Trying to schedule an auto cell to " << MacAddress(neighborId) << endl;
 
     // Although this is always supposed to be a single cell,
     // implementation-wise it's easier to keep it as vector
-    auto sharedCells = pTschLinkInfo->getSharedCellsWith(neighbor);
+    auto sharedCells = pTschLinkInfo->getSharedCellsWith(neighborId);
 
     if (sharedCells.size()) {
         auto sharedCellLoc = sharedCells.back();
-        if (schedule->getLinkByCellCoordinates(sharedCellLoc.timeOffset, sharedCellLoc.channelOffset, MacAddress(neighbor)))
+        if (schedule->getLinkByCellCoordinates(sharedCellLoc.timeOffset, sharedCellLoc.channelOffset, MacAddress(neighborId)))
         {
             EV_DETAIL << "Already scheduled, aborting" << endl;
             return;
@@ -179,10 +183,10 @@ void TschMSF::scheduleAutoCell(uint64_t neighbor) {
     }
 
     auto ctrlMsg = new tsch6topCtrlMsg();
-    ctrlMsg->setDestId(neighbor);
+    ctrlMsg->setDestId(neighborId);
     ctrlMsg->setCellOptions(MAC_LINKOPTIONS_TX | MAC_LINKOPTIONS_SHARED | MAC_LINKOPTIONS_SRCAUTO);
 
-    auto neighborIntfIdent = MacAddress(neighbor).formInterfaceIdentifier();
+    auto neighborIntfIdent = MacAddress(neighborId).formInterfaceIdentifier();
 
     uint32_t nbruid = neighborIntfIdent.low();
 
@@ -193,10 +197,10 @@ void TschMSF::scheduleAutoCell(uint64_t neighbor) {
     cellList.push_back({slotOffset, nbruid % pNumChannels});
     ctrlMsg->setNewCells(cellList);
 
-    EV_DETAIL << "Scheduling auto TX cell at " << cellList.back() << " to " << MacAddress(neighbor) << endl;
+    EV_DETAIL << "Scheduling auto TX cell at " << cellList.back() << " to " << MacAddress(neighborId) << endl;
 
-    pTschLinkInfo->addLink(neighbor, false, 0, 0);
-    pTschLinkInfo->addCell(neighbor, cellList.back(), MAC_LINKOPTIONS_TX | MAC_LINKOPTIONS_SHARED | MAC_LINKOPTIONS_SRCAUTO);
+    pTschLinkInfo->addLink(neighborId, false, 0, 0);
+    pTschLinkInfo->addCell(neighborId, cellList.back(), MAC_LINKOPTIONS_TX | MAC_LINKOPTIONS_SHARED | MAC_LINKOPTIONS_SRCAUTO);
     pTsch6p->updateSchedule(*ctrlMsg);
     delete ctrlMsg;
 }
@@ -284,7 +288,7 @@ bool TschMSF::isLossyLink() {
 
 void TschMSF::addCells(SfControlInfo *retryInfo)
 {
-    throw cRuntimeError("Trying to retry 6P ADD in MSF!");
+//    throw cRuntimeError("Trying to retry 6P ADD in MSF!");
     auto numCells = retryInfo->getNumCells();
     auto nodeId = retryInfo->getNodeId();
     if (!pTschLinkInfo->inTransaction(nodeId)) {
@@ -799,6 +803,9 @@ void TschMSF::refreshDisplay() const {
         hostNode->getDisplayString().setTagArg("tt", 0, outUtil.str().c_str()); // show queue utilization above nodes
     }
 
+    if (showQueueSize)
+        out << ", Q: " << mac->getQueueSize(MacAddress(rplParentId));
+
     if (showLinkResets)
         out << ", R:" << numLinkResets;
 
@@ -806,7 +813,8 @@ void TschMSF::refreshDisplay() const {
 
 }
 
-void TschMSF::handleSuccessAdd(uint64_t sender, int numCells, vector<cellLocation_t> cellList) {
+void TschMSF::handleSuccessAdd(uint64_t sender, int numCells, vector<cellLocation_t> cellList)
+{
     // No cells were added if 6P SUCCESS responds with an empty CELL_LIST
     if (!cellList.size()) {
         EV_DETAIL << "Seems ADD to " << MacAddress(sender) << " failed" << endl;
@@ -824,7 +832,7 @@ void TschMSF::handleSuccessAdd(uint64_t sender, int numCells, vector<cellLocatio
     if (pMaxNumCells > par("maxNumTx").intValue())
         pMaxNumCells = par("maxNumTx").intValue(); // RFC limit
 
-    EV_DETAIL << "6P ADD succeeded, " << cellList << "cells added" << endl;
+    EV_DETAIL << "6P ADD succeeded, " << cellList << " cells added" << endl;
 }
 
 void TschMSF::handleSuccessResponse(uint64_t sender, tsch6pCmd_t cmd, int numCells, vector<cellLocation_t> cellList)
