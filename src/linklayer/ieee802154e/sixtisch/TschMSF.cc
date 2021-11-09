@@ -278,6 +278,13 @@ void TschMSF::handleMaxCellsReached(cMessage* msg) {
     nbrStatistic[neighborId]->numCellsUsed = 0; //intrand(pMaxNumCells >> 1);
     nbrStatistic[neighborId]->numCellsElapsed = 0;
 
+//    if (par("flushQueueOnAdd").boolValue() && ((int) pTschLinkInfo->getDedicatedCells(neighborId).size()) > 3)
+//        try {
+//            mac->flushQueue(MacAddress(neighborId), LINK_PRIO_NORMAL);
+//        }
+//        catch (...) {}
+
+
     delete neighborMac;
 }
 
@@ -815,7 +822,7 @@ void TschMSF::refreshDisplay() const {
 
 void TschMSF::handleSuccessAdd(uint64_t sender, int numCells, vector<cellLocation_t> cellList)
 {
-    // No cells were added if 6P SUCCESS responds with an empty CELL_LIST
+    // No cells were added if 6P SUCCESS responds with an empty CELL_LIST, TODO: move this outside
     if (!cellList.size()) {
         EV_DETAIL << "Seems ADD to " << MacAddress(sender) << " failed" << endl;
 
@@ -831,8 +838,6 @@ void TschMSF::handleSuccessAdd(uint64_t sender, int numCells, vector<cellLocatio
 
     if (pMaxNumCells > par("maxNumTx").intValue())
         pMaxNumCells = par("maxNumTx").intValue(); // RFC limit
-
-    EV_DETAIL << "6P ADD succeeded, " << cellList << " cells added" << endl;
 }
 
 void TschMSF::handleSuccessResponse(uint64_t sender, tsch6pCmd_t cmd, int numCells, vector<cellLocation_t> cellList)

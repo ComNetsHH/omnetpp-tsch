@@ -58,6 +58,7 @@ simple TschMSF like TschSF
 		// probability of simulatenous transactions in both directions between two nodes
 		bool send6pDelayed = default(false);  
 		bool downlinkDedicated = default(false);
+		bool flushQueueOnAdd = default(false); // clear the packet queue after each successful 6P ADD (helps schedule exactly arrival_rate + 1 TX cells) 
 		
 		// Module parameters required by the interface but are actually unused
 		int initNumcells = default(6);
