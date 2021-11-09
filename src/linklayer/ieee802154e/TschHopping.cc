@@ -65,7 +65,8 @@ void TschHopping::initialize(int stage)
         centerFrequency = units::values::Hz(par("centerFrequency"));
 
         if (par("useRandomPattern").boolValue()) {
-            int numChannels = par("nbRadioChannels").intValue();
+            // TODO: move the radio channels definition either down to radio or to the topmost network module
+            numChannels = par("nbRadioChannels").intValue();
 
             std::list<int> l(numChannels);
             std::iota(l.begin(), l.end(), 0);
@@ -95,6 +96,18 @@ int TschHopping::channel(int64_t asn, int channelOffset)
 
 
     return pattern[((asn + channelOffset) % pattern.size())];
+}
+
+int TschHopping::getMinChannel() {
+    return numChannels > 16
+            ? 0 // WAIC
+            : 11; // ISM
+}
+
+int TschHopping::getMaxChannel() {
+    return numChannels > 16
+            ? 40 // WAIC
+            : 26; // ISM
 }
 
 units::values::Hz TschHopping::getMinCenterFrequency(){
