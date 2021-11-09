@@ -51,8 +51,8 @@ class TschHopping: public omnetpp::cSimpleModule, public IChannelPlan
             this->pattern = pattern;
         }
 
-        virtual inline int getMinChannel() { return 11; }
-        virtual inline int getMaxChannel() { return 26; }
+        virtual int getMinChannel();
+        virtual int getMaxChannel();
         //virtual units::values::Hz getMinCenterFrequency() { return units::values::Hz(2.405e9); }
         //virtual units::values::Hz getMaxCenterFrequency() { return units::values::Hz(2.405e9); }
         virtual units::values::Hz getMinCenterFrequency();
@@ -79,6 +79,7 @@ class TschHopping: public omnetpp::cSimpleModule, public IChannelPlan
     private:
         PatternVector pattern;
         units::values::Hz centerFrequency;
+        int numChannels;
 };
 
 } // namespace tsch
