@@ -672,9 +672,12 @@ int TschMSF::createCellList(uint64_t destId, std::vector<cellLocation_t> &cellLi
         EV_WARN << "cellList should be an empty vector" << endl;
         return -EINVAL;
     }
+
     if (!reservedTimeOffsets[destId].empty()) {
         EV_ERROR << "reservedTimeOffsets should be empty when creating new cellList,"
                 << " is another transaction still in progress?" << endl;
+
+        throw cRuntimeError("reservedTimeOffsets should be empty when creating new cellList");
         return -EINVAL;
     }
 

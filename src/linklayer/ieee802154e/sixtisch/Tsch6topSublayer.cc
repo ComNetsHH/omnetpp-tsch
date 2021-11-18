@@ -333,13 +333,13 @@ void Tsch6topSublayer::sendClearRequest(uint64_t destId, int timeout) {
     uint8_t seqNum = pTschLinkInfo->getLastKnownSeqNum(destId);
     simtime_t absoluteTimeout = getAbsoluteTimeout(timeout);
 
+    if (!pTschLinkInfo->linkInfoExists(destId))
+        throw cRuntimeError("Attempt to send a CLEAR when no link info available");
+
     /* CLEAR requests end a transaction, so we can override the current status
        no matter what. However seqnum & cells are only reset after a RC_SUCCESS
        response is received, so we still need to note that we sent a CLEAR */
-    if (!pTschLinkInfo->linkInfoExists(destId))
-        /* We don't have a link to destId yet, register one and start @ SeqNum 0 */
-        pTschLinkInfo->addLink(destId, true, absoluteTimeout, seqNum);
-    else if (!pTschLinkInfo->inTransaction(destId))
+    if (!pTschLinkInfo->inTransaction(destId))
         pTschLinkInfo->setInTransaction(destId, absoluteTimeout);
 
     auto pkt = createClearRequest(destId, seqNum);

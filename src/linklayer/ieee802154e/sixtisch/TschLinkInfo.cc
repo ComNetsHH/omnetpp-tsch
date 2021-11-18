@@ -361,28 +361,8 @@ void TschLinkInfo::clearCells(uint64_t nodeId) {
         return;
     }
 
-    EV_INFO << "Clearing cells scheduled with " << inet::MacAddress(nodeId) << endl;
-
-//    cellVector deletable;
-//
-//    for (auto link : linkInfo[nodeId].scheduledCells) {
-//        auto opts = std::get<1>(link);
-//        auto cell = std::get<0>(link);
-//
-//        if (!getCellOptions_isAUTO(opts))
-//            deletable.push_back(link);
-//    }
-
-//    EV_DETAIL << "Deleting links:" << endl;
-//
-//    for (auto linkToDel : deletable) {
-//        EV_DETAIL << std::get<0>(linkToDel) << endl;
-//        std::remove(linkInfo[nodeId].scheduledCells.begin(), linkInfo[nodeId].scheduledCells.end(), linkToDel);
-//    }
-//
-//    return;
-
-    EV_DETAIL << "Before erasure:\n" << linkInfo[nodeId].scheduledCells << endl;
+    EV_INFO << "Clearing cells scheduled with " << inet::MacAddress(nodeId)
+        << "Before erasure: " << linkInfo[nodeId].scheduledCells << endl;
 
     linkInfo[nodeId].scheduledCells.erase(
         std::remove_if( linkInfo[nodeId].scheduledCells.begin(), linkInfo[nodeId].scheduledCells.end(),
@@ -393,7 +373,7 @@ void TschLinkInfo::clearCells(uint64_t nodeId) {
         linkInfo[nodeId].scheduledCells.end()
     );
 
-    EV_DETAIL << "After:\n" << linkInfo[nodeId].scheduledCells << endl;
+    EV_DETAIL << "After: " << linkInfo[nodeId].scheduledCells << endl;
 
     numScheduleClears++;
 }
