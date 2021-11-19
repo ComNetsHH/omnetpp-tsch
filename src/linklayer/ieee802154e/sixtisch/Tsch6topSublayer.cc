@@ -710,11 +710,13 @@ Packet* Tsch6topSublayer::handleResponseMsg(Packet* pkt, inet::IntrusivePtr<cons
         return response;
     }
 
-    if (pTschLinkInfo->getLastKnownCommand(sender) == CMD_CLEAR) {
-        /* We interrupted an ongoing transaction or got a response to our CLEAR
-          => don't need to perform any other checks
-          (TODO: Do we still need to check seqNum though? Unclear in the draft!) */
-        pTschSF->handleResponse(sender, returnCode, 0, emptyCellList);
+    /* We interrupted an ongoing transaction or got a response to our CLEAR
+      => don't need to perform any other checks
+      (TODO: Do we still need to check seqNum though? Unclear in the draft!) */
+    if (pTschLinkInfo->getLastKnownCommand(sender) == CMD_CLEAR)
+    {
+        pTschLinkInfo->setLastKnownType(sender, MSG_RESPONSE);
+        pTschSF->handleResponse(sender, RC_SUCCESS, 0, emptyCellList); // it's safe to assume CLEAR always succeeds
 
         /* cancel any pending pattern update that we might have created */
         if (pendingPatternUpdates[sender])
@@ -736,12 +738,12 @@ Packet* Tsch6topSublayer::handleResponseMsg(Packet* pkt, inet::IntrusivePtr<cons
         return response;
     }
 
-//    if (seqNum != pTschLinkInfo->getLastKnownSeqNum(sender)) {
-//        /* schedule inconsistency detected (sequence number!) or other node has
-//           detected an inconsistency in their schedule with us*/
-//        pTschSF->handleInconsistency(sender, seqNum);
-//        return response;
-//    }
+    if (seqNum != pTschLinkInfo->getLastKnownSeqNum(sender)) {
+        /* schedule inconsistency detected (sequence number!) or other node has
+           detected an inconsistency in their schedule with us*/
+        pTschSF->handleInconsistency(sender, seqNum);
+        return response;
+    }
 
     pTschLinkInfo->setLastKnownType(sender, MSG_RESPONSE);
 
