@@ -63,11 +63,10 @@ void TschHopping::initialize(int stage)
     if (stage == inet::INITSTAGE_LOCAL) {
         const char *patternstr = par("pattern").stringValue();
         centerFrequency = units::values::Hz(par("centerFrequency"));
+        // TODO: move the radio channels definition either down to radio or to the topmost network module
+        numChannels = par("nbRadioChannels").intValue();
 
         if (par("useRandomPattern").boolValue()) {
-            // TODO: move the radio channels definition either down to radio or to the topmost network module
-            numChannels = par("nbRadioChannels").intValue();
-
             std::list<int> l(numChannels);
             std::iota(l.begin(), l.end(), 0);
             std::copy(l.begin(), l.end(), std::back_inserter(pattern));
