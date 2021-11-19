@@ -845,8 +845,11 @@ void TschMSF::handleSuccessAdd(uint64_t sender, int numCells, vector<cellLocatio
 
 void TschMSF::handleSuccessResponse(uint64_t sender, tsch6pCmd_t cmd, int numCells, vector<cellLocation_t> cellList)
 {
-    if (pTschLinkInfo->getLastKnownType(sender) != MSG_RESPONSE)
-        return;
+    if (pTschLinkInfo->getLastKnownType(sender) != MSG_RESPONSE) {
+        std::ostringstream out;
+        out << "Handling success response to " << cmd << ", but TschLinkInfo last known message type is not MSG_RESPONSE";
+        throw cRuntimeError(out.str().c_str());
+    }
 
     switch (cmd) {
         case CMD_ADD: {
