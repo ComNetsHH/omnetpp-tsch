@@ -125,14 +125,6 @@ void Tsch6topSublayer::initialize(int stage) {
 
         std::list<uint64_t>::iterator it;
 
-        /* Send add requests for INIT_NUM_CELLS cells to all of our neighbors */
-        for(it = neighbors.begin(); it != neighbors.end(); ++it) {
-            uint64_t nodeId = *it;
-            pendingPatternUpdates[nodeId] = new tsch6topCtrlMsg();
-            pendingPatternUpdates[nodeId]->setDestId(-1);
-        }
-
-
         pTschSF = (TschSF*) getParentModule()->getSubmodule("sf");
         pSFID = pTschSF->getSFID();
 
@@ -944,11 +936,16 @@ Packet* Tsch6topSublayer::handleTransactionTimeout(tschLinkInfoTimeoutMsg* tom) 
     EV_DETAIL << "Timeout fired for " << lastCmd << " "
             << lastType << " addressed to " << MacAddress(destId) << endl;
 
-    if (!pTschLinkInfo->linkInfoExists(destId))
-        EV_WARN << "Received timeout for link that doesn't exist, something went very wrong" << endl;
+    if (!pTschLinkInfo->linkInfoExists(destId)) {
+        std::ostringstream out;
+        out << "Received timeout for link with " << MacAddress(destId)
+                << " that doesn't exist, something went very wrong";
+
+        throw cRuntimeError(out.str().c_str());
+    }
 
     /* Notify SF that it might want to try again */
-    pTschSF->handleResponse(destId, RC_RESET, 0, emptyCellList);
+    pTschSF->handleTransactionTimeout(destId);
 
     numTimeouts++;
 

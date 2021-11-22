@@ -868,21 +868,7 @@ void TschMSF::handleSuccessResponse(uint64_t sender, tsch6pCmd_t cmd, int numCel
         }
         // TODO: Investigate in detail what happens to sequence numbers after CLEAR
         case CMD_CLEAR: {
-            clearScheduleWithNode(sender);
-            if (delayed6pReq) {
-                delayed6pReq->removeControlInfo();
-                cancelEvent(delayed6pReq);
-            }
-
-//            delayed6pReq = new cMessage("SEND_6P_DELAYED", SEND_6P_REQ);
-
-            pTschLinkInfo->resetLink(sender, MSG_RESPONSE);
-//            mac->flush6pQueue(MacAddress(sender));
-            mac->flushQueue(MacAddress(sender), LINK_PRIO_CONTROL);
-
-            if (par("clearQueueOnReset").boolValue())
-                mac->flushQueue(MacAddress(sender), LINK_PRIO_NORMAL);
-            scheduleAutoCell(sender);
+            resetStateWith(sender);
             numClearRcv++;
             break;
         }
@@ -916,7 +902,7 @@ void TschMSF::clearScheduleWithNode(uint64_t neighborId)
     if (nbrStatistic.find(neighborId) != nbrStatistic.end()) {
         nbrStatistic[neighborId]->numCellsElapsed = 0;
         nbrStatistic[neighborId]->numCellsUsed = 0;
-        // TODO: cancel the scheduled
+        // TODO: cancel the scheduled MAX_NUM_CELLS selfmsg
 //        cancelEvent(nbrStatistic[neighborId]->maxNumCellsMsg);
 
 //        if (maxNumCellsMessages[neighborId]) {
@@ -932,7 +918,28 @@ void TschMSF::clearScheduleWithNode(uint64_t neighborId)
 void TschMSF::handleResponse(uint64_t sender, tsch6pReturn_t code, int numCells, std::vector<cellLocation_t> *cellList)
 {
     reservedTimeOffsets[sender].clear();
-    return;
+}
+
+void TschMSF::handleTransactionTimeout(uint64_t sender)
+{
+    reservedTimeOffsets[sender].clear();
+    pTschLinkInfo->revertLink(sender, MSG_REQUEST);
+}
+
+void TschMSF::resetStateWith(uint64_t nbrId) {
+    clearScheduleWithNode(nbrId);
+//    TODO: needs further work
+//    if (delayed6pReq) {
+//        delayed6pReq->removeControlInfo();
+//        cancelEvent(delayed6pReq);
+//    }
+
+    pTschLinkInfo->resetLink(nbrId, MSG_RESPONSE);
+
+    if (par("clearQueueOnReset").boolValue())
+        mac->flushQueue(MacAddress(nbrId), LINK_PRIO_NORMAL);
+
+    scheduleAutoCell(nbrId); // Schedule an auto cell to flush remaining packets in the queue
 }
 
 void TschMSF::handleResponse(uint64_t sender, tsch6pReturn_t code, int numCells, std::vector<cellLocation_t> cellList)
@@ -953,24 +960,7 @@ void TschMSF::handleResponse(uint64_t sender, tsch6pReturn_t code, int numCells,
         }
         // Handle all other return codes (RC_RESET, RC_ERROR, RC_VERSION, RC_SFID, ...) as a generic error
         default: {
-            clearScheduleWithNode(sender);
-            if (delayed6pReq) {
-                delayed6pReq->removeControlInfo();
-                cancelEvent(delayed6pReq);
-            }
-
-            // Reset the msg, since otherwise it might retain previous control info, which is somehow undeletable
-//            delayed6pReq = new cMessage("SEND_6P_DELAYED", SEND_6P_REQ);
-
-
-            pTschLinkInfo->resetLink(sender, MSG_RESPONSE);
-            // TODO: investigate why this works worse than just erasing the entire queue
-//            mac->flush6pQueue(MacAddress(sender));
-            mac->flushQueue(MacAddress(sender), LINK_PRIO_CONTROL);
-
-            if (par("clearQueueOnReset").boolValue())
-                mac->flushQueue(MacAddress(sender), LINK_PRIO_NORMAL);
-            scheduleAutoCell(sender); // Schedule an auto cell to flush remaining packets in the queue
+            resetStateWith(sender);
             numLinkResets++;
         }
     }

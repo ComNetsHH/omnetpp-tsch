@@ -124,6 +124,8 @@ public:
     void handleResponse(uint64_t sender, tsch6pReturn_t code, int numCells = -1,
                                 std::vector<cellLocation_t> cellList = {}) {}
 
+    void handleTransactionTimeout(uint64_t sender) {}
+
     /**
      * @brief Handle @p data that was piggybacked by @p sender.
      *

@@ -1224,6 +1224,7 @@ void Ieee802154eMac::handleLowerPacket(Packet *packet) {
         delete packet;
         return;
     }
+    packet->setBitError(false);
     const auto& csmaHeader = packet->peekAtFront<Ieee802154eMacHeader>();
     const MacAddress& src = csmaHeader->getSrcAddr();
     const MacAddress& dest = csmaHeader->getDestAddr();

@@ -214,6 +214,8 @@ class TschMSF: public TschSF, public cListener {
     void handleResponse(uint64_t sender, tsch6pReturn_t code, int numCells = -1,
                             std::vector<cellLocation_t> cellList = {}) override;
 
+    virtual void handleTransactionTimeout(uint64_t sender) override;
+
     virtual void handleSuccessResponse(uint64_t sender, tsch6pCmd_t lastKnownCmd, int numCells, std::vector<cellLocation_t> cellList);
 
     virtual void handleSuccessRelocate(uint64_t sender, std::vector<cellLocation_t> cellList);
@@ -432,6 +434,8 @@ class TschMSF: public TschSF, public cListener {
      * @param sender MAC address of the neighbour to clear schedule with
      */
     void clearScheduleWithNode(uint64_t sender);
+
+    void resetStateWith(uint64_t nbrId);
 
     /**
      * Schedule minimal cells (TX RX SHARED) for broadcast and control messages

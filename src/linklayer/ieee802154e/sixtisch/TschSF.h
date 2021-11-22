@@ -121,6 +121,8 @@ public:
      */
     virtual void handleInconsistency(uint64_t destId, uint8_t seqNum) = 0;
 
+    virtual void handleTransactionTimeout(uint64_t sender) = 0;
+
     /**
      * @return The 6P Timeout value defined by this Scheduling Function in ms
      */

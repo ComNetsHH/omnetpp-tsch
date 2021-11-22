@@ -107,6 +107,8 @@ public:
     virtual void handleResponse(uint64_t sender, tsch6pReturn_t code, int numCells = -1,
                                 std::vector<cellLocation_t> *cellList = NULL);
 
+    void handleTransactionTimeout(uint64_t sender) {}
+
     /**
      * @brief Handle the inconsistency which was uncovered by @p seqNum
      *        in the schedule maintained with @p destId
