@@ -1388,8 +1388,9 @@ uint8_t Tsch6topSublayer::prepLinkForRequest(uint64_t destId, simtime_t absolute
         EV_INFO << "Found link to " << MacAddress(destId) << " with seqNum " << +seqNum << endl;
         /* Link already exists, update its info */
         pTschLinkInfo->setInTransaction(destId, absoluteTimeout);
-        pTschLinkInfo->setLastKnownType(destId, MSG_REQUEST);
     }
+
+    pTschLinkInfo->setLastKnownType(destId, MSG_REQUEST);
 
     return seqNum;
 }
