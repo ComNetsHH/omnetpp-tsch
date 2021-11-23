@@ -61,7 +61,7 @@ void TschMSF::initialize(int stage) {
         pTschLinkInfo = (TschLinkInfo*) getParentModule()->getSubmodule("linkinfo");
         pMaxNumCells = par("maxNumCells");
         pMaxNumTx = par("maxNumTx");
-        pTimeout = par("timeout");
+        pTimeout = par("timeout").intValue();
         pLimNumCellsUsedHigh = par("upperCellUsageLimit");
         pLimNumCellsUsedLow = par("lowerCellUsageLimit");
         pRelocatePdrThres = par("relocatePdrThresh");
