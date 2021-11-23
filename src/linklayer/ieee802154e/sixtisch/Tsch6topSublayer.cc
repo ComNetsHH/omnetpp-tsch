@@ -322,6 +322,10 @@ void Tsch6topSublayer::sendRelocationRequest(uint64_t destId, uint8_t cellOption
 void Tsch6topSublayer::sendClearRequest(uint64_t destId, int timeout) {
     Enter_Method_Silent();
 
+    if (!destId)
+        throw cRuntimeError("Trying to send CLEAR to node 00-00-00-00-00-00");
+
+
     uint8_t seqNum = pTschLinkInfo->getLastKnownSeqNum(destId);
     simtime_t absoluteTimeout = getAbsoluteTimeout(timeout);
 

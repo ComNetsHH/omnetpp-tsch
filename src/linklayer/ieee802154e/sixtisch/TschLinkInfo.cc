@@ -54,6 +54,7 @@ bool TschLinkInfo::linkInfoExists(uint64_t nodeId) {
     Enter_Method_Silent();
 
     auto it = linkInfo.find(nodeId);
+
     if (it == linkInfo.end()) {
         return false;
     }
@@ -622,8 +623,10 @@ void TschLinkInfo::startTimeoutTimer(uint64_t nodeId, simtime_t timeout) {
         return;
     }
 
-    if (!linkInfo[nodeId].tom)
+    if (!linkInfo[nodeId].tom) {
         linkInfo[nodeId].tom = new tschLinkInfoTimeoutMsg();
+        linkInfo[nodeId].tom->setNodeId(nodeId);
+    }
 
     linkInfo[nodeId].tom->setSeqNum(linkInfo[nodeId].lastKnownSeqNum);
     if (linkInfo[nodeId].tom->isScheduled()) {
