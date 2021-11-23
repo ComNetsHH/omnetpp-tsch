@@ -37,16 +37,15 @@ Define_Module(TschMSF);
 TschMSF::TschMSF() :
     rplParentId(0),
     tsch6pRtxThresh(3),
-    numInconsistenciesDetected(0),
+    numInconsistencies(0),
     numLinkResets(0),
     hasStarted(false),
     pHousekeepingDisabled(false),
     hasOverlapping(false),
     isSink(false),
-    num6pAddSent(0),
     delayed6pReq(nullptr),
     numFailedTracked6p(0),
-    numClearRcv(0),
+    num6pAddSent(0),
     uplinkCellUtil(0),
     showLinkResets(false)
 {
@@ -110,17 +109,17 @@ void TschMSF::initialize(int stage) {
         }
 
         isSink = rpl->par("isRoot");
-        delayed6pReq = new cMessage("SEND_6P_DELAYED", SEND_6P_REQ);
+//        delayed6pReq = new cMessage("SEND_6P_DELAYED", SEND_6P_REQ);
 
-        WATCH(numInconsistenciesDetected);
-        WATCH(pMaxNumCells);
-        WATCH(util);
-        WATCH(rplParentId);
+        WATCH(numInconsistencies);
         WATCH(numLinkResets);
-        WATCH(num6pAddSent);
-        WATCH(numFailedTracked6p);
-        WATCH(numClearRcv);
-        WATCH_PTR(delayed6pReq);
+
+        WATCH(pMaxNumCells);
+        WATCH(rplParentId);
+
+//        WATCH(util);
+//        WATCH(numFailedTracked6p);
+//        WATCH_PTR(delayed6pReq);
 
         rpl->subscribe("parentChanged", this);
         rpl->subscribe("rankUpdated", this);
@@ -209,7 +208,7 @@ void TschMSF::finish() {
     if (rplParentId) {
         recordScalar("numUplinkCells", (int) pTschLinkInfo->getDedicatedCells(rplParentId).size());
     }
-    recordScalar("numInconsistenciesDetected", numInconsistenciesDetected);
+    recordScalar("numInconsistenciesDetected", numInconsistencies);
     recordScalar("numLinkResets", numLinkResets);
     if (par("trackFailed6pAddByNum").intValue() > 0)
         recordScalar("tracked6pFailed", numFailedTracked6p);
@@ -862,7 +861,6 @@ void TschMSF::handleSuccessResponse(uint64_t sender, tsch6pCmd_t cmd, int numCel
         // TODO: Investigate in detail what happens to sequence numbers after CLEAR
         case CMD_CLEAR: {
             resetStateWith(sender);
-            numClearRcv++;
             break;
         }
         default: EV_DETAIL << "Unsupported 6P command" << endl;
@@ -916,9 +914,9 @@ void TschMSF::handleResponse(uint64_t sender, tsch6pReturn_t code, int numCells,
 void TschMSF::handleTransactionTimeout(uint64_t sender)
 {
     reservedTimeOffsets[sender].clear();
-//    pTschLinkInfo->revertLink(sender, MSG_REQUEST);
+//    pTschLinkInfo->revertLink(sender, pTschLinkInfo->getLastKnownType(sender));
+    hostNode->bubble("Transaction timed out");
     resetStateWith(sender);
-
 }
 
 void TschMSF::resetStateWith(uint64_t nbrId) {
@@ -966,7 +964,7 @@ void TschMSF::handleInconsistency(uint64_t destId, uint8_t seqNum) {
     EV_WARN << "Inconsistency detected" << endl;
     /* Free already reserved cells to avoid race conditions */
     reservedTimeOffsets[destId].clear();
-    numInconsistenciesDetected++;
+    numInconsistencies++;
 
     pTsch6p->sendClearRequest(destId, pTimeout);
 }
@@ -985,23 +983,23 @@ void TschMSF::addCells(uint64_t nodeId, int numCells, uint8_t cellOptions, doubl
 
     EV_DETAIL << "Trying to add " << numCells << " cell(s) to " << MacAddress(nodeId) << endl;
 
-    if (delay > 0) {
-        throw cRuntimeError("6P delayed packets are not allowed currently");
-        // already in progress
-        if (delayed6pReq && delayed6pReq->isScheduled()) {
-            EV_DETAIL << "Detected another delayed 6P request already in progress" << endl;
-            return;
-        }
-
-        auto ctrlInfo = new SfControlInfo(nodeId);
-        ctrlInfo->set6pCmd(CMD_ADD);
-        ctrlInfo->setNumCells(numCells);
-        ctrlInfo->setCellOptions(cellOptions);
-        delayed6pReq->setControlInfo(ctrlInfo);
-        scheduleAt(simTime() + delay, delayed6pReq);
-        EV_DETAIL << "6P ADD will be sent out after " << delay << "s timeout" << endl;
-        return;
-    }
+//    if (delay > 0) {
+//        throw cRuntimeError("6P delayed packets are not allowed currently");
+//        // already in progress
+//        if (delayed6pReq && delayed6pReq->isScheduled()) {
+//            EV_DETAIL << "Detected another delayed 6P request already in progress" << endl;
+//            return;
+//        }
+//
+//        auto ctrlInfo = new SfControlInfo(nodeId);
+//        ctrlInfo->set6pCmd(CMD_ADD);
+//        ctrlInfo->setNumCells(numCells);
+//        ctrlInfo->setCellOptions(cellOptions);
+//        delayed6pReq->setControlInfo(ctrlInfo);
+//        scheduleAt(simTime() + delay, delayed6pReq);
+//        EV_DETAIL << "6P ADD will be sent out after " << delay << "s timeout" << endl;
+//        return;
+//    }
 
     if (pTschLinkInfo->inTransaction(nodeId)) {
         EV_WARN << "Can't add cells, currently in another transaction with this node" << endl;

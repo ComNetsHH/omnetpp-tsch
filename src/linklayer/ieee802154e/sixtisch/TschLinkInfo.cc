@@ -110,6 +110,7 @@ void TschLinkInfo::revertLink(uint64_t nodeId, tsch6pMsg_t lastKnownType) {
     abortTransaction(nodeId);
     setLastKnownType(nodeId, lastKnownType);
     setLastLinkOption(nodeId, MAC_LINKOPTIONS_NONE);
+    EV_DETAIL << "Reverted link with " << MacAddress(nodeId) << endl;
 }
 
 bool TschLinkInfo::inTransaction(uint64_t nodeId) {
@@ -365,7 +366,7 @@ void TschLinkInfo::clearCells(uint64_t nodeId) {
     }
 
     EV_INFO << "Clearing cells scheduled with " << inet::MacAddress(nodeId)
-        << "Before erasure: " << linkInfo[nodeId].scheduledCells << endl;
+        << "\nBefore erasure: " << linkInfo[nodeId].scheduledCells << endl;
 
     linkInfo[nodeId].scheduledCells.erase(
         std::remove_if( linkInfo[nodeId].scheduledCells.begin(), linkInfo[nodeId].scheduledCells.end(),

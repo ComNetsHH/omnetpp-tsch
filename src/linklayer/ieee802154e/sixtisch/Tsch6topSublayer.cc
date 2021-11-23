@@ -99,7 +99,22 @@ void Tsch6topSublayer::initialize(int stage) {
         sent6pResponseSignal = registerSignal("sent6pResponse");
 
         numConcurrentTransactionErrors = 0;
+        numUnexpectedResponses = 0;
         numTimeouts = 0;
+        numDuplicateResponses = 0;
+        numExpiredReq = 0;
+        numExpiredRsp = 0;
+        numClearReqReceived = 0;
+        numResetsReceived = 0;
+
+        WATCH(numConcurrentTransactionErrors);
+        WATCH(numUnexpectedResponses);
+        WATCH(numTimeouts);
+        WATCH(numDuplicateResponses);
+        WATCH(numExpiredReq);
+        WATCH(numExpiredRsp);
+        WATCH(numClearReqReceived);
+        WATCH(numResetsReceived);
 
         // TODO: just set to sim-time-limit?
 
@@ -138,6 +153,12 @@ void Tsch6topSublayer::initialize(int stage) {
 };
 
 void Tsch6topSublayer::finish() {
+    recordScalar("numDuplicateResponses", numTimeouts);
+    recordScalar("numExpiredReq", numTimeouts);
+    recordScalar("numExpiredRsp", numTimeouts);
+    recordScalar("numClearReqReceived", numTimeouts);
+    recordScalar("numResetsReceived", numTimeouts);
+    recordScalar("numUnexpectedResponses", numTimeouts);
     recordScalar("numTimeouts", numTimeouts);
     recordScalar("numConcurrentTransactionErrors", numConcurrentTransactionErrors);
 }
@@ -425,6 +446,7 @@ Packet* Tsch6topSublayer::handleRequestMsg(Packet* pkt,
     EV_DETAIL << "Received MSG_REQUEST " << cmd << " from " << MacAddress(sender) << ", seqNum - " << +seqNum << endl;
 
     if (cmd == CMD_CLEAR) {
+        numClearReqReceived++;
         /* We don't need to perform any of the (seqNum) checks. A CLEAR is
            always valid. */
         pTschLinkInfo->setLastKnownCommand(sender, cmd);
@@ -442,6 +464,8 @@ Packet* Tsch6topSublayer::handleRequestMsg(Packet* pkt,
         EV_DETAIL << "EXPIRED MSG " << endl;
         pTschLinkInfo->setLastKnownType(sender, MSG_REQUEST);
 
+        numExpiredReq++;
+
         return response;
     }
 
@@ -456,6 +480,7 @@ Packet* Tsch6topSublayer::handleRequestMsg(Packet* pkt,
          * (but make sure you don't abort an ongoing transaction because initial request received twice) */
         EV_WARN <<"received new MSG_REQUEST during active transaction: ignoring request, sending RC_RESET with seqNum "
                 << +seqNum << endl;
+        numConcurrentTransactionErrors++;
         return createErrorResponse(sender, seqNum, RC_RESET, data->getTimeout());
     }
 
@@ -495,6 +520,7 @@ Packet* Tsch6topSublayer::handleRequestMsg(Packet* pkt,
         EV_WARN << "Received new MSG_REQUEST during active transaction: "
                 << "ignoring request, sending RC_RESET (noticed late)" << endl;
 
+        numConcurrentTransactionErrors++;
         return createErrorResponse(sender, seqNum, RC_RESET, data->getTimeout());
     }
 
@@ -681,17 +707,20 @@ Packet* Tsch6topSublayer::handleResponseMsg(Packet* pkt, inet::IntrusivePtr<cons
         /* QUICK FIX (we probably shouldn't start the timeout timer before
          * pkt transmsmission but after pkt received?)*/
         EV_DETAIL << "EXPIRED MSG " << endl;
+        numExpiredRsp++;
         return response;
     }
 
     if (!pTschLinkInfo->inTransaction(sender)) {
         /* There's no transaction this response corresponds to, ignore it */
         EV_WARN << "Received unexpected MSG_RESPONSE: not in transaction" << endl;
+        numUnexpectedResponses++;
         return response;
     }
 
     if (pTschLinkInfo->getLastKnownType(sender) == MSG_RESPONSE) {
         EV_WARN << "Received unexpected MSG_RESPONSE: this node just sent a MSG_RESPONSE itself" << endl;
+        numUnexpectedResponses++;
         return response;
     }
 
@@ -703,6 +732,8 @@ Packet* Tsch6topSublayer::handleResponseMsg(Packet* pkt, inet::IntrusivePtr<cons
         /* cancel any pending pattern update that we might have created */
         if (pendingPatternUpdates[sender])
             pendingPatternUpdates[sender]->setDestId(-1);
+
+        numResetsReceived++;
         return response;
     }
 
@@ -725,6 +756,7 @@ Packet* Tsch6topSublayer::handleResponseMsg(Packet* pkt, inet::IntrusivePtr<cons
     {
         /* pkt is duplicate, ignore */
         EV_DETAIL << "Received duplicate response, ignoring" << endl;
+        numDuplicateResponses++;
         return response;
     }
 

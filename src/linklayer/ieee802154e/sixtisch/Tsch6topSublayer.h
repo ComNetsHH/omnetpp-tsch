@@ -218,8 +218,15 @@ private:
      */
     simtime_t TxQueueTTL;
 
+    // transaction stats
     int numTimeouts;
     int numConcurrentTransactionErrors;
+    int numUnexpectedResponses;
+    int numDuplicateResponses;
+    int numExpiredReq;
+    int numExpiredRsp;
+    int numClearReqReceived;
+    int numResetsReceived;
 
     /** Data to be piggybacked (if any), indexed by destination. */
     std::map<uint64_t, std::vector<tsch6pPiggybackTimeoutMsg*>> piggybackableData;
