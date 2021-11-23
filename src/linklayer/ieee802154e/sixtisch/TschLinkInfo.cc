@@ -85,7 +85,9 @@ int TschLinkInfo::addLink(uint64_t nodeId, bool inTransaction,
         .nodeId = nodeId,
         .inTransaction = inTransaction,
         .tom = new tschLinkInfoTimeoutMsg(),
-        .lastKnownSeqNum = lastKnownSeqNum
+        .lastKnownSeqNum = lastKnownSeqNum,
+        .lastKnownCommand = CMD_NONE,
+        .lastKnownType = MSG_NONE
     };
 
     linkInfo[nodeId].tom->setNodeId(nodeId);

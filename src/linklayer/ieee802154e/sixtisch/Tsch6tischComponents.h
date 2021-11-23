@@ -48,7 +48,8 @@ typedef enum TschSixtischCtrlMsg {
 typedef enum Tsch6pMessageTypes {
     MSG_REQUEST,
     MSG_RESPONSE,
-    MSG_CONFIRMATION
+    MSG_CONFIRMATION,
+    MSG_NONE,
 } tsch6pMsg_t;
 
 
@@ -73,6 +74,7 @@ inline std::ostream& operator<<(std::ostream& out, const Tsch6pMessageTypes tsch
         PRINT_ENUM(MSG_REQUEST, s);
         PRINT_ENUM(MSG_RESPONSE, s);
         PRINT_ENUM(MSG_CONFIRMATION, s);
+        PRINT_ENUM(MSG_NONE, s);
     }
     return out << s;
 }
@@ -83,6 +85,7 @@ inline std::string to_string(const Tsch6pMessageTypes tsch6p) {
         PRINT_ENUM(MSG_REQUEST, s);
         PRINT_ENUM(MSG_RESPONSE, s);
         PRINT_ENUM(MSG_CONFIRMATION, s);
+        PRINT_ENUM(MSG_NONE, s);
     }
     std::string str(s);
     return str;
@@ -98,7 +101,8 @@ typedef enum Tsch6pCommands {
     CMD_COUNT,
     CMD_LIST,
     CMD_SIGNAL,
-    CMD_CLEAR
+    CMD_CLEAR,
+    CMD_NONE,
 } tsch6pCmd_t;
 
 inline std::ostream& operator<<(std::ostream& out, const Tsch6pCommands cmd6p) {
@@ -111,6 +115,7 @@ inline std::ostream& operator<<(std::ostream& out, const Tsch6pCommands cmd6p) {
         PRINT_ENUM(CMD_LIST, s);
         PRINT_ENUM(CMD_SIGNAL, s);
         PRINT_ENUM(CMD_CLEAR, s);
+        PRINT_ENUM(CMD_NONE, s);
     }
     return out << s;
 }
@@ -125,6 +130,7 @@ inline std::string to_string(const Tsch6pCommands cmd6p) {
         PRINT_ENUM(CMD_LIST, s);
         PRINT_ENUM(CMD_SIGNAL, s);
         PRINT_ENUM(CMD_CLEAR, s);
+        PRINT_ENUM(CMD_NONE, s);
     }
     std::string str(s);
     return str;

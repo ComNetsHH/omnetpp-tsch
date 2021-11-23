@@ -61,10 +61,11 @@ class TschLinkInfo: public cSimpleModule
         //std::mutex nliMutex;        /**< Prevents SF & 6P from read/editing this entry
         //                                 at the same time */
 
-        friend std::ostream& operator<<(std::ostream& os, NodeLinkInfo_t const& info)
+        friend std::ostream& operator<<(std::ostream& os, NodeLinkInfo_t info)
         {
-            os << info.scheduledCells << "; last Cmd/Type: "
-                    << info.lastKnownCommand << "/" << info.lastKnownType << endl;
+            os << "(" << inet::MacAddress(info.nodeId) << ") " << info.lastKnownCommand
+                    << " " << info.lastKnownType << (info.inTransaction ? " " : " not ")
+                    << "in transaction";
             return os;
         }
 
