@@ -216,9 +216,12 @@ class TschMSF: public TschSF, public cListener {
 
     virtual void handleTransactionTimeout(uint64_t sender) override;
 
+    virtual void freeReservedCellsWith(uint64_t nodeId) override;
+
     virtual void handleSuccessResponse(uint64_t sender, tsch6pCmd_t lastKnownCmd, int numCells, std::vector<cellLocation_t> cellList);
 
     virtual void handleSuccessRelocate(uint64_t sender, std::vector<cellLocation_t> cellList);
+
     virtual void handleSuccessAdd(uint64_t sender, int numCells, vector<cellLocation_t> cellList);
 
     void handleRplRankUpdate(long rank, int numHosts, double lambda);
@@ -443,6 +446,8 @@ class TschMSF: public TschSF, public cListener {
      * @param slotframeLength length of the slotframe in timeslots
      */
     void scheduleMinimalCells(int numMinimalCells, int slotframeLength);
+
+    void watchReservedTimeOffsets(uint64_t nbrId);
 
     uint64_t checkInTransaction();
     bool checkOverlapping();

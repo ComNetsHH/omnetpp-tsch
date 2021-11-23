@@ -122,6 +122,17 @@ bool TschLinkInfo::inTransaction(uint64_t nodeId) {
     return false;
 }
 
+int TschLinkInfo::setInTransaction(uint64_t nodeId) {
+    Enter_Method_Silent();
+
+    if (!linkInfoExists(nodeId))
+        return -EINVAL;
+
+    linkInfo[nodeId].inTransaction = true;
+
+    return 0;
+}
+
 int TschLinkInfo::setInTransaction(uint64_t nodeId, simtime_t transactionTimeout) {
     Enter_Method_Silent();
 

@@ -34,6 +34,13 @@ using namespace std;
 
 Define_Module(TschMSF);
 
+inline std::ostream& operator<<(std::ostream& os, vector<offset_t> offsets)
+{
+    for (auto o: offsets)
+        os << o << ", ";
+    return os;
+}
+
 TschMSF::TschMSF() :
     rplParentId(0),
     tsch6pRtxThresh(3),
@@ -415,10 +422,17 @@ void TschMSF::relocateCells(uint64_t neighborId, std::vector<cellLocation_t> rel
 
     EV_DETAIL << "Selected candidate cell list to accommodate relocated cells: " << candidateCells << endl;
 
+    watchReservedTimeOffsets(neighborId);
+
     for (auto cc : candidateCells)
         reservedTimeOffsets[neighborId].push_back(cc.timeOffset);
 
     pTsch6p->sendRelocationRequest(neighborId, MAC_LINKOPTIONS_TX, relocCells.size(), relocCells, candidateCells, pTimeout);
+}
+
+void TschMSF::watchReservedTimeOffsets(uint64_t nbrId) {
+    if (reservedTimeOffsets.find(nbrId) != reservedTimeOffsets.end())
+        WATCH_VECTOR(reservedTimeOffsets[nbrId]);
 }
 
 void TschMSF::estimateQueueUtilization() {
@@ -658,6 +672,8 @@ std::vector<offset_t> TschMSF::getAvailableSlotsInRange(int slOffsetEnd) {
 
 int TschMSF::createCellList(uint64_t destId, std::vector<cellLocation_t> &cellList, int numCells)
 {
+    EV_DETAIL << "Creating cell list for " << MacAddress(destId)
+            << "currently occupied slots: " << reservedTimeOffsets[destId] << endl;
     Enter_Method_Silent();
 
     if (cellList.size()) {
@@ -665,9 +681,12 @@ int TschMSF::createCellList(uint64_t destId, std::vector<cellLocation_t> &cellLi
         return -EINVAL;
     }
 
+    watchReservedTimeOffsets(destId);
+
     if (!reservedTimeOffsets[destId].empty()) {
         EV_ERROR << "reservedTimeOffsets should be empty when creating new cellList,"
-                << " is another transaction still in progress?" << endl;
+                << " is another transaction still in progress?\ncurrently occupied time slots: "
+                << reservedTimeOffsets[destId] << endl;
 
         throw cRuntimeError("reservedTimeOffsets should be empty when creating new cellList");
         return -EINVAL;
@@ -731,6 +750,9 @@ int TschMSF::pickCells(uint64_t destId, std::vector<cellLocation_t> &cellList,
             EV_DETAIL << " unavailable" << endl;
     }
     cellList.clear();
+
+    watchReservedTimeOffsets(destId);
+
     for (auto i = 0; i < numCells && i < (int) pickedCells.size(); i++) {
         cellList.push_back(pickedCells[i]);
         reservedTimeOffsets[destId].push_back(pickedCells[i].timeOffset);
@@ -904,6 +926,9 @@ void TschMSF::clearScheduleWithNode(uint64_t neighborId)
     }
 }
 
+void TschMSF::freeReservedCellsWith(uint64_t nodeId) {
+    reservedTimeOffsets[nodeId].clear();
+}
 
 /** Hacky way to free cells reserved to @param sender when link-layer ACK is received from it */
 void TschMSF::handleResponse(uint64_t sender, tsch6pReturn_t code, int numCells, std::vector<cellLocation_t> *cellList)
@@ -1007,6 +1032,10 @@ void TschMSF::addCells(uint64_t nodeId, int numCells, uint8_t cellOptions, doubl
     }
 
     std::vector<cellLocation_t> cellList = {};
+
+    EV_DETAIL << "reservedTimeOffsets to " << MacAddress(nodeId) << " right before creating cell list: "
+            << reservedTimeOffsets[nodeId] << endl;
+
     createCellList(nodeId, cellList, numCells + pCellListRedundancy);
 
     if (!cellList.size())
@@ -1152,11 +1181,10 @@ void TschMSF::handlePacketEnqueued(uint64_t dest) {
         auto dedicatedCells = pTschLinkInfo->getDedicatedCells(dest);
 
         if (!dedicatedCells.size() && !pTschLinkInfo->inTransaction(dest)) {
-            auto timeout = uniform(0, 2);  // FIXME: magic numbers, was 1-3
+//            auto timeout = uniform(0, 2);  // FIXME: magic numbers, was 1-3
 
             EV_DETAIL << "No dedicated TX cell found to this node, and "
-                    << "we are currently not in transaction with it, attempting to add one TX cell in "
-                    << timeout << "s" << endl;
+                    << "we are currently not in transaction with it, attempting to add one TX cell" << endl;
             // heuristics - do not send 6P ADD request immediately, cause simultaneous
             // bi-directional transactions are not yet supported
 //            addCells(dest, 1, MAC_LINKOPTIONS_TX, timeout); // TODO: causes more than one 6P request being added to the queue
