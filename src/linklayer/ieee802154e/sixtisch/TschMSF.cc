@@ -278,13 +278,6 @@ void TschMSF::handleMaxCellsReached(cMessage* msg) {
     nbrStatistic[neighborId]->numCellsUsed = 0; //intrand(pMaxNumCells >> 1);
     nbrStatistic[neighborId]->numCellsElapsed = 0;
 
-//    if (par("flushQueueOnAdd").boolValue() && ((int) pTschLinkInfo->getDedicatedCells(neighborId).size()) > 3)
-//        try {
-//            mac->flushQueue(MacAddress(neighborId), LINK_PRIO_NORMAL);
-//        }
-//        catch (...) {}
-
-
     delete neighborMac;
 }
 

@@ -68,7 +68,7 @@ void TschHopping::initialize(int stage)
 
         if (par("useRandomPattern").boolValue()) {
             std::list<int> l(numChannels);
-            std::iota(l.begin(), l.end(), 0);
+            std::iota(l.begin(), l.end(), getMinChannel());
             std::copy(l.begin(), l.end(), std::back_inserter(pattern));
             std::random_device rd;
             std::mt19937 e{rd()};
