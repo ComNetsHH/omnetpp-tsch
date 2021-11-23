@@ -188,6 +188,11 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
     double getQueueUtilization(MacAddress nbrAddr);
     double getQueueUtilization(MacAddress nbrAddr, int virtualLinkId);
 
+    /**
+     * Get maximum possible backoff interval, i.e. each retry draws a maximum backoff
+     */
+    int getMacMaxBackoff();
+
     int getQueueSize(MacAddress nbrAddr);
 
   protected:

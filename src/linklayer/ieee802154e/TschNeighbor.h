@@ -118,6 +118,9 @@ class TschNeighbor : public cSimpleModule, protected cListener
         int W_nq;
         int C_nq;
 
+        int macMaxBe; // maximum backoff exponent for CSMA
+        int macMinBe; // minimum backoff exponent for CSMA
+
         cModule *hostNode; // reference to this host node's module
 
     public:
@@ -268,6 +271,8 @@ class TschNeighbor : public cSimpleModule, protected cListener
          * Deletes all elements of this neighbor class
          */
         void clearQueue();
+
+        int getMacMaxBe() { return this->macMaxBe; }
 
         void setVirtualQueue(MacAddress macAddr, int linkId);
 

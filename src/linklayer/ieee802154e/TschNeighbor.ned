@@ -33,8 +33,8 @@ simple TschNeighbor
         bool enableSelectDedicated= default(false);
         bool enablePriorityQueue= default(true);
         int queueLength = default(20);
-        int macMinBE = default(3);
-        int macMaxBE = default(8); 
+        int macMinBe = default(3); // min backoff exponent
+        int macMaxBe = default(8); // max backoff exponent
 		@display("i=block/table");
 		// TODO add signals when neighbors are added to the Vector
 		@class(TschNeighbor);

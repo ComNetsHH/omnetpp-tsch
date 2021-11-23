@@ -48,6 +48,8 @@ void TschNeighbor::initialize(int stage){
         this->W_nq = 1;
         this->C_npq = this->W_npq;
         this->C_nq = this->W_nq;
+        macMaxBe = par("macMaxBe").intValue();
+        macMinBe = par("macMinBe").intValue();
     }else if(stage == 5){
         hostNode = getModuleByPath("^.^.^.");
     }
@@ -99,11 +101,10 @@ bool TschNeighbor::add2Queue(Packet *packet,MacAddress macAddr, int virtualLinkI
             EV_DETAIL << "[TschNeighbor] The queue of this neighbor is full." << endl;
     }
     if (added)
-        backoffTable.insert(std::make_pair(macAddr, new TschCSMA(par("macMinBE"), par("macMaxBE"), this->getRNG(0))));
+        backoffTable.insert(std::make_pair(macAddr, new TschCSMA(macMinBe, macMaxBe, this->getRNG(0))));
 
     return added;
 }
-
 
 int TschNeighbor::getTotalQueueSizeAt(MacAddress macAddress) {
     auto macToQueueEntry = this->macToQueueMap.find(macAddress);

@@ -67,6 +67,7 @@ bool TschCSMA::checkBackoff(){
         return false;
     }
 }
+
 void TschCSMA::terminate(){
     this->BE = 0;
     this->NB = 0;

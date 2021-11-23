@@ -59,9 +59,9 @@ void TschMSF::initialize(int stage) {
         EV_DETAIL << "MSF initializing" << endl;
         pNumChannels = getModuleByPath("^.^.^.^.^.channelHopping")->par("nbRadioChannels").intValue();
         pTschLinkInfo = (TschLinkInfo*) getParentModule()->getSubmodule("linkinfo");
-        pTimeout = par("timeout").intValue();
         pMaxNumCells = par("maxNumCells");
         pMaxNumTx = par("maxNumTx");
+        pTimeout = par("timeout");
         pLimNumCellsUsedHigh = par("upperCellUsageLimit");
         pLimNumCellsUsedLow = par("lowerCellUsageLimit");
         pRelocatePdrThres = par("relocatePdrThresh");
@@ -923,7 +923,9 @@ void TschMSF::handleResponse(uint64_t sender, tsch6pReturn_t code, int numCells,
 void TschMSF::handleTransactionTimeout(uint64_t sender)
 {
     reservedTimeOffsets[sender].clear();
-    pTschLinkInfo->revertLink(sender, MSG_REQUEST);
+//    pTschLinkInfo->revertLink(sender, MSG_REQUEST);
+    resetStateWith(sender);
+
 }
 
 void TschMSF::resetStateWith(uint64_t nbrId) {
