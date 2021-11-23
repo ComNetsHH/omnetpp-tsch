@@ -1194,6 +1194,10 @@ bool Ieee802154eMac::artificiallyDropAppPacket(Packet *packet) {
     return false;
 }
 
+int Ieee802154eMac::getMacMaxBackoff() {
+    return pow(2, neighbor->getMacMaxBe()) * macMaxFrameRetries;
+}
+
 void Ieee802154eMac::recordIncorrectlyReceived(Packet *packet) {
     const auto& csmaHeader = packet->peekAtFront<Ieee802154eMacHeader>();
     const MacAddress& src = csmaHeader->getSrcAddr();

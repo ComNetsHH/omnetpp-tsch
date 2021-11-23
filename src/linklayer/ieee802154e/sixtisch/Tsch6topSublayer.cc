@@ -388,22 +388,22 @@ Packet* Tsch6topSublayer::handle6PMsg(Packet* pkt) {
         uint64_t sender = addresses->getSrcAddress().getInt();
         uint8_t seqNum = hdr->getSeqNum();
 
-        response = createErrorResponse(sender, seqNum, RC_SFID, data->getTimeout());
-    } else {
-        /* packet is for us and valid, handle it */
-        tsch6pMsg_t msgType = (tsch6pMsg_t) hdr->getType();
+        return createErrorResponse(sender, seqNum, RC_SFID, data->getTimeout());
+    }
 
-        switch (msgType) {
-            case MSG_REQUEST: {
-                response = handleRequestMsg(pkt, hdr, data);
-                break;
-            }
-            case MSG_RESPONSE: {
-                response = handleResponseMsg(pkt, hdr, data);
-                break;
-            }
-            default: EV_WARN << "Unknown 6P message type" << endl;
+    /* packet is for us and valid, handle it */
+    tsch6pMsg_t msgType = (tsch6pMsg_t) hdr->getType();
+
+    switch (msgType) {
+        case MSG_REQUEST: {
+            response = handleRequestMsg(pkt, hdr, data);
+            break;
         }
+        case MSG_RESPONSE: {
+            response = handleResponseMsg(pkt, hdr, data);
+            break;
+        }
+        default: EV_WARN << "Unknown 6P message type" << endl;
     }
 
     return response;
@@ -518,7 +518,9 @@ Packet* Tsch6topSublayer::handleRequestMsg(Packet* pkt,
         /* We don't know this node yet, add link info for it */
         pTschLinkInfo->addLink(sender, true, timeout, seqNum);
         pTschLinkInfo->setLastKnownCommand(sender, cmd);
-    } else if (seqNum == 0) { // TODO: Check if this clause makes sense at all!
+    }
+    else if (seqNum == 0) // TODO: Check if this clause makes sense at all!
+    {
         /* EXPERIMENTAL: first clear the schedule, only then the TschLinkInfo! */
         auto clearMsg = new tsch6topCtrlMsg();
         clearMsg->setDestId(sender);
@@ -527,11 +529,10 @@ Packet* Tsch6topSublayer::handleRequestMsg(Packet* pkt,
 
         /* node has been reset, clear all existing link information. */
         pTschLinkInfo->resetLink(sender, MSG_REQUEST);
-        pTschLinkInfo->setInTransaction(sender, timeout);
-    } else
-        pTschLinkInfo->setInTransaction(sender, timeout);
+    }
 
     pTschLinkInfo->setLastKnownType(sender, MSG_REQUEST);
+    pTschLinkInfo->setInTransaction(sender, timeout);
 
     // TODO: Refactor this further/split into separate handler functions
     switch (cmd) {
