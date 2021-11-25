@@ -123,6 +123,8 @@ public:
 
     virtual void handleTransactionTimeout(uint64_t sender) = 0;
 
+    virtual void freeReservedCellsWith(uint64_t nodeId) = 0;
+
     /**
      * @return The 6P Timeout value defined by this Scheduling Function in ms
      */

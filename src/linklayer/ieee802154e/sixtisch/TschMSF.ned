@@ -45,7 +45,8 @@ simple TschMSF like TschSF
 		int maxRetries = default(3); // 6P request retry threshold
 		int initialNumCells = default(1); // number of cells to schedule with RPL preferred parent initially
 		
-		int trackFailed6pAddByNum = default(0); // sequence number of specific 6P ADD request to track 
+		int trackFailed6pAddByNum = default(0); // sequence number of specific 6P ADD request to track
+		int minCellChannelOffset = default(0); // channel offset for the minimal cells, esp. important in lossy environment 
 		
 		// UI params
         bool showDedicatedTxCells = default(true); // show scheduled TX cells coordinates above node pictorgram

@@ -129,6 +129,8 @@ void Tsch6topSublayer::initialize(int stage) {
         mac->subscribe(inet::packetSentSignal, this);
 
         schedule = dynamic_cast<TschSlotframe*>(module->getSubmodule("schedule", 0));
+        host = getModuleByPath("^.^.^.^.");
+
         pTschLinkInfo = (TschLinkInfo*) getParentModule()->getSubmodule("linkinfo");
         if (!mac) {
             EV_ERROR << "Tsch6topSublayer: no mac submodule found" << endl;
@@ -141,6 +143,10 @@ void Tsch6topSublayer::initialize(int stage) {
         std::list<uint64_t>::iterator it;
 
         pTschSF = (TschSF*) getParentModule()->getSubmodule("sf");
+
+//        pTschSF->par("timeout").intValue()
+
+
         pSFID = pTschSF->getSFID();
 
         /* only start SF once tschmacwaic is initialized and we can actually
@@ -356,7 +362,7 @@ void Tsch6topSublayer::sendClearRequest(uint64_t destId, int timeout) {
        no matter what. However seqnum & cells are only reset after a RC_SUCCESS
        response is received, so we still need to note that we sent a CLEAR */
     if (!pTschLinkInfo->inTransaction(destId))
-        pTschLinkInfo->setInTransaction(destId, absoluteTimeout);
+        pTschLinkInfo->setInTransaction(destId);
 
     auto pkt = createClearRequest(destId, seqNum);
 
@@ -874,10 +880,31 @@ void Tsch6topSublayer::receiveSignal(cComponent *source, simsignal_t signalID, c
         return;
     }
 
+    // debugging stuff
+//    if (txSuccess)
+//        EV_DETAIL << "Received signal about LL ACK for " << pkt->getFullName() << " to/from? " << MacAddress(destId) << endl;
+//    else {
+//        EV_DETAIL << "Received signal about dropping " << pkt->getFullName() << " intended for " << MacAddress(destId) << endl;
+//        host->bubble("Dropped packet");
+//    }
+
     auto sixphdr = pkt->popAtFront<tsch::sixtisch::SixpHeader>();
 
-    if ( sixphdr && ((tsch6pMsg_t) sixphdr->getType()) == MSG_REQUEST )
+    if ( sixphdr && ((tsch6pMsg_t) sixphdr->getType()) == MSG_REQUEST ) {
+        // LL ACK received for a 6P request addressed to this neighbor
+        // => we can start the timeout!
+        if (txSuccess)
+            pTschLinkInfo->setInTransaction(destId, getAbsoluteTimeout(pTschSF->par("timeout").intValue()));
+        else {
+            // Else abort last intended transaction
+            // TODO: how do we exactly know the one-before-last transaction details?? Maybe set it to CMD_NONE?
+            // TODO: ensure this doesn't screw-up sequence numbers
+            pTschLinkInfo->revertLink(destId, pTschLinkInfo->getLastKnownType(destId));
+            pTschSF->freeReservedCellsWith(destId);
+        }
+
         return;
+    }
 
     tsch6topCtrlMsg* result = NULL;
 
@@ -929,7 +956,6 @@ void Tsch6topSublayer::receiveSignal(cComponent *source, simsignal_t signalID, c
         pTschSF->handleResponse(destId, RC_SUCCESS, 0, NULL);
 //        pTschLinkInfo->incrementSeqNum(destId);
 
-        // TODO: wenn reloc: cells in reloccellist aus ptschlinkinfo entfernen
         pTschLinkInfo->addCells(destId, cellsToAdd, cellOptions);
         if (cellsToDelete.size())
             pTschLinkInfo->deleteCells(destId, cellsToDelete, cellOptions);
@@ -1414,12 +1440,14 @@ uint8_t Tsch6topSublayer::prepLinkForRequest(uint64_t destId, simtime_t absolute
     if (!pTschLinkInfo->linkInfoExists(destId)) {
         /* We don't have a link to destId yet, register one and start @ SeqNum 0 */
         EV_INFO << "We don't have a link to " << MacAddress(destId) << " yet, register one and start at seqNum 0" << endl;
-        pTschLinkInfo->addLink(destId, true, absoluteTimeout, seqNum);
+        // DO NOT start the timeout until a LL ACK is received, and we're certain the request has been delivered
+        pTschLinkInfo->addLink(destId, false, absoluteTimeout, seqNum);
+        pTschLinkInfo->setInTransaction(destId);
     } else {
         seqNum = pTschLinkInfo->getSeqNum(destId);
         EV_INFO << "Found link to " << MacAddress(destId) << " with seqNum " << +seqNum << endl;
         /* Link already exists, update its info */
-        pTschLinkInfo->setInTransaction(destId, absoluteTimeout);
+        pTschLinkInfo->setInTransaction(destId);
     }
 
     pTschLinkInfo->setLastKnownType(destId, MSG_REQUEST);

@@ -176,6 +176,10 @@ public:
     /** TSCH schedule */
     TschSlotframe *schedule;
 
+    // RPL router
+    cModule *host;
+
+
 protected:
     /**
      * @brief handles a lower ctrl message.

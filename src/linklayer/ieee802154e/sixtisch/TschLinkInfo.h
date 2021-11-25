@@ -65,7 +65,7 @@ class TschLinkInfo: public cSimpleModule
         {
             os << "(" << inet::MacAddress(info.nodeId) << ") " << info.lastKnownCommand
                     << " " << info.lastKnownType << (info.inTransaction ? " " : " not ")
-                    << "in transaction";
+                    << "in transaction, #" << (int) info.lastKnownSeqNum;
             return os;
         }
 
@@ -130,6 +130,7 @@ public:
      *            -EINVAL if no link to nodeId exists
      */
     int setInTransaction(uint64_t nodeId, simtime_t transactionTimeout);
+    int setInTransaction(uint64_t nodeId);
 
     /**
      * @brief Mark link with @p nodeId as "not in transaction"

@@ -108,6 +108,7 @@ public:
                                 std::vector<cellLocation_t> *cellList = NULL);
 
     void handleTransactionTimeout(uint64_t sender) {}
+    void freeReservedCellsWith(uint64_t nodeId) {}
 
     /**
      * @brief Handle the inconsistency which was uncovered by @p seqNum
