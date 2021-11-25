@@ -595,7 +595,7 @@ void TschMSF::scheduleMinimalCells(int numMinimalCells, int slotframeLength) {
     EV_DETAIL << "Minimal cell period - " << minCellPeriod << endl;
 
     for (auto i = 0; i < numMinimalCells; i++)
-        cellList.push_back({(offset_t) (i * minCellPeriod), 0});
+        cellList.push_back({(offset_t) (i * minCellPeriod), (offset_t) par("minCellChannelOffset").intValue()});
 
     ctrlMsg->setNewCells(cellList);
     pTschLinkInfo->addLink(macBroadcast, false, 0, 0);

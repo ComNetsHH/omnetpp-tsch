@@ -65,7 +65,7 @@ class TschLinkInfo: public cSimpleModule
         {
             os << "(" << inet::MacAddress(info.nodeId) << ") " << info.lastKnownCommand
                     << " " << info.lastKnownType << (info.inTransaction ? " " : " not ")
-                    << "in transaction";
+                    << "in transaction, #" << (int) info.lastKnownSeqNum;
             return os;
         }
 
