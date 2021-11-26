@@ -142,13 +142,14 @@ void TschNeighbor::setVirtualQueue(MacAddress macAddr, int linkId) {
 int TschNeighbor::getCurrentNeighborQueueSize(){
     int queueSize = 0;
     auto search = this->macToQueueMap.find(this->currentNeighborKey);
-    if(search != this->macToQueueMap.end()){
-        for(auto itr = search->second->begin(); itr != search->second->end(); ++itr){
+    if (search != this->macToQueueMap.end())
+    {
+        for(auto itr = search->second->begin(); itr != search->second->end(); ++itr)
             queueSize += (int)itr->second->size();
-        }
+
         EV_DETAIL << "[TschNeighbor] The queue size for the current neighbor is: " << queueSize << endl;
         return queueSize;
-    }else{
+    } else {
         EV_DETAIL << "[TschNeighbor] This Neighbor does not exist." << endl;
         return queueSize;
     }

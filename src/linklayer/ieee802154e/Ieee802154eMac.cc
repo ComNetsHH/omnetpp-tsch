@@ -307,9 +307,7 @@ bool Ieee802154eMac::isControlPacket(Packet *packet) {
     std::string packetName(packet->getFullName());
 
     // FIXME: make a list of control packet names a constant somewhere
-    return packetName.find("DAO") != std::string::npos
-            || packetName.find("DIO") != std::string::npos
-            || packetName.find("NA") != std::string::npos
+    return packetName.find("NA") != std::string::npos
             || packetName.find("NS") != std::string::npos;
 }
 
