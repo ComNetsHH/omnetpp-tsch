@@ -3,7 +3,7 @@
 //
 //  Copyright (C) 2019  Institute of Communication Networks (ComNets),
 //                      Hamburg University of Technology (TUHH)
-//            (C) 2021  Gï¿½kay Apusoglu
+//            (C) 2021  Gökay Apusoglu
 //
 //  This program is free software: you can redistribute it and/or modify
 //  it under the terms of the GNU General Public License as published by
@@ -58,8 +58,10 @@ void TschUdpReSaEchoApp::initialize(int stage){
     if (stage == INITSTAGE_LOCAL) {
         // init statistics
         numEchoed = 0;
-        rcvdPkNo = 0;
+        moduleIndex_int = 0;
         WATCH(numEchoed);
+        WATCH_MAP(hazardPkDelay);
+        WATCH(hazardPkMeanDelay);
 
     }
     else if(stage == INITSTAGE_LAST){
@@ -73,8 +75,8 @@ void TschUdpReSaEchoApp::socketDataArrived(UdpSocket *socket, Packet *pk)
     EV_INFO << "Received packet: " << UdpSocket::getReceivedPacketInfo(pk) << endl;
     auto l3Addresses = pk->getTag<L3AddressInd>();
     auto ports = pk->getTag<L4PortInd>();
-    L3Address srcAddr = l3Addresses->getSrcAddress();
-    int srcPort = ports->getSrcPort();
+    //L3Address srcAddr = l3Addresses->getSrcAddress();
+    //int srcPort = ports->getSrcPort();
 
     pk->clearTags();
     pk->trim();
@@ -82,10 +84,19 @@ void TschUdpReSaEchoApp::socketDataArrived(UdpSocket *socket, Packet *pk)
 
 
     // send back
-    // TODO: set/get packet name dynamically
-    if (strncmp(pkName, "Hazard", 3) == 0) {
+    if (strncmp(pkName,"HAZARD",3)==0){
 
-        rcvdPkNo++;
+        // For tracing HAZARD packets easily during the debug process, sequence number is set to the packet-owner smoke sensor's index number.
+        std::string sender = pkName;
+        std::string moduleIndex;
+        std::size_t begin = sender.find("[");
+        std::size_t end = sender.find("]",begin);
+        moduleIndex = sender.substr(begin+1,end-begin-1);
+        moduleIndex_int = stoi(moduleIndex);
+        const double delay = (pk->getArrivalTime()).dbl() - (pk->getCreationTime()).dbl();
+        hazardPkDelay.insert({delay,moduleIndex_int});
+        hazardPkMeanDelay = (hazardPkMeanDelay*(hazardPkDelay.size()-1) + delay)/hazardPkDelay.size();
+        recordScalar("hazardPkMeanUplinkDelay", hazardPkMeanDelay);
 
         const char *addrs = par("amAddrList");
         cStringTokenizer tokenizer(addrs);
@@ -111,10 +122,12 @@ void TschUdpReSaEchoApp::forwardPacket(UdpSocket *socket, Packet *packet, L3Addr
     str << "Port:" << destPort;
     Packet *echopacket = new Packet(str.str().c_str());
     echopacket->setName(pkName);
+
     const auto& payload = makeShared<ApplicationPacket>();
     payload->setChunkLength(B(packet->getByteLength()));
-    payload->setSequenceNumber(rcvdPkNo);
+    payload->setSequenceNumber(moduleIndex_int);
     payload->addTag<CreationTimeTag>()->setCreationTime(packet->getCreationTime());
+    echopacket->addTagIfAbsent<VirtualLinkTagReq>()->setVirtualLinkID(-2);
     echopacket->insertAtBack(payload);
     emit(packetSentSignal, echopacket);
 

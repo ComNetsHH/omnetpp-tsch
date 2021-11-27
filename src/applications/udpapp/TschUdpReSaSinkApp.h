@@ -1,7 +1,7 @@
 //
 //  Simulation model for IEEE 802.15.4 Time Slotted Channel Hopping (TSCH)
 //
-//  Copyright (C) 2019  Institute of Communication Networks (ComNets),
+//  Copyright (C) 2021  Institute of Communication Networks (ComNets),
 //                      Hamburg University of Technology (TUHH)
 //            (C) 2021  Gökay Apusoglu
 //
@@ -18,14 +18,18 @@
 //  You should have received a copy of the GNU General Public License
 //  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-#ifndef APPLICATIONS_UDPAPP_TSCHUDPRESAECHOAPP_H_
-#define APPLICATIONS_UDPAPP_TSCHUDPRESAECHOAPP_H_
+#ifndef APPLICATIONS_UDPAPP_TSCHUDPRESASINKAPP_H_
+#define APPLICATIONS_UDPAPP_TSCHUDPRESASINKAPP_H_
 
-#include "inet/applications/udpapp/UdpEchoApp.h"
+#include <vector>
+
 #include "inet/common/INETDefs.h"
 
 #include "inet/applications/base/ApplicationBase.h"
 #include "inet/transportlayer/contract/udp/UdpSocket.h"
+
+#include "inet/applications/udpapp/UdpSink.h"
+#include "inet/common/INETDefs.h"
 #include <fstream>
 #include <iostream>
 #include <list>
@@ -40,35 +44,29 @@ using namespace inet;
 
 namespace tsch{
 
-class TschUdpReSaEchoApp: public inet::UdpEchoApp {
+class TschUdpReSaSinkApp: public inet::UdpSink {
 public:
-    TschUdpReSaEchoApp();
-    virtual ~TschUdpReSaEchoApp();
+    TschUdpReSaSinkApp();
+    ~TschUdpReSaSinkApp();
+
 protected:
-    L3Address destAddr;
-    L3Address amAddr;
-    std::vector<L3Address> amAddrList;
-    std::vector<std::string> amAddrListStr;
-
-    int destPort;
-    int amPort;
-
     int moduleIndex_int;
+
     std::map<double, int> hazardPkDelay;
     double hazardPkMeanDelay;
 
     friend std::ostream& operator<<(std::ostream& os, std::map<double, int> hazardPkDelay)
-    {
-        for (auto const delay: hazardPkDelay){
-            os << "Delay: " << std::get<0>(delay) << "s     Source:sos[" << std::get<0>(delay) << "]\n" << std::endl;
+        {
+            for (auto const delay: hazardPkDelay){
+                os << "Delay: " << std::get<0>(delay) << "s     Source:sos[" << std::get<0>(delay) << "]\n" << std::endl;
+            }
+            return os;
         }
-        return os;
-    }
 
     virtual void initialize(int stage) override;
-    virtual void socketDataArrived(UdpSocket *socket, Packet *packet) override;
-    virtual void forwardPacket(UdpSocket *socket, Packet *packet, L3Address destAddr, int destPort, const char* pkName);
+    virtual void socketDataArrived(UdpSocket *socket, Packet *pk) override;
+
 };
 }
 
-#endif /* APPLICATIONS_UDPAPP_TSCHUDPRESAECHOAPP_H_ */
+#endif /* APPLICATIONS_UDPAPP_TSCHUDPRESASINKAPP_H_ */
