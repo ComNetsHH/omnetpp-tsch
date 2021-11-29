@@ -101,23 +101,34 @@ class TschMSF: public TschSF, public cListener {
     TschMSF();
     ~TschMSF();
 
-//    struct NbrStatistic {
-//        uint8_t numCellsElapsed;
-//        uint8_t numCellsUsed;
-//    };
-
     class NbrStatistic: public cObject {
 
         public:
             uint8_t numCellsElapsed;
             uint8_t numCellsUsed;
+            uint64_t macAddr;
 //            cMessage* maxNumCellsMsg;
 
-            NbrStatistic() { // uint64_t neighborId
+            NbrStatistic() {
                 this->numCellsElapsed = 0;
                 this->numCellsUsed = 0;
 //                this->maxNumCellsMsg = new cMessage("MAX_NUM_CELLS", REACHED_MAXNUMCELLS);
 //                maxNumCellsMsg->setContextPointer(new MacAddress(neighborId));
+            }
+
+
+            NbrStatistic(uint64_t nodeId) {
+                this->numCellsElapsed = 0;
+                this->numCellsUsed = 0;
+                this->macAddr = nodeId;
+            }
+
+
+            friend std::ostream& operator<<(std::ostream& os, const NbrStatistic& stat)
+            {
+                os << "(" << inet::MacAddress(stat.macAddr) <<  ") elapsed = "
+                        << (int) stat.numCellsElapsed << "; used = " << (int) stat.numCellsUsed;
+                return os;
             }
     };
 
@@ -134,13 +145,6 @@ class TschMSF: public TschSF, public cListener {
             return os;
         }
     };
-
-    friend std::ostream& operator<<(std::ostream& os, std::vector<offset_t> const& slots)
-    {
-        for (auto s : slots)
-            os << s << ", ";
-        return os;
-    }
 
     /**
      * @brief Start operating. This function MUST be called after creating a SF
@@ -446,8 +450,6 @@ class TschMSF: public TschSF, public cListener {
      * @param slotframeLength length of the slotframe in timeslots
      */
     void scheduleMinimalCells(int numMinimalCells, int slotframeLength);
-
-    void watchReservedTimeOffsets(uint64_t nbrId);
 
     uint64_t checkInTransaction();
     bool checkOverlapping();

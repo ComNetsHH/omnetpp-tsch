@@ -34,7 +34,7 @@ using namespace std;
 
 Define_Module(TschMSF);
 
-inline std::ostream& operator<<(std::ostream& os, vector<offset_t> offsets)
+inline std::ostream& operator<<(std::ostream& os, vector<offset_t>& offsets)
 {
     for (auto o: offsets)
         os << o << ", ";
@@ -123,6 +123,8 @@ void TschMSF::initialize(int stage) {
 
         WATCH(pMaxNumCells);
         WATCH(rplParentId);
+        WATCH_PTRMAP(nbrStatistic);
+//        WATCH_MAP(reservedTimeOffsets);
 
 //        WATCH(util);
 //        WATCH(numFailedTracked6p);
@@ -422,17 +424,10 @@ void TschMSF::relocateCells(uint64_t neighborId, std::vector<cellLocation_t> rel
 
     EV_DETAIL << "Selected candidate cell list to accommodate relocated cells: " << candidateCells << endl;
 
-    watchReservedTimeOffsets(neighborId);
-
     for (auto cc : candidateCells)
         reservedTimeOffsets[neighborId].push_back(cc.timeOffset);
 
     pTsch6p->sendRelocationRequest(neighborId, MAC_LINKOPTIONS_TX, relocCells.size(), relocCells, candidateCells, pTimeout);
-}
-
-void TschMSF::watchReservedTimeOffsets(uint64_t nbrId) {
-    if (reservedTimeOffsets.find(nbrId) != reservedTimeOffsets.end())
-        WATCH_VECTOR(reservedTimeOffsets[nbrId]);
 }
 
 void TschMSF::estimateQueueUtilization() {
@@ -681,8 +676,6 @@ int TschMSF::createCellList(uint64_t destId, std::vector<cellLocation_t> &cellLi
         return -EINVAL;
     }
 
-    watchReservedTimeOffsets(destId);
-
     if (!reservedTimeOffsets[destId].empty()) {
         EV_ERROR << "reservedTimeOffsets should be empty when creating new cellList,"
                 << " is another transaction still in progress?\ncurrently occupied time slots: "
@@ -750,8 +743,6 @@ int TschMSF::pickCells(uint64_t destId, std::vector<cellLocation_t> &cellList,
             EV_DETAIL << " unavailable" << endl;
     }
     cellList.clear();
-
-    watchReservedTimeOffsets(destId);
 
     for (auto i = 0; i < numCells && i < (int) pickedCells.size(); i++) {
         cellList.push_back(pickedCells[i]);
@@ -1295,7 +1286,7 @@ void TschMSF::updateCellTxStats(cellLocation_t cell, std::string statType) {
 
 void TschMSF::updateNeighborStats(uint64_t neighbor, std::string statType) {
     if (nbrStatistic.find(neighbor) == nbrStatistic.end())
-        nbrStatistic.insert({neighbor, new NbrStatistic()});
+        nbrStatistic.insert({neighbor, new NbrStatistic(neighbor)});
 
     if (statType == "nbSlot") {
         nbrStatistic[neighbor]->numCellsElapsed++;
