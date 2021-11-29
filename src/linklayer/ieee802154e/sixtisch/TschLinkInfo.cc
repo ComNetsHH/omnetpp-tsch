@@ -81,16 +81,14 @@ int TschLinkInfo::addLink(uint64_t nodeId, bool inTransaction,
         return -EEXIST;
     }
 
-    linkInfo[nodeId] = {
-        .nodeId = nodeId,
-        .inTransaction = inTransaction,
-        .tom = new tschLinkInfoTimeoutMsg(),
-        .lastKnownSeqNum = lastKnownSeqNum,
-        .lastKnownCommand = CMD_NONE,
-        .lastKnownType = MSG_NONE
-    };
-
+    linkInfo[nodeId] = {};
+    linkInfo[nodeId].nodeId = nodeId;
+    linkInfo[nodeId].inTransaction= inTransaction;
+    linkInfo[nodeId].tom = new tschLinkInfoTimeoutMsg();
     linkInfo[nodeId].tom->setNodeId(nodeId);
+    linkInfo[nodeId].lastKnownSeqNum = lastKnownSeqNum;
+    linkInfo[nodeId].lastKnownType = MSG_NONE;
+    linkInfo[nodeId].lastKnownCommand = CMD_NONE;
 
     if (inTransaction)
         startTimeoutTimer(nodeId, transactionTimeout);
