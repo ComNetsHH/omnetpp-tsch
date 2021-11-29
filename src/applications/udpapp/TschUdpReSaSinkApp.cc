@@ -74,7 +74,7 @@ void TschUdpReSaSinkApp::socketDataArrived(UdpSocket *socket, Packet *pk)
 
     const char* pkName = pk->getName();
 
-    if (strncmp(pkName,"HAZARD",3)==0){
+    if (strncmp(pkName, "HAZARD", 6) == 0) {
 
         // For tracing HAZARD packets easily during the debug process, sequence number is set to the packet-owner smoke sensor's index number.
         std::string sender = pkName;
