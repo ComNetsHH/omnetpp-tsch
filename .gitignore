@@ -1,12 +1,12 @@
 # local and generated files not to be committed
 src/Makefile
-src/Makefile.vc
+#src/Makefile.vc
 *_m.h
 *_m.cc
 *_sm.h
 *_sm.cc
-.oppfeaturestate
-.nedexclusions
+#.oppfeaturestate
+#.nedexclusions
 src/inet/features.h
 src/inet/opp_defines.h
 precompiled_*.h.*
