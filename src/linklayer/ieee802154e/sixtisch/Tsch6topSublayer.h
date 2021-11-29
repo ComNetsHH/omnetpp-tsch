@@ -546,6 +546,8 @@ private:
     void sendMessageToRadio(cMessage *msg) { sendMessageToRadio(msg, 0); } ;
     void sendMessageToRadio(cMessage *msg, double delay);
 
+    bool hasPatternUpdateFor(uint64_t nodeId);
+
     /**
      * @brief Send control message to the MAC layer.
      */

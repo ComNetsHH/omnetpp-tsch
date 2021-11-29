@@ -848,6 +848,13 @@ Packet* Tsch6topSublayer::handleResponseMsg(Packet* pkt, inet::IntrusivePtr<cons
     return response;
 }
 
+bool Tsch6topSublayer::hasPatternUpdateFor(uint64_t nodeId) {
+    return pendingPatternUpdates[nodeId]
+             && pendingPatternUpdates[nodeId]->getDestId() != -1
+             && pendingPatternUpdates[nodeId]->getTimeout() > simTime()
+             && pTschLinkInfo->inTransaction(nodeId);
+}
+
 void Tsch6topSublayer::receiveSignal(cComponent *source, simsignal_t signalID, cObject *value, cObject *details) {
     Enter_Method_Silent();
     bool txSuccess = false;
@@ -935,9 +942,7 @@ void Tsch6topSublayer::receiveSignal(cComponent *source, simsignal_t signalID, c
     }
 
     /* txsuccess is for a 6P transmission towards one of our neighbors */
-    if (txSuccess && pendingPatternUpdates[destId]->getDestId() != -1
-            && pendingPatternUpdates[destId]->getTimeout() > simTime()
-            && pTschLinkInfo->inTransaction(destId))
+    if (txSuccess && hasPatternUpdateFor(destId))
     {
         /* LL ACK arrived and there is a pattern update waiting for this ACK
          * and the transaction hasn't timed out in the meantime */
@@ -977,7 +982,8 @@ void Tsch6topSublayer::receiveSignal(cComponent *source, simsignal_t signalID, c
 
     // TODO: this gets called in response to SIGNALs as well. might break stuff.
     /* PatternUpdate is no longer needed */
-    pendingPatternUpdates[destId]->setDestId(-1);
+    if (pendingPatternUpdates[destId])
+        pendingPatternUpdates[destId]->setDestId(-1);
 
     if (result != nullptr) {
         result->setDestId(destId);
