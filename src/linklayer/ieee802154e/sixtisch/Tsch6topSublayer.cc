@@ -270,8 +270,7 @@ bool Tsch6topSublayer::sendAddRequest(uint64_t destId, uint8_t cellOptions,
     /* Calculate simtime at which this transaction will time out. since simtime_t is
        always counted in (fractions of) seconds, we need to convert timeout first */
     simtime_t absoluteTimeout = getAbsoluteTimeout(timeout);
-    EV_DETAIL << "Sending ADD to " << MacAddress(destId) << ", timeout scheduled at: "
-            << absoluteTimeout << endl;
+    EV_DETAIL << "Preparing ADD to " << MacAddress(destId) << endl;
     uint8_t seqNum = prepLinkForRequest(destId, absoluteTimeout);
 
     auto pkt = createAddRequest(destId, seqNum, cellOptions, numCells, cellList, absoluteTimeout);
@@ -405,6 +404,11 @@ Packet* Tsch6topSublayer::handle6PMsg(Packet* pkt) {
 
     auto hdr = pkt->popAtFront<tsch::sixtisch::SixpHeader>();
     auto data = pkt->popAtFront<tsch::sixtisch::SixpData>();
+
+    // EXPERIMENTAL - update timeout for received data, since it doesn't make sense to discard it just because it took longer time
+    // on CSMA!!!! Alternatively set really high 6P timeout, so that even with worst backoff, the received data is still valid
+    (const_cast<tsch::sixtisch::SixpData*>(data.get()))->setTimeout(getAbsoluteTimeout(pTschSF->par("timeout").intValue()));
+
     auto addresses = pkt->getTag<MacAddressInd>();
 
     // TODO: lock linkinfo while handling it?!
@@ -463,11 +467,21 @@ Packet* Tsch6topSublayer::handleRequestMsg(Packet* pkt,
         return createClearResponse(sender, seqNum, RC_SUCCESS, data->getTimeout());
     }
 
+    // TODO: this doesn't make sense
     if (data->getTimeout() < simTime()) {
         /* received msg whose timeout already expired; ignore it. */
         /* QUICK FIX (we probably shouldn't start the timeout timer before
          * pkt transmsmission but after pkt received?)*/
         EV_DETAIL << "EXPIRED MSG " << endl;
+
+
+        // EXPERIMENTAL: need to register a link before attempting to set last known type for it!
+        if (!pTschLinkInfo->linkInfoExists(sender)) {
+            /* We don't know this node yet, add link info for it */
+            pTschLinkInfo->addLink(sender, false, 0, seqNum);
+            pTschLinkInfo->setLastKnownCommand(sender, cmd);
+        }
+
         pTschLinkInfo->setLastKnownType(sender, MSG_REQUEST);
 
         numExpiredReq++;
@@ -849,7 +863,8 @@ Packet* Tsch6topSublayer::handleResponseMsg(Packet* pkt, inet::IntrusivePtr<cons
 }
 
 bool Tsch6topSublayer::hasPatternUpdateFor(uint64_t nodeId) {
-    return pendingPatternUpdates[nodeId]
+    return pendingPatternUpdates.find(nodeId) != pendingPatternUpdates.end()
+            && pendingPatternUpdates[nodeId]
              && pendingPatternUpdates[nodeId]->getDestId() != -1
              && pendingPatternUpdates[nodeId]->getTimeout() > simTime()
              && pTschLinkInfo->inTransaction(nodeId);
@@ -933,13 +948,13 @@ void Tsch6topSublayer::receiveSignal(cComponent *source, simsignal_t signalID, c
         }
     }
 
-    if (pendingPatternUpdates.find(destId) == pendingPatternUpdates.end()) {
-        EV_DETAIL << "We are in test condition #1" << endl;
-//        if (pTschLinkInfo->inTransaction(destId))
-//            pTschLinkInfo->abortTransaction(destId); // EXPERIMENTAL: clear in-transaction flag for TSCH-ACKs on RC_RESET
-
-        return;
-    }
+//    if (pendingPatternUpdates.find(destId) == pendingPatternUpdates.end()) {
+//        EV_DETAIL << "We are in test condition #1" << endl;
+////        if (pTschLinkInfo->inTransaction(destId))
+////            pTschLinkInfo->abortTransaction(destId); // EXPERIMENTAL: clear in-transaction flag for TSCH-ACKs on RC_RESET
+//
+//        return;
+//    }
 
     /* txsuccess is for a 6P transmission towards one of our neighbors */
     if (txSuccess && hasPatternUpdateFor(destId))
