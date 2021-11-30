@@ -28,6 +28,7 @@
 #include <random>
 #include <algorithm>
 #include <queue>
+#include <chrono>
 
 using namespace tsch;
 using namespace std;
@@ -625,8 +626,10 @@ std::vector<cellLocation_t> TschMSF::pickRandomly(std::vector<cellLocation_t> in
     if ((int) inputVec.size() < numRequested)
         return {};
 
-    std::random_device rd;
-    std::mt19937 e{rd()};
+//    std::random_device rd;
+//    std::mt19937 e{rd()};
+
+    std::mt19937 e(std::chrono::high_resolution_clock::now().time_since_epoch().count());
 
     std::shuffle(inputVec.begin(), inputVec.end(), e);
 
