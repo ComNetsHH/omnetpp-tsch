@@ -127,7 +127,7 @@ void TschUdpReSaEchoApp::forwardPacket(UdpSocket *socket, Packet *packet, L3Addr
     payload->setChunkLength(B(packet->getByteLength()));
     payload->setSequenceNumber(moduleIndex_int);
     payload->addTag<CreationTimeTag>()->setCreationTime(packet->getCreationTime());
-    echopacket->addTagIfAbsent<VirtualLinkTagReq>()->setVirtualLinkID(-2);
+    echopacket->addTagIfAbsent<VirtualLinkTagReq>()->setVirtualLinkID(par("virtualLinkId").intValue());
     echopacket->insertAtBack(payload);
     emit(packetSentSignal, echopacket);
 

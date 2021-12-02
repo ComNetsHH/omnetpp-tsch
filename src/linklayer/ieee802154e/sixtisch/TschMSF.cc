@@ -445,14 +445,9 @@ void TschMSF::estimateQueueUtilization() {
         addCells(rplParentId, 1);
 }
 
-void TschMSF::handleMessage(cMessage* msg) {
-    Enter_Method_Silent();
 
-    if (!msg->isSelfMessage()) {
-        delete msg;
-        return;
-    }
-
+void TschMSF::handleSelfMessage(cMessage* msg) {
+    EV_DETAIL << "MSF handling msg - " << msg << endl;
     switch (msg->getKind()) {
         case REACHED_MAXNUMCELLS: {
             handleMaxCellsReached(msg);
@@ -498,8 +493,18 @@ void TschMSF::handleMessage(cMessage* msg) {
 
             break;
         }
-        default: EV_ERROR << "Unknown message received: " << msg << endl;
+        default: {
+            EV_ERROR << "Unknown message received: " << msg << endl;
+        }
     }
+}
+
+void TschMSF::handleMessage(cMessage* msg) {
+    Enter_Method_Silent();
+
+    if (msg->isSelfMessage())
+        handleSelfMessage(msg);
+
     delete msg;
 }
 
@@ -933,12 +938,13 @@ void TschMSF::handleResponse(uint64_t sender, tsch6pReturn_t code, int numCells,
 void TschMSF::handleTransactionTimeout(uint64_t sender)
 {
     reservedTimeOffsets[sender].clear();
-//    pTschLinkInfo->revertLink(sender, pTschLinkInfo->getLastKnownType(sender));
+//    pTschLinkInfo->revertLink(sender, pTschLinkInfo->getLastKnownType(sender)); // TODO: investigate why doesn't this work properly
     hostNode->bubble("Transaction timed out");
-    resetStateWith(sender);
+    resetStateWith(sender); // Unclear what to do according to RFC 8480 (6top) or MSF one
 }
 
 void TschMSF::resetStateWith(uint64_t nbrId) {
+    EV_DETAIL << "Resetting state with " << MacAddress(nbrId) << endl;
     clearScheduleWithNode(nbrId);
 //    TODO: needs further work
 //    if (delayed6pReq) {
@@ -946,6 +952,8 @@ void TschMSF::resetStateWith(uint64_t nbrId) {
 //        cancelEvent(delayed6pReq);
 //    }
 
+    // TODO: Might be MSG_REQUEST if the handleTransactionTimeout got invoked on failed request??
+    // or maybe just get last known type dynamically
     pTschLinkInfo->resetLink(nbrId, MSG_RESPONSE);
 
     if (par("clearQueueOnReset").boolValue())

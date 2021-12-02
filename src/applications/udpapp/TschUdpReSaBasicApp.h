@@ -41,7 +41,7 @@ protected:
     virtual void sendPacket() override;
     virtual void initialize(int stage) override;
 private:
-    int virtualLinkID;
+    int virtualLinkId;
 };
 }
 

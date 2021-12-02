@@ -3,7 +3,7 @@
 //
 //  Copyright (C) 2019  Institute of Communication Networks (ComNets),
 //                      Hamburg University of Technology (TUHH)
-//            (C) 2021  Gökay Apusoglu
+//            (C) 2021  Gï¿½kay Apusoglu
 //
 //  This program is free software: you can redistribute it and/or modify
 //  it under the terms of the GNU General Public License as published by
@@ -28,6 +28,7 @@ simple TschUdpReSaEchoApp extends UdpEchoApp
 {
     parameters:
         @class(TschUdpReSaEchoApp);
+        int virtualLinkId = default(0);
         int amPort;
         string amAddrList;
 }

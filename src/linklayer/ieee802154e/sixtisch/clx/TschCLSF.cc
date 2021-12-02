@@ -83,6 +83,17 @@ void TschCLSF::deleteCells(uint64_t nodeId, int numCells) {
         TschMSF::deleteCells(nodeId, numCells);
 }
 
+void TschCLSF::handleSelfMessage(cMessage* msg) {
+    EV_DETAIL << "CLSF handling self-msg - " << msg << endl;
+    auto copy = msg->dup();
+
+    TschMSF::handleSelfMessage(msg);
+    if (copy->getKind() == CHECK_DAISY_CHAIN)
+        checkDaisyChained();
+
+    delete copy;
+}
+
 void TschCLSF::handleSuccessRelocate(uint64_t sender, std::vector<cellLocation_t> cellList) {
     if (sender != rplParentId) {
         EV_WARN << "Received RELOCATE response from node other than preferred parent!" << endl;
@@ -98,7 +109,7 @@ void TschCLSF::handleSuccessRelocate(uint64_t sender, std::vector<cellLocation_t
         EV_WARN << "Received empty RELOCATE response during daisy-chaining" << endl;
 
         if (num6pRelocateAttempts > maxNum6pAttempts) {
-            EV_DETAIL << "Maximum number relocates attempted, daisy-chaining is considered failed" << endl;
+            EV_DETAIL << "Maximum number RELOCATEs attempted, daisy-chaining is considered failed" << endl;
             isDaisyChainFailed = true;
             return;
         }
@@ -111,24 +122,28 @@ void TschCLSF::handleSuccessRelocate(uint64_t sender, std::vector<cellLocation_t
             return;
         }
 
-        auto selfMsg = new cMessage("SEND_6P_DELAYED", SEND_6P_REQ);
-        auto ctrlInfo = new SfControlInfo(sender);
-        ctrlInfo->set6pCmd(CMD_RELOCATE);
-        ctrlInfo->setCellList(dedicatedCells);
-        selfMsg->setControlInfo(ctrlInfo);
-
-//        auto delay = uniform(10, 20); // FIXME: magic numbers
         num6pRelocateAttempts++;
 
-        auto timeoutVal = pow(2, uniform(0, num6pRelocateAttempts));
+        // Might break 6top transaction handling flow
+//        auto selfMsg = new cMessage("SEND_6P_DELAYED", SEND_6P_REQ);
+//        auto ctrlInfo = new SfControlInfo(sender);
+//        ctrlInfo->set6pCmd(CMD_RELOCATE);
+//        ctrlInfo->setCellList(dedicatedCells);
+//        selfMsg->setControlInfo(ctrlInfo);
+//
+//        auto timeoutVal = pow(2, uniform(0, num6pRelocateAttempts));
+//        scheduleAt(simTime() + timeoutVal, selfMsg);
+//        EV_DETAIL << "Preparing to send 6P RELOCATE in " << timeoutVal
+//                << " s, at " << simTime() + timeoutVal << endl;
 
-        scheduleAt(simTime() + timeoutVal, selfMsg);
 
-        EV_DETAIL << "Preparing to send 6P RELOCATE in " << timeoutVal
-                << " s, at " << simTime() + timeoutVal << endl;
+        scheduleAt(simTime() + pow(2, intrand(num6pRelocateAttempts)), new cMessage("CHECK_DAISY_CHAIN", CHECK_DAISY_CHAIN));
+
+//        relocateCells(sender, dedicatedCells);
     }
     else
     {
+        // TODO: weak assumption that we don't relocate cells due to reasons other than for daisy-chaining
         EV_DETAIL << "Successfully relocated cells: " << cellList << endl;
         isDaisyChained = true;
     }
@@ -312,7 +327,7 @@ void TschCLSF::setBranchChannelOffset(int chOf) {
 void TschCLSF::handleSuccessAdd(uint64_t sender, int numCells,  vector<cellLocation_t> cellList) {
 
     TschMSF::handleSuccessAdd(sender, numCells, cellList);
-    if (isCrossLayerInfoAvailable())
+    if (isCrossLayerInfoAvailable() && !isDaisyChained && !isDaisyChainFailed)
         checkDaisyChained();
 }
 
@@ -341,10 +356,22 @@ void TschCLSF::handleDaisyChaining(SlotframeChunk advertisedChunk) {
     checkDaisyChained();
 }
 
+void TschCLSF::resetStateWith(uint64_t nbrId) {
+    TschMSF::resetStateWith(nbrId);
+    checkDaisyChained();
+}
+
 void TschCLSF::checkDaisyChained()
 {
-    if (isDaisyChained)
+    if (isDaisyChained) {
+        EV_DETAIL << "Already daisy-chained" << endl;
         return;
+    }
+
+    if (!isCrossLayerInfoAvailable()) {
+        EV_DETAIL << "No cross-layer info available" << endl;
+        return;
+    }
 
     auto dedicatedCells = pTschLinkInfo->getDedicatedCells(rplParentId);
 
@@ -361,20 +388,25 @@ void TschCLSF::checkDaisyChained()
             return;
         }
 
-        EV_DETAIL << "\n Attempting daisy-chaining, slotframe chunk: " << crossLayerSlotRange
-                                   << " and channel offset = " << crossLayerChOffset << endl;
+        EV_DETAIL << "\n Attempting daisy-chaining, slotframe chunk: "
+                << crossLayerSlotRange << " and channel offset = " << crossLayerChOffset << endl;
 
-        auto selfMsg = new cMessage("SEND_6P_DELAYED", SEND_6P_REQ);
-        auto ctrlInfo = new SfControlInfo(rplParentId);
-        ctrlInfo->set6pCmd(CMD_RELOCATE);
-        ctrlInfo->setCellList(nonDaisyChained);
-        selfMsg->setControlInfo(ctrlInfo);
+        // This may break 6P transaction handling process by 6top and TschLinkInfo
+//        auto selfMsg = new cMessage("SEND_6P_DELAYED", SEND_6P_REQ);
+//        auto ctrlInfo = new SfControlInfo(rplParentId);
+//        ctrlInfo->set6pCmd(CMD_RELOCATE);
+//        ctrlInfo->setCellList(nonDaisyChained);
+//        selfMsg->setControlInfo(ctrlInfo);
+//
+//        auto delay = uniform(10, 20); // FIXME: magic numbers
+//
+//        scheduleAt(simTime() + delay, selfMsg);
+//        EV_DETAIL << "Preparing to send 6P RELOCATE in " << delay << " s, at " << simTime() + delay << endl;
 
-        auto delay = uniform(10, 20); // FIXME: magic numbers
+        relocateCells(rplParentId, nonDaisyChained);
 
-        scheduleAt(simTime() + delay, selfMsg);
         num6pRelocateAttempts++;
-        EV_DETAIL << "Preparing to send 6P RELOCATE in " << delay << " s, at " << simTime() + delay << endl;
+
     }
 }
 

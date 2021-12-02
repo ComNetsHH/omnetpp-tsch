@@ -393,6 +393,7 @@ class TschMSF: public TschSF, public cListener {
         HOUSEKEEPING,
         SEND_6P_REQ,
         DELAY_TEST,
+        CHECK_DAISY_CHAIN, // message type for CLX scheduling
         UNDEFINED
     };
 
@@ -410,6 +411,8 @@ class TschMSF: public TschSF, public cListener {
     void scheduleAutoCell(uint64_t neighbor);
     void scheduleAutoRxCell(InterfaceToken euiAddr);
     void removeAutoTxCell(uint64_t neighbor);
+
+    virtual void handleSelfMessage(cMessage* msg);
 
     /**
      * Sends out 6P request according to the details of SfControlInfo object.
@@ -441,7 +444,7 @@ class TschMSF: public TschSF, public cListener {
      */
     void clearScheduleWithNode(uint64_t sender);
 
-    void resetStateWith(uint64_t nbrId);
+    virtual void resetStateWith(uint64_t nbrId);
 
     /**
      * Schedule minimal cells (TX RX SHARED) for broadcast and control messages

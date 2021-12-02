@@ -70,6 +70,9 @@ private:
     void handleDaisyChaining(SlotframeChunk advertisedChunk);
     void setBranchChannelOffset(int chOf);
 
+    virtual void resetStateWith(uint64_t nbrId) override;
+    virtual void handleSelfMessage(cMessage* msg) override;
+
 protected:
     virtual void refreshDisplay() const override;
 };
