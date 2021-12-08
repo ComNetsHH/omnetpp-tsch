@@ -272,6 +272,12 @@ private:
     simsignal_t sent6pDeleteSignal;
     simsignal_t sent6pResponseSignal;
 
+    /** stats: number of 6p messages ACKed */
+    simsignal_t acked6pAddSignal;
+    simsignal_t acked6pRelocateSignal;
+    simsignal_t acked6pDeleteSignal;
+    simsignal_t acked6pResponseSignal;
+
     enum tsch6topSelfMessage_t {
         SF_START,
         PIGGYBACK_TIMEOUT
@@ -287,6 +293,14 @@ private:
      * @brief Handle 6p message @p pkt of type MSG_REQUEST.
      */
     Packet* handleRequestMsg(Packet* pkt, inet::IntrusivePtr<const tsch::sixtisch::SixpHeader>& hdr, inet::IntrusivePtr<const tsch::sixtisch::SixpData>& data);
+
+    /**
+     * Handle link-layer ACK received for the last 6P request
+     *
+     * @param destId id of the destination-originator of the ACK
+     * @param cmd 6top command type - ADD/DELETE/RELOCATE
+     */
+    void handleRequestAck(uint64_t destId, tsch6pCmd_t cmd);
 
     /**
      * @brief Handle 6p packet @p pkt of type MSG_RESPONSE.

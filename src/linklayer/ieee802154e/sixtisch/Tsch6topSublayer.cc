@@ -98,6 +98,11 @@ void Tsch6topSublayer::initialize(int stage) {
         sent6pRelocateSignal = registerSignal("sent6pRelocate");
         sent6pResponseSignal = registerSignal("sent6pResponse");
 
+        acked6pAddSignal = registerSignal("acked6pAdd");
+        acked6pRelocateSignal = registerSignal("acked6pRelocate");
+        acked6pDeleteSignal = registerSignal("acked6pDelete");
+        acked6pResponseSignal = registerSignal("acked6pResponse");
+
         numConcurrentTransactionErrors = 0;
         numUnexpectedResponses = 0;
         numTimeouts = 0;
@@ -117,7 +122,6 @@ void Tsch6topSublayer::initialize(int stage) {
         WATCH(numResetsReceived);
 
         // TODO: just set to sim-time-limit?
-
         int ttl = getParentModule()->getSubmodule("sf")->par("timeout");
         TxQueueTTL = SimTime(ttl, SIMTIME_MS);
 
@@ -404,11 +408,6 @@ Packet* Tsch6topSublayer::handle6PMsg(Packet* pkt) {
 
     auto hdr = pkt->popAtFront<tsch::sixtisch::SixpHeader>();
     auto data = pkt->popAtFront<tsch::sixtisch::SixpData>();
-
-    // EXPERIMENTAL - update timeout for received data, since it doesn't make sense to discard it just because it took longer time
-    // on CSMA!!!! Alternatively set really high 6P timeout, so that even with worst backoff, the received data is still valid
-    (const_cast<tsch::sixtisch::SixpData*>(data.get()))->setTimeout(getAbsoluteTimeout(pTschSF->par("timeout").intValue()));
-
     auto addresses = pkt->getTag<MacAddressInd>();
 
     // TODO: lock linkinfo while handling it?!
@@ -453,6 +452,14 @@ Packet* Tsch6topSublayer::handleRequestMsg(Packet* pkt,
     tsch6pCmd_t cmd = (tsch6pCmd_t) hdr->getCode();
     std::vector<cellLocation_t> emptyCellList = {};
 
+    // EXPERIMENTAL - update timeout for received data, since it doesn't make sense to discard it just because it took longer time
+    // on CSMA!!!! Alternatively set really high 6P timeout, so that even with worst backoff, the received data is still valid
+    // causes errors on debug
+    // TODO: rework this mechanism completely
+    auto timeout = getAbsoluteTimeout(pTschSF->par("timeout").intValue());
+//    original version
+//    auto timeout = data->getTimeout();
+
     EV_DETAIL << "Received MSG_REQUEST " << cmd << " from " << MacAddress(sender) << ", seqNum - " << +seqNum << endl;
 
     if (cmd == CMD_CLEAR) {
@@ -464,11 +471,11 @@ Packet* Tsch6topSublayer::handleRequestMsg(Packet* pkt,
         /* "The Response Code to a 6P CLEAR command SHOULD be RC_SUCCESS unless
            the operation cannot be executed.  When the CLEAR operation cannot be
            executed, the Response Code MUST be set to RC_RESET." */
-        return createClearResponse(sender, seqNum, RC_SUCCESS, data->getTimeout());
+        return createClearResponse(sender, seqNum, RC_SUCCESS, timeout);
     }
 
     // TODO: this doesn't make sense
-    if (data->getTimeout() < simTime()) {
+    if (timeout < simTime()) {
         /* received msg whose timeout already expired; ignore it. */
         /* QUICK FIX (we probably shouldn't start the timeout timer before
          * pkt transmsmission but after pkt received?)*/
@@ -501,7 +508,7 @@ Packet* Tsch6topSublayer::handleRequestMsg(Packet* pkt,
         EV_WARN <<"received new MSG_REQUEST during active transaction: ignoring request, sending RC_RESET with seqNum "
                 << +seqNum << endl;
         numConcurrentTransactionErrors++;
-        return createErrorResponse(sender, seqNum, RC_RESET, data->getTimeout());
+        return createErrorResponse(sender, seqNum, RC_RESET, timeout);
     }
 
     if (seqNum != 0 && seqNum != (pTschLinkInfo->getLastKnownSeqNum(sender))) {
@@ -541,12 +548,12 @@ Packet* Tsch6topSublayer::handleRequestMsg(Packet* pkt,
                 << "ignoring request, sending RC_RESET (noticed late)" << endl;
 
         numConcurrentTransactionErrors++;
-        return createErrorResponse(sender, seqNum, RC_RESET, data->getTimeout());
+        return createErrorResponse(sender, seqNum, RC_RESET, timeout);
     }
 
     pTschLinkInfo->setLastKnownCommand(sender, cmd);
 
-    simtime_t timeout = data->getTimeout();
+//    simtime_t timeout = data->getTimeout();
     int numCells = data->getNumCells();
     // Type of link
     uint8_t cellOptions = (uint8_t) data->getCellOptions();
@@ -602,13 +609,13 @@ Packet* Tsch6topSublayer::handleRequestMsg(Packet* pkt,
                        anyway, as mandated by the standard */
                     EV_WARN <<"No suitable cell(s) found" << endl;
                     std::vector<cellLocation_t> empty = {};
-                    response = createSuccessResponse(sender, seqNum, empty, data->getTimeout());
+                    response = createSuccessResponse(sender, seqNum, empty, timeout);
                     break;
                 }
                 case 0:
                 case -EFBIG: {
                     /* Enough cells found */
-                    response = createSuccessResponse(sender, seqNum, cellList, data->getTimeout());
+                    response = createSuccessResponse(sender, seqNum, cellList, timeout);
 
                     /* TODO: check if we need to split cellList into multiple messages!
                        -> either because cellList is too long or because we have RX, TX,
@@ -619,7 +626,7 @@ Packet* Tsch6topSublayer::handleRequestMsg(Packet* pkt,
                     pendingPatternUpdates[sender] = setCtrlMsg_PatternUpdate(
                                                         pendingPatternUpdates[sender],
                                                         sender, myOpt, cellList, emptyCellList,
-                                                        data->getTimeout());
+                                                        timeout);
                     break;
                 }
                 default: EV_ERROR << "Undefined result code of SF cell-picking: " << pickResult << endl;
@@ -633,20 +640,20 @@ Packet* Tsch6topSublayer::handleRequestMsg(Packet* pkt,
             if (cellList.size() < numCells) {
                 EV_ERROR << "Cell list size is smaller than number of cells requested" << endl;
                 /** Send the error response due to error in cell list */
-                response = createErrorResponse(sender, seqNum, RC_CELLLIST, data->getTimeout());
+                response = createErrorResponse(sender, seqNum, RC_CELLLIST, timeout);
             }
             else {
                 // in response to delete request send RC_SUCCESS with empty cell list,
                 // TODO: figure out how and when node sending DELETE request clears ITS local schedule
                 std::vector<cellLocation_t> emptyList = {};
-                response = createSuccessResponse(sender, seqNum, cellList, data->getTimeout());
+                response = createSuccessResponse(sender, seqNum, cellList, timeout);
 
                 /* store potential change to our hopping sequence
                  * (activated if LL ACK arrives within this timeslot) */
                 pendingPatternUpdates[sender] = setCtrlMsg_PatternUpdate(
                                                     pendingPatternUpdates[sender],
                                                     sender, MAC_LINKOPTIONS_RX, emptyList,
-                                                    cellList, data->getTimeout());
+                                                    cellList, timeout);
             }
             break;
         }
@@ -686,14 +693,14 @@ Packet* Tsch6topSublayer::handleRequestMsg(Packet* pkt,
                     pendingPatternUpdates[sender] = setCtrlMsg_PatternUpdate(
                                                         pendingPatternUpdates[sender],
                                                         sender, myOpt, candidateCellList,
-                                                        relocCellList, data->getTimeout());
+                                                        relocCellList, timeout);
                 }
 
-                response = createSuccessResponse(sender, seqNum, candidateCellList, data->getTimeout());
+                response = createSuccessResponse(sender, seqNum, candidateCellList, timeout);
             } else {
                 /* that was an invalid RELOCATE message, respond accordingly */
                 EV_DETAIL << "Received invalid RELOCATE request, sending error response" << endl;
-                response = createErrorResponse(sender, seqNum, RC_CELLLIST, data->getTimeout());
+                response = createErrorResponse(sender, seqNum, RC_CELLLIST, timeout);
             }
             break;
         }
@@ -719,10 +726,14 @@ Packet* Tsch6topSublayer::handleResponseMsg(Packet* pkt, inet::IntrusivePtr<cons
     uint8_t seqNum = hdr->getSeqNum();
     uint64_t sender = addresses->getSrcAddress().getInt();
     tsch6pReturn_t returnCode = (tsch6pReturn_t) hdr->getCode();
+    // this is a mockup to avoid dicarding a valid packet which took longer time on the CSMA,
+    // TODO: rework the mechanism completely!
+    auto timeout = getAbsoluteTimeout(pTschSF->par("timeout").intValue());
+//    auto timeout = data->getTimeout();
 
     EV_DETAIL << "Node " << MacAddress(pNodeId) << " received MSG_RESPONSE from "
             << MacAddress(sender) << " with seqNum " << +seqNum << ", return code - " << returnCode << endl;
-    if (data->getTimeout() < simTime()) {
+    if (timeout < simTime()) {
         /* received msg whose timeout already expired; ignore it. */
         /* QUICK FIX (we probably shouldn't start the timeout timer before
          * pkt transmsmission but after pkt received?)*/
@@ -846,9 +857,9 @@ Packet* Tsch6topSublayer::handleResponseMsg(Packet* pkt, inet::IntrusivePtr<cons
         // TODO: Change to directly update TschSlotframe instead of using msg
         tsch6topCtrlMsg *msg = new tsch6topCtrlMsg();
         if (lastCmd == CMD_DELETE)
-            setCtrlMsg_PatternUpdate(msg, sender, cellOption, emptyCellList, cellList, data->getTimeout());
+            setCtrlMsg_PatternUpdate(msg, sender, cellOption, emptyCellList, cellList, timeout);
         else
-            setCtrlMsg_PatternUpdate(msg, sender, cellOption, cellList, deleteCells, data->getTimeout());
+            setCtrlMsg_PatternUpdate(msg, sender, cellOption, cellList, deleteCells, timeout);
 
         //sendControlDown(msg);
         updateSchedule(*msg);
@@ -868,6 +879,28 @@ bool Tsch6topSublayer::hasPatternUpdateFor(uint64_t nodeId) {
              && pendingPatternUpdates[nodeId]->getDestId() != -1
              && pendingPatternUpdates[nodeId]->getTimeout() > simTime()
              && pTschLinkInfo->inTransaction(nodeId);
+}
+
+void Tsch6topSublayer::handleRequestAck(uint64_t destId, tsch6pCmd_t cmd) {
+    EV_DETAIL << "6top received ACK for " << cmd << " sent to " << MacAddress(destId) << endl;
+
+    pTschLinkInfo->setInTransaction(destId, getAbsoluteTimeout(pTschSF->par("timeout").intValue()));
+
+    switch (cmd) {
+        case CMD_ADD: {
+            emit(acked6pAddSignal, 1);
+            break;
+        }
+        case CMD_RELOCATE: {
+            emit(acked6pRelocateSignal, 1);
+            break;
+        }
+        case CMD_DELETE: {
+            emit(acked6pDeleteSignal, 1);
+            break;
+        }
+        default: {} // to silence compiler warning
+    }
 }
 
 void Tsch6topSublayer::receiveSignal(cComponent *source, simsignal_t signalID, cObject *value, cObject *details) {
@@ -916,7 +949,7 @@ void Tsch6topSublayer::receiveSignal(cComponent *source, simsignal_t signalID, c
         // LL ACK received for a 6P request addressed to this neighbor
         // => we can start the timeout!
         if (txSuccess)
-            pTschLinkInfo->setInTransaction(destId, getAbsoluteTimeout(pTschSF->par("timeout").intValue()));
+            handleRequestAck(destId, (tsch6pCmd_t) sixphdr->getCode());
         else {
             // Else abort last intended transaction
             // TODO: how do we exactly know the one-before-last transaction details?? Maybe set it to CMD_NONE?
@@ -984,6 +1017,8 @@ void Tsch6topSublayer::receiveSignal(cComponent *source, simsignal_t signalID, c
 //        pTschLinkInfo->abortTransaction(destId);
 
         result = pendingPatternUpdate->dup();
+
+
     }
 
     if (pTschLinkInfo->inTransaction(destId))
