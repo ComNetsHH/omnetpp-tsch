@@ -631,11 +631,7 @@ std::vector<cellLocation_t> TschMSF::pickRandomly(std::vector<cellLocation_t> in
     if ((int) inputVec.size() < numRequested)
         return {};
 
-//    std::random_device rd;
-//    std::mt19937 e{rd()};
-
-    std::mt19937 e(std::chrono::high_resolution_clock::now().time_since_epoch().count());
-
+    std::mt19937 e((unsigned int) pNodeId % 1000);
     std::shuffle(inputVec.begin(), inputVec.end(), e);
 
     std::vector<cellLocation_t> picked = {};
