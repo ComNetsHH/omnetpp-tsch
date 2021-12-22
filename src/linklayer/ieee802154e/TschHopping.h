@@ -59,6 +59,7 @@ class TschHopping: public omnetpp::cSimpleModule, public IChannelPlan
         virtual units::values::Hz getMaxCenterFrequency();
         virtual units::values::Hz getChannelSpacing() { return units::values::Hz(5.0e6); }
         virtual units::values::Hz channelToCenterFrequency(int channel);
+        virtual double channelToCenterFrequencyPlain(int channel);
 
         std::string printPattern(PatternVector pv) {
             std::ostringstream out;

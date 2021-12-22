@@ -178,6 +178,7 @@ void Ieee802154eMac::initialize(int stage) {
 
         pktEnqueuedSignal = registerSignal("pktEnqueued");
         pktRecFromUpperSignal = registerSignal("pktReceviedFromUpperLayer");
+        currentFreqSignal = registerSignal("currentFrequency");
     } else if (stage == INITSTAGE_LAST) {
         auto nbrs = this->getNeighborsInRange();
         for (auto nbrId : nbrs)
@@ -606,6 +607,9 @@ void Ieee802154eMac::updateStatusIdle(t_mac_event event, cMessage *msg) {
             return;
 
         currentChannel = hopping->channel(currentAsn, currentLink->getChannelOffset());
+
+        emit(currentFreqSignal, hopping->channelToCenterFrequencyPlain(currentChannel));
+
         auto freq = hopping->channelToCenterFrequency(currentChannel);
 
         EV_DETAIL << currentLink->str() << endl;

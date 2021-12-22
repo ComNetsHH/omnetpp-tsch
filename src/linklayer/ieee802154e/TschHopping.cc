@@ -124,5 +124,12 @@ units::values::Hz TschHopping::channelToCenterFrequency(int channel)
    return units::values::Hz(getMinCenterFrequency().get() + ((channel - getMinChannel()) * getChannelSpacing().get()));
 }
 
+double TschHopping::channelToCenterFrequencyPlain(int channel)
+{
+   ASSERT(channel >= getMinChannel());
+   ASSERT(channel <= getMaxChannel());
+   return getMinCenterFrequency().get() + ((channel - getMinChannel()) * getChannelSpacing().get());
+}
+
 } // namespace inet
 

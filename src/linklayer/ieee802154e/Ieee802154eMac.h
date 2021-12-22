@@ -414,6 +414,7 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
 
     std::vector<simsignal_t> channelSignals;
     simsignal_t pktEnqueuedSignal;
+    simsignal_t currentFreqSignal; // ping current frequency to RPL
 
     std::vector<std::string> registeredSignals;
 
