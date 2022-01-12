@@ -186,6 +186,7 @@ void TschNeighbor::flushQueue(MacAddress neighbor, int vlinkId) {
 }
 
 void TschNeighbor::flush6pQueue(MacAddress neighbor) {
+    EV_DETAIL << "Flushing queue with " << neighbor << endl;
     auto neighborQueueInfo = this->macToQueueMap.find(neighbor);
     if (neighborQueueInfo == this->macToQueueMap.end())
         return;
@@ -209,11 +210,24 @@ TschCSMA* TschNeighbor::getCurrentTschCSMA(){
     return this->backoffTable.find(currentNeighborKey)->second;
 }
 
+TschCSMA* TschNeighbor::getTschCsmaWith(MacAddress neighborAddr) {
+    return this->backoffTable.find(neighborAddr)->second;
+}
+
+void TschNeighbor::terminateTschCsmaWith(MacAddress neighborAddr) {
+    EV_DETAIL << "Terminating CSMA with " << neighborAddr << endl;
+
+    auto nbrCsma = getTschCsmaWith(neighborAddr);
+    if (nbrCsma)
+        nbrCsma->terminate();
+}
+
 void TschNeighbor::failedTX(){
     this->getCurrentTschCSMA()->failedTX(this->isDedicated());
 }
 
 void TschNeighbor::terminateCurrentTschCSMA(){
+    EV_DETAIL << "Terminating CSMA with " << currentNeighborKey << endl;
     this->getCurrentTschCSMA()->terminate();
 }
 

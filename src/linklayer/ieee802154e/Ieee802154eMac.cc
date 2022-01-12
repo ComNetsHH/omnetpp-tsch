@@ -427,6 +427,9 @@ double Ieee802154eMac::getQueueUtilization(MacAddress nbrAddr, int virtualLinkId
 }
 
 TschLink* Ieee802154eMac::selectActiveLink(std::vector<TschLink*> links) {
+    if (!links.size())
+        return nullptr;
+
     if ((int) links.size() == 1)
         return links.back();
 
@@ -1214,13 +1217,29 @@ void Ieee802154eMac::recordIncorrectlyReceived(Packet *packet) {
         storedEntry->second++;
 }
 
+
+bool Ieee802154eMac::drop6pPacket(Packet *packet, std::string cmdType, std::string pktType) {
+    if (simTime() < 50 || simTime() > 100)
+        return false;
+
+    std::string pktName(packet->getFullName());
+
+    if (pktName.find(cmdType) == std::string::npos || pktName.find(pktType) == std::string::npos)
+        return false;
+
+    EV_DETAIL << "Artificially dropping 6P " << cmdType << " " << pktType << endl;
+
+    return true;
+}
+
 /**
  * Compares the address of this Host with the destination address in
  * frame. Generates the corresponding event.
  */
 void Ieee802154eMac::handleLowerPacket(Packet *packet) {
     // Either packet has a bit error, or an *artificial* link collision probability applies
-    if ( (packet->hasBitError() && !ignoreBitErrors) || artificiallyDropAppPacket(packet) )
+    if ( (packet->hasBitError() && !ignoreBitErrors)
+            || artificiallyDropAppPacket(packet)) // || drop6pPacket(packet, "TSCH", "Ack")
     {
         EV << "Received " << packet << " contains bit errors or collision, dropping it\n";
         PacketDropDetails details;

@@ -123,6 +123,14 @@ public:
 
     virtual void handleTransactionTimeout(uint64_t sender) = 0;
 
+
+    /**
+     * Invoked by the 6top sublayer when a 6P CLEAR request is received.
+     * The SF is supposed to clear the schedule as well as all the associated info
+     * from TschLinkInfo
+     */
+    virtual void handle6pClearReq(uint64_t nodeId) = 0;
+
     virtual void freeReservedCellsWith(uint64_t nodeId) = 0;
 
     /**
