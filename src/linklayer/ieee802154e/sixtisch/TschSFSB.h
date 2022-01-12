@@ -126,6 +126,7 @@ public:
 
     void handleTransactionTimeout(uint64_t sender) {}
     void freeReservedCellsWith(uint64_t nodeId) {}
+    void handle6pClearReq(uint64_t nodeId) {}
 
     /**
      * @brief Handle @p data that was piggybacked by @p sender.

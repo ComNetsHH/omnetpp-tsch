@@ -197,6 +197,11 @@ class TschNeighbor : public cSimpleModule, protected cListener
          * @return pointer to the TschCSMA
          */
         TschCSMA* getCurrentTschCSMA();
+
+        void terminateTschCsmaWith(MacAddress neighborAddr);
+        TschCSMA* getTschCsmaWith(MacAddress neighborAddr);
+
+
         /**
          * A public member function checking if the slot is dedicated
          * @return  State of the slot

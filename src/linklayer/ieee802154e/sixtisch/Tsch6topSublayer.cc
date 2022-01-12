@@ -467,7 +467,15 @@ Packet* Tsch6topSublayer::handleRequestMsg(Packet* pkt,
         /* We don't need to perform any of the (seqNum) checks. A CLEAR is
            always valid. */
         pTschLinkInfo->setLastKnownCommand(sender, cmd);
-        pTschSF->handleResponse(sender, RC_SUCCESS, 0, {}); // Note: SF handles schedule cleanup, not 6P!
+        pTschLinkInfo->setInTransaction(sender, timeout);
+
+        pTschSF->handle6pClearReq(sender);
+
+        // very important to clear cells in TschLinkInfo AFTER the SF handler function
+        // because for now the latter fully relies on TschLinkInfo
+        pTschLinkInfo->clearCells(sender);
+        pTschLinkInfo->resetSeqNum(sender);
+
         /* "The Response Code to a 6P CLEAR command SHOULD be RC_SUCCESS unless
            the operation cannot be executed.  When the CLEAR operation cannot be
            executed, the Response Code MUST be set to RC_RESET." */
@@ -571,17 +579,18 @@ Packet* Tsch6topSublayer::handleRequestMsg(Packet* pkt,
         pTschLinkInfo->addLink(sender, true, timeout, seqNum);
         pTschLinkInfo->setLastKnownCommand(sender, cmd);
     }
-    else if (seqNum == 0) // TODO: Check if this clause makes sense at all!
-    {
-        /* EXPERIMENTAL: first clear the schedule, only then the TschLinkInfo! */
-        auto clearMsg = new tsch6topCtrlMsg();
-        clearMsg->setDestId(sender);
-        clearMsg->setDeleteCells(pTschLinkInfo->getCellLocations(sender)); // delete all scheduled cells except for auto
-        updateSchedule(*clearMsg);
-
-        /* node has been reset, clear all existing link information. */
-        pTschLinkInfo->resetLink(sender, MSG_REQUEST);
-    }
+    // TODO: Check if this clause makes sense at all!
+//    else if (seqNum == 0)
+//    {
+//        /* EXPERIMENTAL: first clear the schedule, only then the TschLinkInfo! */
+//        auto clearMsg = new tsch6topCtrlMsg();
+//        clearMsg->setDestId(sender);
+//        clearMsg->setDeleteCells(pTschLinkInfo->getCellLocations(sender)); // delete all scheduled cells except for auto
+//        updateSchedule(*clearMsg);
+//
+//        /* node has been reset, clear all existing link information. */
+//        pTschLinkInfo->resetLink(sender, MSG_REQUEST);
+//    }
 
     pTschLinkInfo->setLastKnownType(sender, MSG_REQUEST);
     pTschLinkInfo->setInTransaction(sender, timeout);
@@ -757,7 +766,6 @@ Packet* Tsch6topSublayer::handleResponseMsg(Packet* pkt, inet::IntrusivePtr<cons
 
     if (returnCode == RC_RESET) {
         pTschLinkInfo->revertLink(sender, MSG_RESPONSE);
-        EV_DETAIL << "Reverted link with " << MacAddress(sender) << endl;
         pTschSF->handleResponse(sender, RC_RESET, 0, emptyCellList);
 
         /* cancel any pending pattern update that we might have created */
@@ -775,6 +783,11 @@ Packet* Tsch6topSublayer::handleResponseMsg(Packet* pkt, inet::IntrusivePtr<cons
     {
         pTschLinkInfo->setLastKnownType(sender, MSG_RESPONSE);
         pTschSF->handleResponse(sender, RC_SUCCESS, 0, emptyCellList); // it's safe to assume CLEAR always succeeds
+
+        pTschLinkInfo->clearCells(sender);
+        pTschLinkInfo->resetSeqNum(sender);
+        pTschLinkInfo->incrementSeqNum(sender);
+        pTschLinkInfo->abortTransaction(sender);
 
         /* cancel any pending pattern update that we might have created */
         if (pendingPatternUpdates[sender])
@@ -882,7 +895,7 @@ bool Tsch6topSublayer::hasPatternUpdateFor(uint64_t nodeId) {
 }
 
 void Tsch6topSublayer::handleRequestAck(uint64_t destId, tsch6pCmd_t cmd) {
-    EV_DETAIL << "6top received ACK for " << cmd << " sent to " << MacAddress(destId) << endl;
+    EV_DETAIL << "6top received ACK for " << cmd << " request sent to " << MacAddress(destId) << endl;
 
     pTschLinkInfo->setInTransaction(destId, getAbsoluteTimeout(pTschSF->par("timeout").intValue()));
 
@@ -1052,7 +1065,7 @@ Packet* Tsch6topSublayer::handleTransactionTimeout(tschLinkInfoTimeoutMsg* tom) 
     auto lastType = pTschLinkInfo->getLastKnownType(destId);
 
     EV_DETAIL << "Timeout fired for " << lastCmd << " "
-            << lastType << " addressed to " << MacAddress(destId) << endl;
+            << " transaction with " << MacAddress(destId) << endl;
 
     if (!pTschLinkInfo->linkInfoExists(destId)) {
         std::ostringstream out;
@@ -1064,6 +1077,9 @@ Packet* Tsch6topSublayer::handleTransactionTimeout(tschLinkInfoTimeoutMsg* tom) 
 
     /* Notify SF that it might want to try again */
     pTschSF->handleTransactionTimeout(destId);
+
+    if (pTschLinkInfo->getLastKnownCommand(destId) == CMD_CLEAR)
+        pTschLinkInfo->resetLink(destId, pTschLinkInfo->getLastKnownType(destId));
 
     numTimeouts++;
 

@@ -195,6 +195,11 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
 
     int getQueueSize(MacAddress nbrAddr);
 
+    // See the same method in TschNeighbor
+    void terminateTschCsmaWith(MacAddress nbrAddr) {
+        neighbor->terminateTschCsmaWith(nbrAddr);
+    }
+
   protected:
     /** @name Different tracked statistics.*/
     /*@{*/
@@ -527,6 +532,8 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
     // Util
     list<MacAddress> neighbors; // list of neighbors MAC addresses
     bool artificiallyDropAppPacket(Packet *packet);
+
+    bool drop6pPacket(Packet *packet, std::string cmdType, std::string pktType);
 
 
     /**
