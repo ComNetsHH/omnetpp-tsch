@@ -55,7 +55,9 @@ TschMSF::TschMSF() :
     numFailedTracked6p(0),
     num6pAddSent(0),
     uplinkCellUtil(0),
-    showLinkResets(false)
+    numUnhandledResponses(0),
+    showLinkResets(false),
+    pCheckScheduleConsistency(false)
 {
 }
 TschMSF::~TschMSF() {
@@ -79,9 +81,8 @@ void TschMSF::initialize(int stage) {
         pSend6pDelayed = par("send6pDelayed").boolValue();
         pHousekeepingPeriod = par("housekeepingPeriod").intValue();
         pHousekeepingDisabled = par("disableHousekeeping").boolValue();
-        internalEvent = new cMessage("SF internal event", UNDEFINED);
+        pCheckScheduleConsistency = par("checkScheduleConsistency").boolValue();
         queueUtilization = registerSignal("queueUtilization");
-        neighborNotFoundError = registerSignal("neighborNotFoundError");
         failed6pAdd = registerSignal("failed6pAdd");
     } else if (stage == 5) {
         interfaceModule = dynamic_cast<InterfaceTable *>(getParentModule()->getParentModule()->getParentModule()->getParentModule()->getSubmodule("interfaceTable", 0));
@@ -220,6 +221,8 @@ void TschMSF::finish() {
     }
     recordScalar("numInconsistenciesDetected", numInconsistencies);
     recordScalar("numLinkResets", numLinkResets);
+    recordScalar("numUnhandledResponses", numUnhandledResponses);
+
     if (par("trackFailed6pAddByNum").intValue() > 0)
         recordScalar("tracked6pFailed", numFailedTracked6p);
 }
@@ -234,9 +237,9 @@ void TschMSF::start() {
     msg->setKind(DO_START);
 
     scheduleAt(simTime() + SimTime(par("startTime").doubleValue()), msg);
-
-    if (par("estimateQueueUtil").boolValue())
-        scheduleAt(simTime() + par("queueEstimationPeriod"), new cMessage("", QUEUE_ESTIMATION));
+//
+//    scheduleAt(simTime() + 50, new cMessage("", DEBUG_TEST));
+//    scheduleAt(simTime() + 200, new cMessage("", DEBUG_TEST));
 }
 
 std::string TschMSF::printCellUsage(std::string neighborMac, double usage) {
@@ -297,7 +300,6 @@ bool TschMSF::isLossyLink() {
 
 void TschMSF::addCells(SfControlInfo *retryInfo)
 {
-//    throw cRuntimeError("Trying to retry 6P ADD in MSF!");
     auto numCells = retryInfo->getNumCells();
     auto nodeId = retryInfo->getNodeId();
     if (!pTschLinkInfo->inTransaction(nodeId)) {
@@ -431,34 +433,11 @@ void TschMSF::relocateCells(uint64_t neighborId, std::vector<cellLocation_t> rel
     pTsch6p->sendRelocationRequest(neighborId, MAC_LINKOPTIONS_TX, relocCells.size(), relocCells, candidateCells, pTimeout);
 }
 
-void TschMSF::estimateQueueUtilization() {
-    if (!rplParentId)
-        return;
-
-//    util = mac->getQueueUtilization(MacAddress(rplParentId));
-
-//    auto currentQueueSize = std::get<1>(mac->getQueueSizes(MacAddress(rplParentId), {0}).back());
-    util = mac->getQueueUtilization(MacAddress(rplParentId), 0);
-    emit(queueUtilization, util);
-
-    if (util > par("queueUtilUpperThresh").doubleValue())
-        addCells(rplParentId, 1);
-}
-
-
 void TschMSF::handleSelfMessage(cMessage* msg) {
-    EV_DETAIL << "MSF handling msg - " << msg << endl;
     switch (msg->getKind()) {
         case REACHED_MAXNUMCELLS: {
             handleMaxCellsReached(msg);
             break;
-        }
-        case QUEUE_ESTIMATION: {
-            estimateQueueUtilization();
-            auto nextTimestamp = simTime() + par("queueEstimationPeriod");
-            EV_DETAIL << "Next queue estimation event on " << nextTimestamp << endl;
-            scheduleAt(nextTimestamp, msg);
-            return;
         }
         case DO_START: {
             handleDoStart(msg);
@@ -480,6 +459,10 @@ void TschMSF::handleSelfMessage(cMessage* msg) {
                 send6topRequest(ctrlInfo); // This just sends the request out without checking for RTX
             msg->removeControlInfo();
             return; // do not delete the self-msg
+        }
+        case DEBUG_TEST: {
+            handleDebugTestMsg();
+            break;
         }
         case DELAY_TEST: {
             long *rankPtr = (long*) msg->getContextPointer();
@@ -875,9 +858,10 @@ void TschMSF::handleSuccessResponse(uint64_t sender, tsch6pCmd_t cmd, int numCel
             handleSuccessRelocate(sender, cellList);
             break;
         }
-        // TODO: Investigate in detail what happens to sequence numbers after CLEAR
         case CMD_CLEAR: {
-            resetStateWith(sender);
+            clearScheduleWithNode(sender);
+            scheduleAutoCell(sender);
+
             break;
         }
         default: EV_DETAIL << "Unsupported 6P command" << endl;
@@ -896,6 +880,7 @@ void TschMSF::clearScheduleWithNode(uint64_t neighborId)
 {
     auto ctrlMsg = new tsch6topCtrlMsg();
     ctrlMsg->setDestId(neighborId);
+    // FIXME: cell locations should be read directly from TschSlotframe rather than TschLinkInfo!
     std::vector<cellLocation_t> deletable = pTschLinkInfo->getCellLocations(neighborId);
     EV_DETAIL << "Clearing schedule with " << MacAddress(neighborId) << endl;
 
@@ -928,20 +913,35 @@ void TschMSF::freeReservedCellsWith(uint64_t nodeId) {
 /** Hacky way to free cells reserved to @param sender when link-layer ACK is received from it */
 void TschMSF::handleResponse(uint64_t sender, tsch6pReturn_t code, int numCells, std::vector<cellLocation_t> *cellList)
 {
+    EV_DETAIL << "Old version of handleResponse() invoked" << endl;
     reservedTimeOffsets[sender].clear();
 }
 
-void TschMSF::handleTransactionTimeout(uint64_t sender)
+void TschMSF::handleTransactionTimeout(uint64_t nodeId)
 {
-    reservedTimeOffsets[sender].clear();
-//    pTschLinkInfo->revertLink(sender, pTschLinkInfo->getLastKnownType(sender)); // TODO: investigate why doesn't this work properly
     hostNode->bubble("Transaction timed out");
-    resetStateWith(sender); // Unclear what to do according to RFC 8480 (6top) or MSF one
+
+    reservedTimeOffsets[nodeId].clear();
+
+    if (pTschLinkInfo->getLastKnownCommand(nodeId) == CMD_CLEAR) {
+        clearScheduleWithNode(nodeId);
+        scheduleAutoCell(nodeId);
+    }
+
+    // FIXME: obsolete if 6P transaction timeout is set properly
+    mac->flush6pQueue(MacAddress(nodeId));
+    mac->terminateTschCsmaWith(MacAddress(nodeId));
 }
 
-void TschMSF::resetStateWith(uint64_t nbrId) {
-    EV_DETAIL << "Resetting state with " << MacAddress(nbrId) << endl;
-    clearScheduleWithNode(nbrId);
+void TschMSF::handle6pClearReq(uint64_t nodeId) {
+    reservedTimeOffsets[nodeId].clear();
+    clearScheduleWithNode(nodeId);
+    scheduleAutoCell(nodeId);
+}
+
+void TschMSF::resetStateWith(uint64_t nodeId) {
+    EV_DETAIL << "Resetting state with " << MacAddress(nodeId) << endl;
+    clearScheduleWithNode(nodeId);
 //    TODO: needs further work
 //    if (delayed6pReq) {
 //        delayed6pReq->removeControlInfo();
@@ -950,12 +950,16 @@ void TschMSF::resetStateWith(uint64_t nbrId) {
 
     // TODO: Might be MSG_REQUEST if the handleTransactionTimeout got invoked on failed request??
     // or maybe just get last known type dynamically
-    pTschLinkInfo->resetLink(nbrId, MSG_RESPONSE);
+//    pTschLinkInfo->resetLink(nodeId, MSG_RESPONSE);
+//    pTschLinkInfo->resetLink(nodeId, pTschLinkInfo->getLastKnownType(nodeId));
+
+    pTschLinkInfo->clearCells(nodeId);
+    pTschLinkInfo->resetSeqNum(nodeId);
 
     if (par("clearQueueOnReset").boolValue())
-        mac->flushQueue(MacAddress(nbrId), LINK_PRIO_NORMAL);
+        mac->flushQueue(MacAddress(nodeId), LINK_PRIO_NORMAL);
 
-    scheduleAutoCell(nbrId); // Schedule an auto cell to flush remaining packets in the queue
+    scheduleAutoCell(nodeId); // Schedule an auto cell to flush remaining packets in the queue
 }
 
 void TschMSF::handleResponse(uint64_t sender, tsch6pReturn_t code, int numCells, std::vector<cellLocation_t> cellList)
@@ -974,11 +978,16 @@ void TschMSF::handleResponse(uint64_t sender, tsch6pReturn_t code, int numCells,
             handleSuccessResponse(sender, lastKnownCmd, numCells, cellList);
             break;
         }
-        // Handle all other return codes (RC_RESET, RC_ERROR, RC_VERSION, RC_SFID, ...) as a generic error
-        default: {
-            resetStateWith(sender);
+        case RC_RESET: {
+            pTsch6p->sendClearRequest(sender, pTimeout);
             numLinkResets++;
+            break;
         }
+        default: {
+            numUnhandledResponses++;
+            EV_WARN << "No handler specified for this command type" << endl;
+        }
+
     }
 }
 
@@ -1030,10 +1039,6 @@ void TschMSF::addCells(uint64_t nodeId, int numCells, uint8_t cellOptions, doubl
     }
 
     std::vector<cellLocation_t> cellList = {};
-
-    EV_DETAIL << "reservedTimeOffsets to " << MacAddress(nodeId) << " right before creating cell list: "
-            << reservedTimeOffsets[nodeId] << endl;
-
     createCellList(nodeId, cellList, numCells + pCellListRedundancy);
 
     if (!cellList.size())
@@ -1054,9 +1059,6 @@ void TschMSF::deleteCells(uint64_t nodeId, int numCells) {
 
     if (!dedicated.size()) {
         EV_DETAIL << "No dedicated cells found" << endl;
-        // If neighbor is not a parent or we are the sink, no need to hold onto this auto cell
-//        if (nodeId != rplParentId || isSink)
-//            removeAutoTxCell(nodeId);
         return;
     }
 
@@ -1090,6 +1092,71 @@ bool TschMSF::slotOffsetReserved(offset_t slOf) {
 bool TschMSF::slotOffsetReserved(uint64_t nodeId, offset_t slOf) {
     std::vector<offset_t> slOffsets = reservedTimeOffsets[nodeId];
     return std::find(slOffsets.begin(), slOffsets.end(), slOf) != slOffsets.end();
+}
+
+void TschMSF::handleParentChangedSignal(uint64_t newParentId) {
+    EV_DETAIL << "RPL parent changed to " << MacAddress(newParentId) << endl;
+
+    // If RPL parent hasn't been set, we've just joined the DODAG
+    if (!rplParentId) {
+        rplParentId = newParentId;
+        addCells(rplParentId, par("initialNumCells").intValue());
+        return;
+    }
+
+    auto txCells = pTschLinkInfo->getDedicatedCells(rplParentId);
+    EV_DETAIL << "Dedicated TX cells currently scheduled with PP: " << txCells << endl;
+
+    /** Clear all negotiated cells with the former parent */
+    pTsch6p->sendClearRequest(rplParentId, pTimeout);
+
+    rplParentId = newParentId;
+
+    /** and schedule the same amount of cells (or at least 1) with the new parent */
+    addCells(newParentId, (int) txCells.size() > 0 ? (int) txCells.size() : par("initialNumCells").intValue());
+}
+
+void TschMSF::handlePacketEnqueued(uint64_t dest) {
+    if (MacAddress(dest) == MacAddress::BROADCAST_ADDRESS)
+        return;
+
+    auto txCells = pTschLinkInfo->getCellsByType(dest, MAC_LINKOPTIONS_TX);
+
+    EV_DETAIL << "Received MAC notification for a packet addressed to "
+            << MacAddress(dest) << ", TX cells: " << txCells << endl;
+
+    if (pCheckScheduleConsistency)
+        checkScheduleConsistency(dest);
+
+    // Heuristic, checking if there's a dedicated cell to preferred parent whenever a packet is enqueued
+    if (rplParentId == dest || par("downlinkDedicated").boolValue()) {
+        auto dedicatedCells = pTschLinkInfo->getDedicatedCells(dest);
+
+        if (!dedicatedCells.size() && !pTschLinkInfo->inTransaction(dest)) {
+            EV_DETAIL << "No dedicated TX cell found to this node, and "
+                    << "we are currently not in transaction with it, attempting to add one TX cell" << endl;
+            addCells(dest, 1, MAC_LINKOPTIONS_TX);
+        }
+    }
+
+    // Ensure minimal connectivity
+    if (!txCells.size())
+        scheduleAutoCell(dest);
+}
+
+void TschMSF::checkScheduleConsistency(uint64_t nodeId) {
+    auto txCells = pTschLinkInfo->getCellsByType(nodeId, MAC_LINKOPTIONS_TX);
+
+    for (auto cell : txCells) {
+        if (!schedule->getLinkByCellCoordinates(cell.timeOffset, cell.channelOffset, MacAddress(nodeId))) {
+            std::ostringstream ostream;
+            ostream << "Schedule inconsistency detected on node " << MacAddress(nodeId)
+                    << ": TX cell at [ " << cell.timeOffset << ", "
+                    << cell.channelOffset << " ] is present in TschLinkInfo but missing from the schedule!" << endl;
+
+            throw cRuntimeError(ostream.str().c_str());
+        }
+    }
 }
 
 void TschMSF::receiveSignal(cComponent *src, simsignal_t id, cObject *value, cObject *details)
@@ -1127,72 +1194,6 @@ void TschMSF::receiveSignal(cComponent *src, simsignal_t id, cObject *value, cOb
             }
         }
     }
-}
-
-void TschMSF::handleParentChangedSignal(uint64_t newParentId) {
-    EV_DETAIL << "RPL parent changed to " << MacAddress(newParentId) << endl;
-
-    // If RPL parent hasn't been set, we've just joined the DODAG
-    if (!rplParentId) {
-        rplParentId = newParentId;
-        addCells(rplParentId, par("initialNumCells").intValue());
-        return;
-    }
-
-    auto txCells = pTschLinkInfo->getDedicatedCells(rplParentId);
-    EV_DETAIL << "Dedicated TX cells currently scheduled with PP: " << txCells << endl;
-
-    /** Clear all negotiated cells and state information with now former PP */
-//    clearScheduleWithNode(rplParentId);
-//    pTschLinkInfo->abortTransaction(rplParentId);
-//    reservedTimeOffsets[rplParentId].clear();
-    pTsch6p->sendClearRequest(rplParentId, pTimeout);
-
-    rplParentId = newParentId;
-
-    /** and schedule the same amount of cells (or at least 1) with the new parent */
-    addCells(newParentId, (int) txCells.size() > 0 ? (int) txCells.size() : par("initialNumCells").intValue());
-}
-
-void TschMSF::handlePacketEnqueued(uint64_t dest) {
-    if (MacAddress(dest) == MacAddress::BROADCAST_ADDRESS)
-        return;
-
-    auto txCells = pTschLinkInfo->getCellsByType(dest, MAC_LINKOPTIONS_TX);
-
-    EV_DETAIL << "Received MAC notification for a packet addressed to "
-            << MacAddress(dest) << ", TX cells: " << txCells << endl;
-
-    // TODO: investigate the exact reason why/where this happens in the first place
-    for (auto cell : txCells) {
-        if (!schedule->getLinkByCellCoordinates(cell.timeOffset, cell.channelOffset, MacAddress(dest))) {
-            std::ostringstream ostream;
-            ostream << "TX cell at [ " << cell.timeOffset << ", "
-                    << cell.channelOffset << " ] missing from the schedule!" << endl;
-
-            throw cRuntimeError(ostream.str().c_str());
-        }
-    }
-
-    // Heuristic, checking if there's a dedicated cell to preferred parent whenever a packet is enqueued
-    if (rplParentId == dest || par("downlinkDedicated").boolValue()) {
-        auto dedicatedCells = pTschLinkInfo->getDedicatedCells(dest);
-
-        if (!dedicatedCells.size() && !pTschLinkInfo->inTransaction(dest)) {
-//            auto timeout = uniform(0, 2);  // FIXME: magic numbers, was 1-3
-
-            EV_DETAIL << "No dedicated TX cell found to this node, and "
-                    << "we are currently not in transaction with it, attempting to add one TX cell" << endl;
-            // heuristics - do not send 6P ADD request immediately, cause simultaneous
-            // bi-directional transactions are not yet supported
-//            addCells(dest, 1, MAC_LINKOPTIONS_TX, timeout); // TODO: causes more than one 6P request being added to the queue
-            addCells(dest, 1, MAC_LINKOPTIONS_TX);
-        }
-    }
-
-    // Ensure minimal connectivity
-    if (!txCells.size())
-        scheduleAutoCell(dest);
 }
 
 void TschMSF::receiveSignal(cComponent *src, simsignal_t id, long value, cObject *details)
@@ -1264,12 +1265,6 @@ void TschMSF::receiveSignal(cComponent *src, simsignal_t id, long value, cObject
 
         out << "could not find neighbor for cell " << linkStr << endl;
         throw cRuntimeError(out.str().c_str());
-//
-//        EV_WARN << "could not find neighbor for cell " << linkStr << endl;
-//        bubble("could not find neighbor for cell");
-//
-//        emit(neighborNotFoundError, 1);
-//        return;
     }
 
     if (options != 0xFF && getCellOptions_isTX(options))
@@ -1343,4 +1338,29 @@ uint32_t TschMSF::saxHash(int maxReturnVal, InterfaceToken EUI64addr)
     } while (i < sizeof(uint64_t));
 
     return h;
+}
+
+void TschMSF::handleDebugTestMsg() {
+    if (!rplParentId)
+        return;
+
+    if (simTime() >= 200) {
+        EV_DETAIL << "SimTime > 100, adding uplink cell" << endl;
+
+        hostNode->bubble("Sending ADD");
+
+        addCells(rplParentId, 1);
+        return;
+    }
+
+    if (simTime() >= 50) {
+        EV_DETAIL << "Debug self-msg received, preparing to send 6P CLEAR to our pref.parent - "
+                << MacAddress(rplParentId) << endl;
+//                hostNode->bubble("Sending CLEAR");
+//                pTsch6p->sendClearRequest(rplParentId, pTimeout);
+        hostNode->bubble("Sending ADD");
+        addCells(rplParentId, 1);
+
+        return;
+    }
 }

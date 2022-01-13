@@ -220,6 +220,14 @@ class TschMSF: public TschSF, public cListener {
 
     virtual void handleTransactionTimeout(uint64_t sender) override;
 
+    void handleDebugTestMsg();
+
+    /**
+     * This function gets called by 6top sublayer on receiving 6P CLEAR request,
+     * the role of MSF is to erase all scheduled cells with
+     */
+    virtual void handle6pClearReq(uint64_t nodeId) override;
+
     virtual void freeReservedCellsWith(uint64_t nodeId) override;
 
     virtual void handleSuccessResponse(uint64_t sender, tsch6pCmd_t lastKnownCmd, int numCells, std::vector<cellLocation_t> cellList);
@@ -366,6 +374,7 @@ class TschMSF: public TschSF, public cListener {
     int numLinkResets;
     int numFailedTracked6p;
     int num6pAddSent;
+    int numUnhandledResponses;
     double util; // queue utilization with preferred parent
     double uplinkCellUtil; // cell utilization with pref. parent
 
@@ -394,6 +403,7 @@ class TschMSF: public TschSF, public cListener {
         SEND_6P_REQ,
         DELAY_TEST,
         CHECK_DAISY_CHAIN, // message type for CLX scheduling
+        DEBUG_TEST,
         UNDEFINED
     };
 
@@ -442,7 +452,7 @@ class TschMSF: public TschSF, public cListener {
      *
      * @param sender MAC address of the neighbour to clear schedule with
      */
-    void clearScheduleWithNode(uint64_t sender);
+    void clearScheduleWithNode(uint64_t sender); // TODO: create a dedicated function directly in TschSlotframe
 
     virtual void resetStateWith(uint64_t nbrId);
 
@@ -465,6 +475,7 @@ class TschMSF: public TschSF, public cListener {
     bool slotOffsetReserved(uint64_t nodeId, offset_t slOf);
     bool slOfScheduled(offset_t slOf);
     bool isLossyLink(); // TEST, only for manual lossy link testing
+    bool pCheckScheduleConsistency;
 
     /**
      * @return    the number of times the channel has been busy in %.
@@ -522,7 +533,14 @@ class TschMSF: public TschSF, public cListener {
     std::vector<offset_t> getAvailableSlotsInRange(int start, int end);
     std::vector<offset_t> getAvailableSlotsInRange(int slOffsetEnd);
 
-    void estimateQueueUtilization();
+
+    /**
+     * Spaghetti function to check that information about a neighbor stored in TschSlotframe
+     * and TschLinkInfo is the same
+     *
+     * @param nodeId MAC identifier of the neighbor node
+     */
+    void checkScheduleConsistency(uint64_t nodeId);
 };
 
 #endif /*__WAIC_TSCHMSF_H_*/
