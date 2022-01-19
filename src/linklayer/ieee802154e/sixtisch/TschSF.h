@@ -151,6 +151,11 @@ public:
      */
     virtual void recordPDR(cMessage* msg) = 0;
 
+    virtual void incrementNeighborCellElapsed(uint64_t neighborId) = 0;
+
+    /** Workaround function used to account for cell usage in overlapping links */
+    virtual void decrementNeighborCellElapsed(uint64_t neighborId) = 0;
+
     /**
      * @brief Handle an update from the @ref TschSpectrumSensing module.
      *        These updates will arrive after each completed spectrum sweep.

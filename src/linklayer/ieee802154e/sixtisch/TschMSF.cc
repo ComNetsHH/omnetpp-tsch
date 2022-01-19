@@ -54,10 +54,13 @@ TschMSF::TschMSF() :
     delayed6pReq(nullptr),
     numFailedTracked6p(0),
     num6pAddSent(0),
+    uplinkSlotOffset(0),
+    num6pAddFailed(0),
     uplinkCellUtil(0),
     numUnhandledResponses(0),
     showLinkResets(false),
-    pCheckScheduleConsistency(false)
+    pCheckScheduleConsistency(false),
+    isLeafNode(true)
 {
 }
 TschMSF::~TschMSF() {
@@ -84,6 +87,7 @@ void TschMSF::initialize(int stage) {
         pCheckScheduleConsistency = par("checkScheduleConsistency").boolValue();
         queueUtilization = registerSignal("queueUtilization");
         failed6pAdd = registerSignal("failed6pAdd");
+        uplinkScheduledSignal = registerSignal("uplinkScheduled");
     } else if (stage == 5) {
         interfaceModule = dynamic_cast<InterfaceTable *>(getParentModule()->getParentModule()->getParentModule()->getParentModule()->getSubmodule("interfaceTable", 0));
         pNodeId = interfaceModule->getInterface(1)->getMacAddress().getInt();
@@ -92,6 +96,9 @@ void TschMSF::initialize(int stage) {
         mac = check_and_cast<Ieee802154eMac*>(getModuleByPath("^.^.mac"));
         mac->subscribe(POST_MODEL_CHANGE, this);
         mac->subscribe(mac->pktRecFromUpperSignal, this);
+
+        if (par("lowLatencyMode").boolValue())
+            mac->subscribe(linkBrokenSignal, this);
 
         schedule = check_and_cast<TschSlotframe*>(getModuleByPath("^.^.schedule"));
 
@@ -111,20 +118,17 @@ void TschMSF::initialize(int stage) {
         /** And an auto RX cell for communication with neighbors [IETF MSF draft, 3] */
         scheduleAutoRxCell(interfaceModule->getInterface(1)->getMacAddress().formInterfaceIdentifier());
 
-        rpl = hostNode->getSubmodule("rpl");
-        if (!rpl) {
-            EV_WARN << "RPL module not found" << endl;
-            return;
-        }
-
-        isSink = rpl->par("isRoot");
 //        delayed6pReq = new cMessage("SEND_6P_DELAYED", SEND_6P_REQ);
 
         WATCH(numInconsistencies);
         WATCH(numLinkResets);
-
+        WATCH(num6pAddSent);
+        WATCH(uplinkSlotOffset);
         WATCH(pMaxNumCells);
         WATCH(rplParentId);
+        WATCH(isLeafNode);
+        WATCH(rplRank);
+        WATCH(num6pAddFailed);
         WATCH_PTRMAP(nbrStatistic);
 //        WATCH_MAP(reservedTimeOffsets);
 
@@ -132,8 +136,17 @@ void TschMSF::initialize(int stage) {
 //        WATCH(numFailedTracked6p);
 //        WATCH_PTR(delayed6pReq);
 
-        rpl->subscribe("parentChanged", this);
-        rpl->subscribe("rankUpdated", this);
+        rpl = hostNode->getSubmodule("rpl");
+
+        isSink = rpl ? rpl->par("isRoot") : false;
+
+        if (rpl) {
+            rpl->subscribe("parentChanged", this);
+            rpl->subscribe("rankUpdated", this);
+            rpl->subscribe("childJoined", this);
+            if (par("lowLatencyMode").boolValue())
+                rpl->subscribe("uplinkSlotOffset", this);
+        }
     }
 }
 
@@ -243,7 +256,7 @@ void TschMSF::start() {
 }
 
 std::string TschMSF::printCellUsage(std::string neighborMac, double usage) {
-    std::string usageInfo = std::string("Cell utilization with") + neighborMac
+    std::string usageInfo = std::string("Cell utilization with ") + neighborMac
             + std::string(usage >= pLimNumCellsUsedHigh ? " exceeds upper" : "")
             + std::string(usage <= pLimNumCellsUsedLow ? " is below lower" : "")
             + std::string((usage < pLimNumCellsUsedHigh && usage > pLimNumCellsUsedLow) ? " within" : "")
@@ -433,6 +446,19 @@ void TschMSF::relocateCells(uint64_t neighborId, std::vector<cellLocation_t> rel
     pTsch6p->sendRelocationRequest(neighborId, MAC_LINKOPTIONS_TX, relocCells.size(), relocCells, candidateCells, pTimeout);
 }
 
+void TschMSF::handleScheduleUplink() {
+    auto dedicatedCells = pTschLinkInfo->getDedicatedCells(rplParentId);
+
+    if (!dedicatedCells.size() && !pTschLinkInfo->inTransaction(rplParentId)) {
+        EV_DETAIL << "No dedicated TX cell found to preferred parent and "
+                << "we are currently not in transaction with it, attempting to add one TX cell" << endl;
+        addCells(rplParentId, 1, MAC_LINKOPTIONS_TX);
+    }
+
+    if (!dedicatedCells.size())
+        scheduleAt(simTime() + 20, new cMessage("", SCHEDULE_UPLINK));
+}
+
 void TschMSF::handleSelfMessage(cMessage* msg) {
     switch (msg->getKind()) {
         case REACHED_MAXNUMCELLS: {
@@ -447,7 +473,12 @@ void TschMSF::handleSelfMessage(cMessage* msg) {
             handleHousekeeping(msg);
             break;
         }
+        case SCHEDULE_UPLINK: {
+            handleScheduleUplink();
+            break;
+        }
         case SEND_6P_REQ: {
+            EV_DETAIL << "Preparing to send a 6P request" << endl;
             auto ctrlInfo = check_and_cast<SfControlInfo*> (msg->getControlInfo());
 
             // If this 6P request needs to be retransmitted, this check would means
@@ -594,14 +625,24 @@ void TschMSF::scheduleMinimalCells(int numMinimalCells, int slotframeLength) {
 
 
 
-void TschMSF::removeAutoTxCell(uint64_t neighbor) {
-    if (MacAddress(neighbor) == MacAddress::BROADCAST_ADDRESS)
+void TschMSF::removeAutoTxCell(uint64_t nodeId) {
+    if (MacAddress(nodeId) == MacAddress::BROADCAST_ADDRESS)
         return;
 
-    pTschLinkInfo->deleteCells(neighbor, pTschLinkInfo->getSharedCellsWith(neighbor),
-            MAC_LINKOPTIONS_TX | MAC_LINKOPTIONS_SHARED | MAC_LINKOPTIONS_SRCAUTO);
+    auto sharedCells = pTschLinkInfo->getSharedCellsWith(nodeId);
 
-    pTsch6p->schedule->removeAutoLinkToNeighbor(MacAddress(neighbor));
+    if (!sharedCells.size()) {
+        EV_DETAIL << "No shared cell to " << MacAddress(nodeId) << " found for deletion" << endl;
+        return;
+    }
+
+    pTschLinkInfo->deleteCells(nodeId, sharedCells, MAC_LINKOPTIONS_TX | MAC_LINKOPTIONS_SHARED | MAC_LINKOPTIONS_SRCAUTO);
+    pTsch6p->schedule->removeAutoLinkToNeighbor(MacAddress(nodeId));
+
+    auto cellStat = cellStatistic.find(sharedCells.back());
+
+    if (cellStat != cellStatistic.end())
+        cellStatistic.erase(cellStat);
 }
 
 tsch6pSFID_t TschMSF::getSFID() {
@@ -672,16 +713,54 @@ int TschMSF::createCellList(uint64_t destId, std::vector<cellLocation_t> &cellLi
         return -EINVAL;
     }
 
-    std::vector<offset_t> availableSlots = getAvailableSlotsInRange(pSlotframeLength);
+    std::vector<offset_t> freeSlots = {}; // generally unoccupied slot offsets
+    // slot offsets from which we can construct cell list, subject to extra filtering compared to freeSlots
+    std::vector<offset_t> availableSlots = {};
+    std::vector<offset_t> blacklisted = {}; // slot offsets previously rejected by the receiver node
+
+    /** Low-latency part */
+    if (par("lowLatencyMode").boolValue()) {
+
+        if (uplinkSlotOffset > 0) {
+
+            if (num6pAddSent > 0)
+                numCells *= num6pAddFailed + 1; // OG: numCells *= num6pAddFailed + 1;
+
+            // slowly increase acceptable range to offer in CELL_LIST
+            auto startOffset = (int) uplinkSlotOffset - numCells;
+            freeSlots = getAvailableSlotsInRange(startOffset > 0 ? startOffset : 0, uplinkSlotOffset);
+        } else
+        {
+            // 1-hop sink neighbors select slot offsets later in the slotframe to facilitate "longer" daisy-chains
+            freeSlots = getAvailableSlotsInRange((int) pSlotframeLength / 2, pSlotframeLength);
+        }
+    }
+    else
+        freeSlots = getAvailableSlotsInRange(pSlotframeLength);
+
+    /** Adaptive blacklisting part */
+    if (blacklistedSlots.find(destId) != blacklistedSlots.end())
+        blacklisted = blacklistedSlots[destId];
+
+    if (!blacklisted.empty())
+    {
+        for (auto slot : freeSlots)
+            if (!std::count(blacklisted.begin(), blacklisted.end(), slot))
+                availableSlots.push_back(slot);
+
+        EV_DETAIL << "Available slots after filtering blacklisted ones: " << availableSlots << endl;
+    }
+    else
+        availableSlots = freeSlots;
 
     if (!availableSlots.size()) {
         EV_DETAIL << "No available cells found" << endl;
         return -ENOSPC;
     }
 
-    if ((int) availableSlots.size() < numCells) {
-        EV_DETAIL << "More cells requested than total available, returning "
-                << availableSlots.size() << " cells" << endl;
+    if ((int) availableSlots.size() <= numCells) {
+        EV_DETAIL << "More or equal cells requested than available, returning "
+                << availableSlots << endl;
         for (auto s : availableSlots) {
             cellList.push_back({s, (offset_t) intrand(pNumChannels)});
             reservedTimeOffsets[destId].push_back(s);
@@ -815,14 +894,58 @@ void TschMSF::refreshDisplay() const {
 
 }
 
-void TschMSF::handleSuccessAdd(uint64_t sender, int numCells, vector<cellLocation_t> cellList)
+void TschMSF::handleSuccessAdd(uint64_t sender, int numCells, vector<cellLocation_t> cellList, vector<offset_t> reservedSlots)
 {
     // No cells were added if 6P SUCCESS responds with an empty CELL_LIST, TODO: move this outside
     if (!cellList.size()) {
         EV_DETAIL << "Seems ADD to " << MacAddress(sender) << " failed" << endl;
 
+        num6pAddFailed++;
+
+        if (par("blacklistSlots").boolValue())
+        {
+            EV_DETAIL << "Slot blacklisting is active, blacklisting slots proposed in the failed transaction: " << reservedSlots << endl;
+            if (blacklistedSlots.find(sender) == blacklistedSlots.end())
+                blacklistedSlots[sender] = reservedSlots;
+            else
+                for (auto slot: reservedSlots)
+                    blacklistedSlots[sender].push_back(slot);
+
+            // TODO: Refactor into custom class for better display in Qtenv
+            WATCH_VECTOR(blacklistedSlots[sender]);
+        }
+
         if (num6pAddSent == par("trackFailed6pAddByNum").intValue())
             numFailedTracked6p++;
+
+
+        // Retry scheduling low-latency cell if our rank > 2 and there are no dedicated cells at all
+        if (par("lowLatencyMode").boolValue() && uplinkSlotOffset > 0 && sender == rplParentId) {
+
+            EV_DETAIL << "Low-latency mode enabled and an empty response received from the parent" << endl;
+
+            auto uplinkCells = pTschLinkInfo->getDedicatedCells(rplParentId);
+
+            if ((int) uplinkCells.size() > 0) {
+                EV_DETAIL << "Found uplink cells: " << uplinkCells << endl << "No retry attempt is needed" << endl;
+                return;
+            }
+
+            auto selfMsg = new cMessage("", SEND_6P_REQ);
+
+            auto ci = new SfControlInfo(sender);
+            ci->set6pCmd(CMD_ADD);
+            ci->setCellOptions(MAC_LINKOPTIONS_TX);
+
+            selfMsg->setControlInfo(ci);
+
+            auto timeout = uniform(1, 10); // originally (1, 10)
+
+            // FIXME: magic numbers
+            scheduleAt(simTime() + timeout, selfMsg);
+
+            EV_DETAIL << "Scheduled retry attempt at " << simTime() + timeout << "s" << endl;
+        }
 
         return;
     }
@@ -833,9 +956,13 @@ void TschMSF::handleSuccessAdd(uint64_t sender, int numCells, vector<cellLocatio
 
     if (pMaxNumCells > par("maxNumTx").intValue())
         pMaxNumCells = par("maxNumTx").intValue(); // RFC limit
+
+    if (sender == rplParentId)
+        emit(uplinkScheduledSignal, (long) cellList.back().timeOffset);
 }
 
-void TschMSF::handleSuccessResponse(uint64_t sender, tsch6pCmd_t cmd, int numCells, vector<cellLocation_t> cellList)
+
+void TschMSF::handleSuccessResponse(uint64_t sender, tsch6pCmd_t cmd, int numCells, vector<cellLocation_t> cellList, vector<offset_t> reservedSlots)
 {
     if (pTschLinkInfo->getLastKnownType(sender) != MSG_RESPONSE) {
         std::ostringstream out;
@@ -845,7 +972,7 @@ void TschMSF::handleSuccessResponse(uint64_t sender, tsch6pCmd_t cmd, int numCel
 
     switch (cmd) {
         case CMD_ADD: {
-            handleSuccessAdd(sender, numCells, cellList);
+            handleSuccessAdd(sender, numCells, cellList, reservedSlots);
             break;
         }
         case CMD_DELETE: {
@@ -939,29 +1066,6 @@ void TschMSF::handle6pClearReq(uint64_t nodeId) {
     scheduleAutoCell(nodeId);
 }
 
-void TschMSF::resetStateWith(uint64_t nodeId) {
-    EV_DETAIL << "Resetting state with " << MacAddress(nodeId) << endl;
-    clearScheduleWithNode(nodeId);
-//    TODO: needs further work
-//    if (delayed6pReq) {
-//        delayed6pReq->removeControlInfo();
-//        cancelEvent(delayed6pReq);
-//    }
-
-    // TODO: Might be MSG_REQUEST if the handleTransactionTimeout got invoked on failed request??
-    // or maybe just get last known type dynamically
-//    pTschLinkInfo->resetLink(nodeId, MSG_RESPONSE);
-//    pTschLinkInfo->resetLink(nodeId, pTschLinkInfo->getLastKnownType(nodeId));
-
-    pTschLinkInfo->clearCells(nodeId);
-    pTschLinkInfo->resetSeqNum(nodeId);
-
-    if (par("clearQueueOnReset").boolValue())
-        mac->flushQueue(MacAddress(nodeId), LINK_PRIO_NORMAL);
-
-    scheduleAutoCell(nodeId); // Schedule an auto cell to flush remaining packets in the queue
-}
-
 void TschMSF::handleResponse(uint64_t sender, tsch6pReturn_t code, int numCells, std::vector<cellLocation_t> cellList)
 {
     Enter_Method_Silent();
@@ -970,12 +1074,14 @@ void TschMSF::handleResponse(uint64_t sender, tsch6pReturn_t code, int numCells,
     EV_DETAIL << "From " << MacAddress(sender) << " received " << code << " for "
             << lastKnownCmd << " with cell list: " << cellList << endl;
 
+    auto reservedSlots = reservedTimeOffsets[sender];
+
     // free the cells that were reserved during the transaction
     reservedTimeOffsets[sender].clear();
 
     switch (code) {
         case RC_SUCCESS: {
-            handleSuccessResponse(sender, lastKnownCmd, numCells, cellList);
+            handleSuccessResponse(sender, lastKnownCmd, numCells, cellList, reservedSlots);
             break;
         }
         case RC_RESET: {
@@ -1058,7 +1164,23 @@ void TschMSF::deleteCells(uint64_t nodeId, int numCells) {
     std::vector<cellLocation_t> dedicated = pTschLinkInfo->getDedicatedCells(nodeId);
 
     if (!dedicated.size()) {
-        EV_DETAIL << "No dedicated cells found" << endl;
+        EV_DETAIL << "No dedicated cells found with " << MacAddress(nodeId) << endl;
+
+        auto pktsEnqueued = mac->getQueueSize(MacAddress(nodeId));
+
+        EV_DETAIL << pktsEnqueued << " packets enqueued" << endl;
+
+        if (!pktsEnqueued) {
+
+            if (par("allowAutoCellDeletion").boolValue())
+            {
+                EV_DETAIL << "Deleting auto cell" << endl;
+                removeAutoTxCell(nodeId);
+            }
+
+        } else
+            EV_DETAIL << "Keeping auto cell" << endl;
+
         return;
     }
 
@@ -1100,7 +1222,15 @@ void TschMSF::handleParentChangedSignal(uint64_t newParentId) {
     // If RPL parent hasn't been set, we've just joined the DODAG
     if (!rplParentId) {
         rplParentId = newParentId;
-        addCells(rplParentId, par("initialNumCells").intValue());
+
+        // To control whether secondary nodes are allowed to occupy the cells (mainly an issue at the sink)
+        if (par("scheduleUplinkOnJoin").boolValue())
+            addCells(rplParentId, par("initialNumCells").intValue());
+
+        // FIXME: magic numbers
+        if (par("scheduleUplinkManually").boolValue())
+            scheduleAt(simTime() + 20, new cMessage("", SCHEDULE_UPLINK));
+
         return;
     }
 
@@ -1113,7 +1243,8 @@ void TschMSF::handleParentChangedSignal(uint64_t newParentId) {
     rplParentId = newParentId;
 
     /** and schedule the same amount of cells (or at least 1) with the new parent */
-    addCells(newParentId, (int) txCells.size() > 0 ? (int) txCells.size() : par("initialNumCells").intValue());
+    if (par("scheduleUplinkOnJoin").boolValue())
+        addCells(newParentId, (int) txCells.size() > 0 ? (int) txCells.size() : par("initialNumCells").intValue());
 }
 
 void TschMSF::handlePacketEnqueued(uint64_t dest) {
@@ -1129,7 +1260,9 @@ void TschMSF::handlePacketEnqueued(uint64_t dest) {
         checkScheduleConsistency(dest);
 
     // Heuristic, checking if there's a dedicated cell to preferred parent whenever a packet is enqueued
-    if (rplParentId == dest || par("downlinkDedicated").boolValue()) {
+    if ((rplParentId == dest || par("downlinkDedicated").boolValue())
+            && !(!par("scheduleUplinkOnJoin").boolValue() && isLeafNode && rplRank == 2)) // EXPERIMENTAL: forbid leaf nodes (seatbelts) at the sink to schedule uplink
+    {
         auto dedicatedCells = pTschLinkInfo->getDedicatedCells(dest);
 
         if (!dedicatedCells.size() && !pTschLinkInfo->inTransaction(dest)) {
@@ -1194,6 +1327,34 @@ void TschMSF::receiveSignal(cComponent *src, simsignal_t id, cObject *value, cOb
             }
         }
     }
+
+    if (id == linkBrokenSignal && par("lowLatencyMode").boolValue() && uplinkSlotOffset > 0)
+    {
+        Packet *datagram = check_and_cast<Packet *>(value);
+        std::string packetName(datagram->getFullName());
+        EV_DETAIL << "MSF received link break for " << packetName << endl;
+
+        // FIXME: checks also if the lost 6P message was really addressed to the parent
+        if (packetName.find("6top") != std::string::npos && packetName.find("Req") != std::string::npos) {
+            auto uplinkCells = pTschLinkInfo->getDedicatedCells(rplParentId);
+
+            if ((int) uplinkCells.size() > 0)
+                return;
+
+            EV_DETAIL << "Seems 6P packet has been lost and there are no uplink cells to pref. parent, let's retry scheduling uplink cell" << endl;
+
+            auto selfMsg = new cMessage("", SEND_6P_REQ);
+
+            auto ci = new SfControlInfo(rplParentId);
+            ci->set6pCmd(CMD_ADD);
+            ci->setCellOptions(MAC_LINKOPTIONS_TX);
+
+            selfMsg->setControlInfo(ci);
+
+            // FIXME: magic numbers
+            scheduleAt(simTime() + uniform(1, 10), selfMsg);
+        }
+    }
 }
 
 void TschMSF::receiveSignal(cComponent *src, simsignal_t id, long value, cObject *details)
@@ -1218,18 +1379,48 @@ void TschMSF::receiveSignal(cComponent *src, simsignal_t id, long value, cObject
     }
 
 
-    if (std::strcmp(signalName.c_str(), "rankUpdated") == 0 && par("handleRankUpdates")) {
-        auto selfMsg = new cMessage("", DELAY_TEST);
-        long updatedRank = value;
-        rplRank = value;
+    // CUSTOM ReSA handler procedure
+    if (std::strcmp(signalName.c_str(), "rankUpdated") == 0) {
+        rplRank = (int) value;
         EV_DETAIL << "Set RPL rank inside SF to " << rplRank << endl;
-        selfMsg->setContextPointer((long*) &updatedRank);
-        // FIXME: Magic numbers
-        scheduleAt(simTime() + SimTime(20, SIMTIME_S), selfMsg);
-//        handleRplRankUpdate(value, numHosts);
+
+        // For seatbelts which are not direct neighbors of sink, schedule dedicated cell with the parent
+        // to avoid blocking his auto RX cell when the applications start
+        if (!par("scheduleUplinkOnJoin").boolValue() && rplRank > 2) {
+            auto dedicatedCells = pTschLinkInfo->getDedicatedCells(rplParentId);
+
+            if (!dedicatedCells.size() && !pTschLinkInfo->inTransaction(rplParentId))
+                addCells(rplParentId, 1, MAC_LINKOPTIONS_TX);
+        }
+
         return;
     }
 
+    // CUSTOM handler procedure for delay testing
+//    if (std::strcmp(signalName.c_str(), "rankUpdated") == 0 && par("handleRankUpdates")) {
+//        auto selfMsg = new cMessage("", DELAY_TEST);
+//        long updatedRank = value;
+//        rplRank = value;
+//        EV_DETAIL << "Set RPL rank inside SF to " << rplRank << endl;
+//        selfMsg->setContextPointer((long*) &updatedRank);
+//        // FIXME: Magic numbers
+//        scheduleAt(simTime() + SimTime(20, SIMTIME_S), selfMsg);
+////        handleRplRankUpdate(value, numHosts);
+//        return;
+//    }
+
+    if (std::strcmp(signalName.c_str(), "childJoined") == 0) {
+        isLeafNode = false; // TODO: Add reset mechanism
+        return;
+    }
+
+    // As part of low-latency scheduling, RPL notifies the SF about the lowest small offset used by the preferred parent for his own uplink
+    // TODO: rename signal for clarity
+    if (par("lowLatencyMode").boolValue() && std::strcmp(signalName.c_str(), "uplinkSlotOffset") == 0) {
+        EV_DETAIL << "MSF learned slot offset used by preferred parent from RPL: " << value;
+        uplinkSlotOffset = (uint8_t) value;
+        return;
+    }
 
     std::string statisticStr;
     std::string scopeStr;
@@ -1286,37 +1477,66 @@ void TschMSF::updateCellTxStats(cellLocation_t cell, std::string statType) {
         cellStatistic[cell].NumTxAck++;
 }
 
-void TschMSF::updateNeighborStats(uint64_t neighbor, std::string statType) {
+void TschMSF::incrementNeighborCellElapsed(uint64_t neighbor) {
+    Enter_Method_Silent();
     if (nbrStatistic.find(neighbor) == nbrStatistic.end())
         nbrStatistic.insert({neighbor, new NbrStatistic(neighbor)});
 
-    if (statType == "nbSlot") {
-        nbrStatistic[neighbor]->numCellsElapsed++;
-        EV_DETAIL << "NumCellsElapsed for " << MacAddress(neighbor) << " now at " << +(nbrStatistic[neighbor]->numCellsElapsed) << endl;
-    } else if (statType == "nbTxFrames") {
-        nbrStatistic[neighbor]->numCellsUsed++;
-        EV_DETAIL << "NumCellsUsed for " << MacAddress(neighbor) << " now at " << +(nbrStatistic[neighbor]->numCellsUsed) << endl;
+    nbrStatistic[neighbor]->numCellsElapsed++;
+    checkMaxCellsReachedFor(neighbor);
+}
+
+void TschMSF::decrementNeighborCellElapsed(uint64_t neighbor) {
+    if (nbrStatistic.find(neighbor) == nbrStatistic.end()) {
+        nbrStatistic.insert({neighbor, new NbrStatistic(neighbor)});
+        return;
     }
 
-    if (nbrStatistic[neighbor]->numCellsElapsed >= pMaxNumCells) {
+    nbrStatistic[neighbor]->numCellsElapsed--;
+}
 
-//        if (maxNumCellsMessages.find(neighbor) == maxNumCellsMessages.end()) {
-//            auto maxNumCellMsg = new cMessage("MAX_NUM_CELLS", REACHED_MAXNUMCELLS);
-//            maxNumCellMsg->setContextPointer(new MacAddress(neighbor));
-//            maxNumCellsMessages[neighbor] = maxNumCellMsg;
-//            EV_DETAIL << "Added a new entry to maxNumCellMessages, pointer to the message: " << maxNumCellsMessages[neighbor] << endl;
-////
-////            maxNumCellsMessages.insert({neighbor, });
-////            maxNumCellsMessages[neighbor]->setContextPointer(new MacAddress(neighbor));
-//        }
-//
-//        scheduleAt(simTime(), maxNumCellsMessages[neighbor]);
+void TschMSF::checkMaxCellsReachedFor(uint64_t neighborId) {
+    Enter_Method_Silent();
+
+    if (nbrStatistic[neighborId]->numCellsElapsed >= pMaxNumCells) {
+
+        //        if (maxNumCellsMessages.find(neighbor) == maxNumCellsMessages.end()) {
+        //            auto maxNumCellMsg = new cMessage("MAX_NUM_CELLS", REACHED_MAXNUMCELLS);
+        //            maxNumCellMsg->setContextPointer(new MacAddress(neighbor));
+        //            maxNumCellsMessages[neighbor] = maxNumCellMsg;
+        //            EV_DETAIL << "Added a new entry to maxNumCellMessages, pointer to the message: " << maxNumCellsMessages[neighbor] << endl;
+        //
+        //            maxNumCellsMessages.insert({neighbor, });
+        //            maxNumCellsMessages[neighbor]->setContextPointer(new MacAddress(neighbor));
+        //        }
+        //
+        //        scheduleAt(simTime(), maxNumCellsMessages[neighbor]);
 
         cMessage* selfMsg = new cMessage();
         selfMsg->setKind(REACHED_MAXNUMCELLS);
-        selfMsg->setContextPointer(new MacAddress(neighbor));
+        selfMsg->setContextPointer(new MacAddress(neighborId));
         scheduleAt(simTime(), selfMsg);
     }
+}
+
+void TschMSF::updateNeighborStats(uint64_t neighborId, std::string statType) {
+    if (nbrStatistic.find(neighborId) == nbrStatistic.end())
+        nbrStatistic.insert({neighborId, new NbrStatistic(neighborId)});
+
+    if (statType == "nbSlot") {
+        nbrStatistic[neighborId]->numCellsElapsed++;
+        EV_DETAIL << "NumCellsElapsed for " << MacAddress(neighborId) << " now at " << +(nbrStatistic[neighborId]->numCellsElapsed) << endl;
+    } else if (statType == "nbTxFrames") {
+        nbrStatistic[neighborId]->numCellsUsed++;
+
+        // If stats are reset while there's a transmission, the elapsed counter is 0, while used is incremented to 1
+        if (!nbrStatistic[neighborId]->numCellsElapsed)
+            nbrStatistic[neighborId]->numCellsElapsed = nbrStatistic[neighborId]->numCellsUsed;
+
+        EV_DETAIL << "NumCellsUsed for " << MacAddress(neighborId) << " now at " << +(nbrStatistic[neighborId]->numCellsUsed) << endl;
+    }
+
+    checkMaxCellsReachedFor(neighborId);
 }
 
 uint32_t TschMSF::saxHash(int maxReturnVal, InterfaceToken EUI64addr)

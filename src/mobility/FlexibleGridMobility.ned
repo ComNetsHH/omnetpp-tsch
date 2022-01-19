@@ -9,7 +9,13 @@ import inet.mobility.static.StaticGridMobility;
 simple FlexibleGridMobility extends StaticGridMobility
 {
     parameters:
-        int resetRowAt = default(0);
         @class(FlexibleGridMobility);
+        
+        // the index of the node at which Y coordinate will be reset to allow creating several disjoint grids vertically aligned 
+        int resetRowAtNodeIndex = default(0);
+        
+        // parameters to help align seatbelts grid with the center of the aircraft from ReSA Demo 
+        double gridOffsetX = default(0);
+        double gridOffsetY = default(0);
 }
 

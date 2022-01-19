@@ -22,8 +22,7 @@
  */
 
 #include "TschBlacklistManager.h"
-//#include "TschMacWaic.h"
-#include "../Ieee802154eMac.h"
+#include "../../Ieee802154eMac.h"
 
 using namespace tsch;
 

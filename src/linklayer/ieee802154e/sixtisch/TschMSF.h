@@ -1,5 +1,5 @@
 /*
- * Minimal Scheduling Function Implementation (6TiSCH WG Draft).
+ * Minimal Scheduling Function Implementation (RFC9033).
  *
  * Copyright (C) 2021  Institute of Communication Networks (ComNets),
  *                     Hamburg University of Technology (TUHH)
@@ -25,8 +25,6 @@
 #include <omnetpp.h>
 
 #include "Tsch6topSublayer.h"
-#include "TschBlacklistManager.h"
-//#include "RplDefs.h"
 #include "inet/networklayer/common/InterfaceTable.h"
 
 
@@ -53,6 +51,7 @@ class TschMSF: public TschSF, public cListener {
             };
             SfControlInfo(uint64_t nodeId) {
                 this->reservedDestId = nodeId;
+                this->numCells = 1;
                 this->rtxCtn = 0;
             }
 
@@ -230,11 +229,11 @@ class TschMSF: public TschSF, public cListener {
 
     virtual void freeReservedCellsWith(uint64_t nodeId) override;
 
-    virtual void handleSuccessResponse(uint64_t sender, tsch6pCmd_t lastKnownCmd, int numCells, std::vector<cellLocation_t> cellList);
+    virtual void handleSuccessResponse(uint64_t sender, tsch6pCmd_t lastKnownCmd, int numCells, std::vector<cellLocation_t> cellList, vector<offset_t> reservedSlots);
 
     virtual void handleSuccessRelocate(uint64_t sender, std::vector<cellLocation_t> cellList);
 
-    virtual void handleSuccessAdd(uint64_t sender, int numCells, vector<cellLocation_t> cellList);
+    virtual void handleSuccessAdd(uint64_t sender, int numCells, vector<cellLocation_t> cellList, vector<offset_t> reservedSlots);
 
     void handleRplRankUpdate(long rank, int numHosts, double lambda);
 
@@ -270,6 +269,9 @@ class TschMSF: public TschSF, public cListener {
      * @return The 6P Timeout value defined by this Scheduling Function in ms
      */
     int getTimeout() override;
+
+    virtual void incrementNeighborCellElapsed(uint64_t neighborId) override;
+    virtual void decrementNeighborCellElapsed(uint64_t neighborId) override;
 
     void handleMessage(cMessage* msg) override;
     void handleDoStart(cMessage* msg);
@@ -368,12 +370,14 @@ class TschMSF: public TschSF, public cListener {
 
     std::vector<uint64_t> oneHopRplChildren;
     std::map<cellLocation_t, CellStatistic> cellStatistic;
+    std::map<uint64_t, std::vector<offset_t>> blacklistedSlots;
 
     // Stats
     int numInconsistencies;
     int numLinkResets;
     int numFailedTracked6p;
     int num6pAddSent;
+    int num6pAddFailed;
     int numUnhandledResponses;
     double util; // queue utilization with preferred parent
     double uplinkCellUtil; // cell utilization with pref. parent
@@ -382,6 +386,8 @@ class TschMSF: public TschSF, public cListener {
 
     bool hasStarted;
     bool isDisabled;
+    bool isLeafNode; // based on RPL info
+
 
     /** Parameter variables, see NED */
     bool showTxCells;
@@ -394,6 +400,11 @@ class TschMSF: public TschSF, public cListener {
 
     int rplRank;
 
+
+    // Low-latency scheduling (CLXv2)
+    offset_t uplinkSlotOffset; // slot offset of the preferred parent to schedule close to
+    simsignal_t uplinkScheduledSignal; // used to notify RPL about the slot offset of the scheduled uplink cell
+
     enum msfSelfMsg_t {
         CHECK_STATISTICS,
         REACHED_MAXNUMCELLS,
@@ -404,6 +415,7 @@ class TschMSF: public TschSF, public cListener {
         DELAY_TEST,
         CHECK_DAISY_CHAIN, // message type for CLX scheduling
         DEBUG_TEST,
+        SCHEDULE_UPLINK,
         UNDEFINED
     };
 
@@ -423,6 +435,7 @@ class TschMSF: public TschSF, public cListener {
     void removeAutoTxCell(uint64_t neighbor);
 
     virtual void handleSelfMessage(cMessage* msg);
+    void handleScheduleUplink();
 
     /**
      * Sends out 6P request according to the details of SfControlInfo object.
@@ -454,8 +467,6 @@ class TschMSF: public TschSF, public cListener {
      */
     void clearScheduleWithNode(uint64_t sender); // TODO: create a dedicated function directly in TschSlotframe
 
-    virtual void resetStateWith(uint64_t nbrId);
-
     /**
      * Schedule minimal cells (TX RX SHARED) for broadcast and control messages
      *
@@ -486,15 +497,16 @@ class TschMSF: public TschSF, public cListener {
     void clearCellStats(std::vector<cellLocation_t> cellList);
     std::string printCellUsage(std::string neighborMac, double usage);
     void updateCellTxStats(cellLocation_t cell, std::string statType);
+
     void removeCell(uint64_t neighbor, cellLocation_t cell, uint8_t cellOptions);
 
     void updateNeighborStats(uint64_t neighbor, std::string statType);
+    void checkMaxCellsReachedFor(uint64_t neighborId);
+
     bool slotOffsetAvailable(offset_t slOf);
 
     simsignal_t queueUtilization;
-
     simsignal_t failed6pAdd; // tracks number of failed 6P ADD requests
-
     simsignal_t neighborNotFoundError; // tracks unknown error where node's schedule is not cleared properly
 
     enum transactionFailReason_t {

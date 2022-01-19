@@ -579,18 +579,6 @@ Packet* Tsch6topSublayer::handleRequestMsg(Packet* pkt,
         pTschLinkInfo->addLink(sender, true, timeout, seqNum);
         pTschLinkInfo->setLastKnownCommand(sender, cmd);
     }
-    // TODO: Check if this clause makes sense at all!
-//    else if (seqNum == 0)
-//    {
-//        /* EXPERIMENTAL: first clear the schedule, only then the TschLinkInfo! */
-//        auto clearMsg = new tsch6topCtrlMsg();
-//        clearMsg->setDestId(sender);
-//        clearMsg->setDeleteCells(pTschLinkInfo->getCellLocations(sender)); // delete all scheduled cells except for auto
-//        updateSchedule(*clearMsg);
-//
-//        /* node has been reset, clear all existing link information. */
-//        pTschLinkInfo->resetLink(sender, MSG_REQUEST);
-//    }
 
     pTschLinkInfo->setLastKnownType(sender, MSG_REQUEST);
     pTschLinkInfo->setInTransaction(sender, timeout);

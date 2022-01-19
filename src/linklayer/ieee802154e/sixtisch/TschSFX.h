@@ -142,6 +142,9 @@ public:
      */
     void recordPDR(cMessage* msg);
 
+    virtual void incrementNeighborCellElapsed(uint64_t neighborId) override {}
+    virtual void decrementNeighborCellElapsed(uint64_t neighborId) override {}
+
 private:
     /** Thresholds for cell over-provisioning.
      TODO: these numbers are picked arbitrarily for now, play around with it!

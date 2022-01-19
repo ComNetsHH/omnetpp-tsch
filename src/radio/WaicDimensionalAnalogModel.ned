@@ -27,6 +27,15 @@ import inet.physicallayer.analogmodel.packetlevel.DimensionalAnalogModel;
 module WaicDimensionalAnalogModel extends DimensionalAnalogModel
 {
     parameters:
+        //int numAltimeters = default(0);
+        string RA_OffSet = default("0.01s 0.02s 0.03s 0.04s 0.005s");
+        string RA_Freq_OffSet = default("0 5E6 10E6 0 5E6");        
+        string AltimeterLocations=default("(0,0,0)m (0,0,0)m (0,0,0)m (0,0,0)m (0,0,0)m ");
+        
+        double T_chirp=default(0.02);
+        double f_chirp_min=default(4200.0e6);
+        double f_chirp_max=default(4400.0e6);
+        
     	@class(WaicDimensionalAnalogModel);
 }
 

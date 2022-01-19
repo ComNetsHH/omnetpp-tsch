@@ -25,7 +25,7 @@
 #define __WAIC_TSCHBLACKLISTMANAGER_H_
 
 #include <omnetpp.h>
-#include "WaicCellComponents.h"
+#include "../WaicCellComponents.h"
 
 #include "tschBlacklistExpiryMsg_m.h"
 

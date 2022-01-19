@@ -43,6 +43,7 @@
 #include "Ieee802154eASN.h"
 #include "TschHopping.h"
 #include "TschNeighbor.h"
+#include "sixtisch/TschSF.h"
 #include "inet/common/Units.h"
 #include <vector>
 #include <tuple>
@@ -426,6 +427,7 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
     TschNeighbor *neighbor;
     TschSlotframe *schedule;
     Ieee802154eASN asn;
+    TschSF *sf;
 
     int64_t currentAsn;
     TschLink *currentLink;

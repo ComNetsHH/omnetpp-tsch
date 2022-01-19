@@ -44,6 +44,10 @@ network ReSa
         int numGW = default(1);
         int numBM = default(1);
         int numWAS = default(1);
+        int numHosts = default(0);
+        double gridCenterX = default(0);
+        double gridCenterY = default(0);
+        
     submodules:
         configurator: Ipv6FlatNetworkConfigurator {
             parameters:
@@ -72,6 +76,7 @@ network ReSa
         sos1[numSoS]: RplRouter {
             parameters:
                 @6tisch;
+                @display("i=misc/sensor2");
                 @display("r=,,#707070;p=28.48,34.354");
         }                        
         bm1[numBM]: RplRouter {
@@ -80,6 +85,11 @@ network ReSa
                 @display("p=28.48,20.114;r=,,#707070");
         }                        
         was1[numWAS]: RplRouter {
+            parameters:
+                @6tisch;
+                @display("p=28.48,20.114;r=,,#707070");
+        }
+        host[numHosts]: RplRouter {
             parameters:
                 @6tisch;
                 @display("p=28.48,20.114;r=,,#707070");

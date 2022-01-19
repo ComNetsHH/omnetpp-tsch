@@ -19,7 +19,7 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 //
 
-package tsch.linklayer.ieee802154e.sixtisch;
+package tsch.linklayer.ieee802154e.sixtisch.blacklisting;
 
 module TschBlacklistManager {
     parameters:

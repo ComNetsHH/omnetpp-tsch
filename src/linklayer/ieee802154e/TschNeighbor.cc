@@ -110,6 +110,7 @@ int TschNeighbor::getTotalQueueSizeAt(MacAddress macAddress) {
     auto macToQueueEntry = this->macToQueueMap.find(macAddress);
     if (macToQueueEntry != this->macToQueueMap.end()) {
         int queueSize= 0;
+        // iterate over all virtual link IDs, i.e. priority levels
         for (auto itr = macToQueueEntry->second->begin(); itr != macToQueueEntry->second->end(); ++itr)
             queueSize += (int)itr->second->size();
 

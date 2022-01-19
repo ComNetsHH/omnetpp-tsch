@@ -49,7 +49,6 @@
 #include "inet/physicallayer/common/packetlevel/RadioMedium.h"
 #include "./sixtisch/SixpHeaderChunk_m.h"
 #include "../../common/VirtualLinkTag_m.h"
-#include "sixtisch/TschSF.h"
 
 
 namespace tsch {
@@ -163,7 +162,7 @@ void Ieee802154eMac::initialize(int stage) {
             throw cRuntimeError("neighbor module not found");
 
         // Use XML schedule only if SF is disabled
-        auto sf = getModuleByPath("^.sixtischInterface.sf");
+        sf = check_and_cast<TschSF*> (getModuleByPath("^.sixtischInterface.sf"));
         if (sf->par("disable").boolValue()) {
             schedule->xmlSchedule();
             schedule->printSlotframe();
@@ -434,28 +433,46 @@ TschLink* Ieee802154eMac::selectActiveLink(std::vector<TschLink*> links) {
         return links.back();
 
     // If multiple links / cells are scheduled at the same position
-    // First look for a DEDICATED TX link
-    for (auto link : links) {
+    // First look for unicast TX link with packets in the queue
+    std::vector<TschLink*> unicastTxLinks = {};
+    for (auto link : links)
+    {
         if (link->isTx() && link->getAddr() != MacAddress::BROADCAST_ADDRESS
                 && neighbor->getTotalQueueSizeAt(link->getAddr()) > 0)
         {
-            EV_DETAIL << "Found unicast TX link with non-empty queue: " << link->str() << endl;
-            return link;
+            unicastTxLinks.push_back(link);
         }
+        // Update the elapsed counter also for inactive links!
+        sf->incrementNeighborCellElapsed(link->getAddr().getInt());
     }
 
-    // Then check for AUTO TX cells with packets in queues
-    for (auto link : links) {
-        if (link->isTx() && link->isAuto()
-                && link->getAddr() != MacAddress::BROADCAST_ADDRESS
-                && neighbor->getTotalQueueSizeAt(link->getAddr()) > 0)
-        {
-            EV_DETAIL << "Found auto TX link with non-empty queue: " << link->str() << endl;
-            return link;
-        }
-    }
+    if ((int) unicastTxLinks.size() == 1) {
+        EV_DETAIL << "Found unicast TX link with non-empty queue: " << unicastTxLinks.back()->str() << endl;
+        return unicastTxLinks.back();
+    } else if ((int) unicastTxLinks.size() > 1) {
+        EV_DETAIL << "Multiple unicast links with non-empty queues found, selecting one randomly: " << endl;
 
-    // Finally check if there's ANY TX - shared, broadcast - link with packets in queue
+        auto selectedId = intrand((int) unicastTxLinks.size());
+        auto selectedLink = unicastTxLinks[selectedId];
+
+        // Compensate for the "catch-all" increment above, since active link is handled by the SF properly
+        sf->decrementNeighborCellElapsed(selectedLink->getAddr().getInt());
+
+        return selectedLink;
+    }
+//
+//    // Then check for AUTO TX cells with packets in queues
+//    for (auto link : links) {
+//        if (link->isTx() && link->isAuto()
+//                && link->getAddr() != MacAddress::BROADCAST_ADDRESS
+//                && neighbor->getTotalQueueSizeAt(link->getAddr()) > 0)
+//        {
+//            EV_DETAIL << "Found auto TX link with non-empty queue: " << link->str() << endl;
+//            return link;
+//        }
+//    }
+
+    // Secondly check if there's any other TX link: shared, broadcast with packets in queue
     for (auto link : links) {
         if (link->isTx() && neighbor->getTotalQueueSizeAt(link->getAddr()) > 0)
         {
@@ -473,7 +490,7 @@ TschLink* Ieee802154eMac::selectActiveLink(std::vector<TschLink*> links) {
             rxLinks.push_back(link);
 
     if (!rxLinks.size()) {
-        EV_WARN << "No RX link as well? Seems like a bug!" << endl;
+        EV_DETAIL << "No RX links found" << endl;
         return nullptr;
     }
 

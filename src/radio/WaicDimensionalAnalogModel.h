@@ -19,6 +19,9 @@
 #define __WAICDIMENSIONALANALOGMODEL_H
 
 #include "inet/physicallayer/analogmodel/packetlevel/DimensionalAnalogModel.h"
+// FL_TEST
+//#include "inet/physicallayer/analogmodel/packetlevel/DimensionalSnir.h"
+
 #include "WaicDimensionalSnir.h"
 
 namespace tsch {
@@ -35,17 +38,38 @@ class WaicDimensionalAnalogModel : public DimensionalAnalogModel
 
   private:
     Coord altimeterLocation;
-
+    std::vector<Coord> V_AltimeterLocation;
+    std::vector<simtime_t> RaOffSet;
+    std::vector<double> Ra_Freq_OffSet;
+    double T_chirp;
+    double f_chirp_min;
+    double f_chirp_max;
+    //int numAltimeters;
+    //std::vector<Coord> V_AltimeterLocation_test;
   public:
+
+//    WaicDimensionalAnalogModel(const DimensionalReception *reception);
+
     virtual const ISnir *computeSNIR(const IReception *reception, const INoise *noise) const override;
 
     virtual const INoise *computeNoise(const IListening *listening, const IInterference *interference) const override;
     virtual const INoise *computeNoise(const IReception *reception, const INoise *noise) const override;
 
     const Coord& getAltimeterLocation() const;
+    const std::vector<Coord>  getAltimeterLocation_v() const;
+    const std::vector<Coord>  getAltimeterLocation_v_str() const;
+    const std::vector<simtime_t>  getRaOffSet() const;
+    const std::vector<double>  getRa_Freq_OffSet() const;
+
+
     // TODO: Implement logic to check whether we have to consider altimeter interference
     // at given point in time / frequency
-    const bool isAltimeterInterfering() const { return uniform(0, 1) > 0.1; };
+    // DONE FL
+    const bool isAltimeterInterfering(Hz centerFrequency,  Hz bandwidth, simsec startTime, simsec endTime, double RA_OffSet, double RA_Freq_OffSet) const; // { return uniform(0, 1) > 0.1; };
+
+    // const tuple<double , double> computeTimeInt(const IReception *reception) const;
+    const std::tuple<double , double> computeTimeInt() const;
+    const double AltimeterInterferingPower(double distance) const;
 
 };
 

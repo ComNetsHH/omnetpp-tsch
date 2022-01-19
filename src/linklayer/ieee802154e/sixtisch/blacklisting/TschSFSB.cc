@@ -22,14 +22,14 @@
 
 #include "TschSFSB.h"
 
-#include "tsch6topCtrlMsg_m.h"
+#include "../tsch6topCtrlMsg_m.h"
 //#include "TschMacWaic.h"
-#include "../Ieee802154eMac.h"
+#include "../../Ieee802154eMac.h"
 //#include "ChannelState.h"
-#include "Tsch6topSublayer.h"
+#include "../Tsch6topSublayer.h"
 #include "inet/networklayer/common/InterfaceTable.h"
 #include <omnetpp.h>
-#include "TschSpectrumSensing.h"
+#include "../TschSpectrumSensing.h"
 
 using namespace tsch;
 

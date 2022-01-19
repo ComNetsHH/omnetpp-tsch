@@ -25,11 +25,11 @@
 
 #include <omnetpp.h>
 
-#include "Tsch6topSublayer.h"
-#include "TschLinkInfo.h"
-#include "TschSF.h"
+#include "../Tsch6topSublayer.h"
+#include "../TschLinkInfo.h"
+#include "../TschSF.h"
+#include "../TschSpectrumSensing.h"
 #include "TschBlacklistManager.h"
-#include "TschSpectrumSensing.h"
 
 
 class TschSFSB: public TschSF {
@@ -165,6 +165,9 @@ public:
 
     /* unimplemented on purpose */
     void recordPDR(cMessage* msg) {}
+
+    virtual void incrementNeighborCellElapsed(uint64_t neighborId) override {}
+    virtual void decrementNeighborCellElapsed(uint64_t neighborId) override {}
 
 private:
     // TODO: refactor into enum, this is a mess

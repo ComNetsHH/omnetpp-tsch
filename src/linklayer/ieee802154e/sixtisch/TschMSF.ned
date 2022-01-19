@@ -34,7 +34,11 @@ simple TschMSF like TschSF
         bool clearQueueOnReset = default(false); // if enabled, completely flushes regular queue with a neighbor when the link is reset    
         bool disableHousekeeping = default(false);
              
-     	bool handleRankUpdates = default(false); // TEST parameter, only needed for delay-testing scenarios 
+     	bool handleRankUpdates = default(false); // TEST parameter, only needed for delay-testing scenarios
+     	
+     	// node periodically checks the existence of a dedicated uplink cell until it one is successfully scheduled
+     	bool scheduleUplinkManually = default(false);    
+     	bool blacklistSlots = default(false); // slot offsets rejected by the destination node will not be proposed to it ever again 
 
 		double startTime @unit("s") = default(uniform(1s, 2s));
 		
@@ -65,4 +69,10 @@ simple TschMSF like TschSF
 		// Module parameters required by the interface but are actually unused
 		int initNumcells = default(6);
 		int maxRetryBackoff @unit(ms) = default(60000ms);
+		
+		// Misc
+		bool lowLatencyMode = default(false);
+		bool scheduleUplinkOnJoin = default(true);
+		
+		bool allowAutoCellDeletion = default(false);
 }
