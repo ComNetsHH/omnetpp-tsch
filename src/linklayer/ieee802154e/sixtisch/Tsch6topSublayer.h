@@ -79,6 +79,11 @@ public:
     virtual Packet* handleExternalMessage(cMessage* msg);
 
     /**
+     * Check the status of piggybackable data on link-layer (LL) ACK reception
+     */
+    virtual void handlePiggybackData(uint64_t destId, bool txSuccess);
+
+    /**
      * @brief Send a 6P Add request.
      *
      * @param destId       Id of the node to which this request will be sent

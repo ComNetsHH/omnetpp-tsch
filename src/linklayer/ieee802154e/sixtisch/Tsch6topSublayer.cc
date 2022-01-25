@@ -32,13 +32,10 @@
 
 #include "Tsch6topSublayer.h"
 
-//#include "NetworkTopologyMockManager.h"
 #include <memory>
-//#include "TschMacWaic.h"
 
 #include "../TschLink.h"
 #include "TschSF.h"
-//#include "msg/tschSpectrumSensingResult_m.h"
 #include "tsch6pPiggybackTimeoutMsg_m.h"
 #include "WaicCellComponents.h"
 #include "inet/physicallayer/common/packetlevel/RadioMedium.h"
@@ -53,7 +50,6 @@
 #include "inet/common/packet/chunk/BytesChunk.h"
 #include "../Ieee802154eMacHeader_m.h"
 #include "inet/common/ProtocolGroup.h"
-//#include "TschImprovisedTests.h"
 
 using namespace omnetpp;
 using namespace tsch;
@@ -904,6 +900,27 @@ void Tsch6topSublayer::handleRequestAck(uint64_t destId, tsch6pCmd_t cmd) {
     }
 }
 
+void Tsch6topSublayer::handlePiggybackData(uint64_t destId, bool txSuccess) {
+    bool pigbackDataExists = piggybackableData.find(destId) != piggybackableData.end();
+    auto pigbackData = piggybackableData[destId];
+
+    if (pigbackDataExists && !pigbackData.empty() && pigbackData.front()->getInTransit())
+    {
+        if (txSuccess)
+            /* successfully piggybacked data, remove it from queue */
+            deletePiggybackableData(destId, pigbackData.front()->getContextPointer());
+        else {
+            /* data not successfully piggybacked, try again */
+            // TODO: the whole assumption that it's always the front that has been
+            // piggybacked is quite feeble; but time etc etc.
+            pigbackData.front()->setInTransit(false);
+            if (pigbackData.front()->getArrivalTime() <= simTime())
+                /* piggyback timeout already ran out, re-schedule */
+                scheduleAt(simTime() + PIGGYBACKING_BACKOFF, pigbackData.front());
+        }
+    }
+}
+
 void Tsch6topSublayer::receiveSignal(cComponent *source, simsignal_t signalID, cObject *value, cObject *details) {
     Enter_Method_Silent();
     bool txSuccess = false;
@@ -932,30 +949,22 @@ void Tsch6topSublayer::receiveSignal(cComponent *source, simsignal_t signalID, c
 
     if (machdr->getNetworkProtocol() == -1
             || ProtocolGroup::ethertype.getProtocol(machdr->getNetworkProtocol()) != &Protocol::wiseRoute)
-    {
         return;
-    }
 
-    // debugging stuff
-//    if (txSuccess)
-//        EV_DETAIL << "Received signal about LL ACK for " << pkt->getFullName() << " to/from? " << MacAddress(destId) << endl;
-//    else {
-//        EV_DETAIL << "Received signal about dropping " << pkt->getFullName() << " intended for " << MacAddress(destId) << endl;
-//        host->bubble("Dropped packet");
-//    }
+    if (txSuccess)
+        EV_DEBUG << "Received signal about LL ACK for " << pkt->getFullName() << " to " << MacAddress(destId) << endl;
+    else
+        EV_DEBUG << "Received signal about dropping " << pkt->getFullName() << " intended for " << MacAddress(destId) << endl;
 
     auto sixphdr = pkt->popAtFront<tsch::sixtisch::SixpHeader>();
 
     if ( sixphdr && ((tsch6pMsg_t) sixphdr->getType()) == MSG_REQUEST ) {
-        // LL ACK received for a 6P request addressed to this neighbor
-        // => we can start the timeout!
+        // LL ACK received for a 6P request addressed to this neighbor => we can start the timeout!
         if (txSuccess)
             handleRequestAck(destId, (tsch6pCmd_t) sixphdr->getCode());
         else {
             // Else abort last intended transaction
-            // TODO: how do we exactly know the one-before-last transaction details?? Maybe set it to CMD_NONE?
-            // TODO: ensure this doesn't screw-up sequence numbers
-            pTschLinkInfo->revertLink(destId, pTschLinkInfo->getLastKnownType(destId));
+            pTschLinkInfo->revertLink(destId, pTschLinkInfo->getLastKnownType(destId)); // TODO: this basically does nothing
             pTschSF->freeReservedCellsWith(destId);
         }
 
@@ -964,69 +973,40 @@ void Tsch6topSublayer::receiveSignal(cComponent *source, simsignal_t signalID, c
 
     tsch6topCtrlMsg* result = NULL;
 
-    bool pigbackDataExists = piggybackableData.find(destId) != piggybackableData.end();
-    auto pigbackData = piggybackableData[destId];
-
-    if (pigbackDataExists && !pigbackData.empty() && pigbackData.front()->getInTransit()) {
-        if (txSuccess)
-            /* successfully piggybacked data, remove it from queue */
-            deletePiggybackableData(destId, pigbackData.front()->getContextPointer());
-        else {
-            /* data not successfully piggybacked, try again */
-            // TODO: the whole assumption that it's always the front that has been
-            // piggybacked is quite feeble; but time etc etc.
-            pigbackData.front()->setInTransit(false);
-            if (pigbackData.front()->getArrivalTime() <= simTime())
-                /* piggyback timeout already ran out, re-schedule */
-                scheduleAt(simTime() + PIGGYBACKING_BACKOFF, pigbackData.front());
-        }
-    }
-
-//    if (pendingPatternUpdates.find(destId) == pendingPatternUpdates.end()) {
-//        EV_DETAIL << "We are in test condition #1" << endl;
-////        if (pTschLinkInfo->inTransaction(destId))
-////            pTschLinkInfo->abortTransaction(destId); // EXPERIMENTAL: clear in-transaction flag for TSCH-ACKs on RC_RESET
-//
-//        return;
-//    }
+    handlePiggybackData(destId, txSuccess);
 
     /* txsuccess is for a 6P transmission towards one of our neighbors */
     if (txSuccess && hasPatternUpdateFor(destId))
     {
         /* LL ACK arrived and there is a pattern update waiting for this ACK
          * and the transaction hasn't timed out in the meantime */
-        EV_DETAIL << "LL ACK arrived and there is a pattern update waiting for this ACK" << endl;
+        EV_DETAIL << "LL ACK arrived and there is a schedule update waiting for this ACK" << endl;
 
         tsch6topCtrlMsg* pendingPatternUpdate = pendingPatternUpdates[destId];
         auto cellsToAdd = pendingPatternUpdate->getNewCells();
         auto cellsToDelete = pendingPatternUpdate->getDeleteCells();
         auto cellOptions = pendingPatternUpdate->getCellOptions();
 
-        EV_DETAIL << "Cells to add: " << cellsToAdd << "\nto delete: " << cellsToDelete << endl;
+        if (cellsToAdd.size())
+            EV_DETAIL << "Cells to add: " << cellsToAdd << endl;
+        if (cellsToDelete.size())
+            EV_DETAIL << "Cells to delete: " << cellsToDelete << endl;
 
         // TODO: using handleResponse() is a bit hacky since we're the ones who
         // sent the response, we're just handling the fact that it was ACKed
         // create dedicated SF fct for that?
         pTschSF->handleResponse(destId, RC_SUCCESS, 0, NULL);
-//        pTschLinkInfo->incrementSeqNum(destId);
 
         pTschLinkInfo->addCells(destId, cellsToAdd, cellOptions);
         if (cellsToDelete.size())
             pTschLinkInfo->deleteCells(destId, cellsToDelete, cellOptions);
 
-//        /* as far as we're considered, this transaction is complete now. */
-//        pTschLinkInfo->abortTransaction(destId);
-
         result = pendingPatternUpdate->dup();
-
-
     }
 
     if (pTschLinkInfo->inTransaction(destId))
     {
         /* as far as we're considered, this transaction is complete now. */
-        // EXPERIMENTAL: moved these 2 lines here to ensure proper seqNum management and transaction termination
-        // when receiving an ACK for empty RC_SUCCESS
         pTschLinkInfo->incrementSeqNum(destId);
         pTschLinkInfo->abortTransaction(destId);
     }
@@ -1323,9 +1303,8 @@ Packet* Tsch6topSublayer::createErrorResponse(uint64_t destId, uint8_t seqNum,
     return pkt;
 }
 
-Packet* Tsch6topSublayer::createSeqNumErrorResponse(uint64_t destId,
-                                                          uint8_t seqNum,
-                                                          simtime_t timeout) {
+Packet* Tsch6topSublayer::createSeqNumErrorResponse(uint64_t destId, uint8_t seqNum, simtime_t timeout)
+{
     const auto& sixpHeader = makeShared<tsch::sixtisch::SixpHeader>();
     sixpHeader->setType(MSG_RESPONSE);
     sixpHeader->setSeqNum(seqNum);

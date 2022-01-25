@@ -208,11 +208,17 @@ void TschNeighbor::flush6pQueue(MacAddress neighbor) {
 }
 
 TschCSMA* TschNeighbor::getCurrentTschCSMA(){
-    return this->backoffTable.find(currentNeighborKey)->second;
+    if (this->backoffTable.find(currentNeighborKey) != this->backoffTable.end())
+        return this->backoffTable.find(currentNeighborKey)->second;
+
+    return nullptr;
 }
 
 TschCSMA* TschNeighbor::getTschCsmaWith(MacAddress neighborAddr) {
-    return this->backoffTable.find(neighborAddr)->second;
+    if (this->backoffTable.find(neighborAddr) != this->backoffTable.end())
+            return this->backoffTable.find(neighborAddr)->second;
+
+    return nullptr;
 }
 
 void TschNeighbor::terminateTschCsmaWith(MacAddress neighborAddr) {
@@ -229,7 +235,8 @@ void TschNeighbor::failedTX(){
 
 void TschNeighbor::terminateCurrentTschCSMA(){
     EV_DETAIL << "Terminating CSMA with " << currentNeighborKey << endl;
-    this->getCurrentTschCSMA()->terminate();
+    if (this->getCurrentTschCSMA())
+        this->getCurrentTschCSMA()->terminate();
 }
 
 void TschNeighbor::reset() {
