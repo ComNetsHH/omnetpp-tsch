@@ -34,7 +34,7 @@ import rpl.configurator.RplNetConfigurator;
 import tsch.mobility.ReSaMobility;
 import tsch.linklayer.ieee802154e.TschHopping;
 
-network ReSa
+network ReSA
 {
     parameters:
         @display("bgb=38.5,59.95");
@@ -191,5 +191,12 @@ network ReSa
 //            parameters:
 //                @6tisch;
 //                @display("p=28.48,20.114;r=,,#707070");
-//        }                                       
+//        }          
+// 		 // purely for display purposes
+//        ra[2]: RplRouter {
+//            parameters:
+//                @6tisch;
+//                @display("i=device/antennatower");
+//                @display("p=28.48,20.114;r=,,#707070");
+//        }                             
 }
