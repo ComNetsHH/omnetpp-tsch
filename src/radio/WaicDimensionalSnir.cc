@@ -30,7 +30,7 @@ WaicDimensionalSnir::WaicDimensionalSnir(const DimensionalReception *reception, 
 double WaicDimensionalSnir::computeMin() const
 {
     // TODO: factor out common part
-    EV_DETAIL << "Computing min WAIC SNIR, distance to altimeter " << distanceToAltimeter << endl;
+    EV_DEBUG << "Computing min WAIC SNIR, distance to altimeter " << distanceToAltimeter << endl;
     const DimensionalNoise *dimensionalNoise = check_and_cast<const DimensionalNoise *>(noise);
     const DimensionalReception *dimensionalReception = check_and_cast<const DimensionalReception *>(reception);
     EV_TRACE << "Reception power begin " << endl;
@@ -57,7 +57,7 @@ double WaicDimensionalSnir::computeMin() const
 double WaicDimensionalSnir::computeMax() const
 {
     // TODO: factor out common part
-    EV_DETAIL << "Computing max WAIC SNIR, distance to altimeter " << distanceToAltimeter << endl;
+    EV_DEBUG << "Computing max WAIC SNIR, distance to altimeter " << distanceToAltimeter << endl;
     const DimensionalNoise *dimensionalNoise = check_and_cast<const DimensionalNoise *>(noise);
     const DimensionalReception *dimensionalReception = check_and_cast<const DimensionalReception *>(reception);
     EV_DEBUG << "Reception power begin " << endl;
@@ -84,7 +84,7 @@ double WaicDimensionalSnir::computeMax() const
 double WaicDimensionalSnir::computeMean() const
 {
     // TODO: factor out common part
-    EV_DETAIL << "Computing mean WAIC SNIR, distance to altimeter " << distanceToAltimeter << endl;
+    EV_DEBUG << "Computing mean WAIC SNIR, distance to altimeter " << distanceToAltimeter << endl;
     const DimensionalNoise *dimensionalNoise = check_and_cast<const DimensionalNoise *>(noise);
     const DimensionalReception *dimensionalReception = check_and_cast<const DimensionalReception *>(reception);
     EV_TRACE << "Reception power begin " << endl;
@@ -104,7 +104,7 @@ double WaicDimensionalSnir::computeMean() const
     EV_TRACE << *snir << endl;
     EV_TRACE << "SNIR end" << endl;
     double meanSNIR = snir->getMean(Interval<simsec, Hz>(startPoint, endPoint, 0b1, 0b0, 0b0));
-    EV_DETAIL << "Computing mean SNIR: start = " << startPoint << ", end = " << endPoint << " -> mean SNIR = " << meanSNIR << endl;
+    EV_DEBUG << "Computing mean SNIR: start = " << startPoint << ", end = " << endPoint << " -> mean SNIR = " << meanSNIR << endl;
     return meanSNIR;
 }
 

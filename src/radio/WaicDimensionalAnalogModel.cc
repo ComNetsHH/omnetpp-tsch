@@ -36,7 +36,7 @@ Define_Module(WaicDimensionalAnalogModel);
 void WaicDimensionalAnalogModel::initialize(int stage)
 {
     DimensionalAnalogModelBase::initialize(stage);
-    EV_DETAIL << "Initializing stage" << stage << endl;
+    EV_DEBUG << "Initializing stage" << stage << endl;
     if (stage == INITSTAGE_LAST) {
         //===========================================================================================================
         // Altimeter locations defined by: *.radioAltimeter[1].mobility.initialX /Y /Z = ... in ini-file
@@ -66,7 +66,7 @@ void WaicDimensionalAnalogModel::initialize(int stage)
 
 const ISnir *WaicDimensionalAnalogModel::computeSNIR(const IReception *reception, const INoise *noise) const
 {
-    EV_DETAIL << "==============>> Inside computeSNIR" << endl;
+    EV_DEBUG << "==============>> Inside computeSNIR" << endl;
 
     const DimensionalReception *dimensionalReception = check_and_cast<const DimensionalReception *>(reception);
     const DimensionalNoise *dimensionalNoise = check_and_cast<const DimensionalNoise *>(noise);
@@ -75,10 +75,10 @@ const ISnir *WaicDimensionalAnalogModel::computeSNIR(const IReception *reception
     auto distToAltimeter = reception->getEndPosition().distance(altimeterLocation);
 //    simsec startTime = simsec(reception->getStartTime());
 //    simsec endTime = simsec(reception->getEndTime());
-//    EV_DETAIL <<"startime=" << startTime << endl;
-//    EV_DETAIL <<"endtime =" << toDouble(endTime) << endl;
-//    EV_DETAIL <<"altimeterLocation =" << altimeterLocation << endl;
-//    EV_DETAIL <<"distToAltimeter =" << distToAltimeter << endl;
+//    EV_DEBUG <<"startime=" << startTime << endl;
+//    EV_DEBUG <<"endtime =" << toDouble(endTime) << endl;
+//    EV_DEBUG <<"altimeterLocation =" << altimeterLocation << endl;
+//    EV_DEBUG <<"distToAltimeter =" << distToAltimeter << endl;
 
     return new WaicDimensionalSnir(dimensionalReception,dimensionalNoise, distToAltimeter);
 
@@ -87,7 +87,7 @@ const ISnir *WaicDimensionalAnalogModel::computeSNIR(const IReception *reception
 
 const INoise *WaicDimensionalAnalogModel::computeNoise(const IListening *listening, const IInterference *interference) const
 {
-    EV_DETAIL << "==============>> Inside computeNoise 1: Interference" << endl;
+    EV_DEBUG << "==============>> Inside computeNoise 1: Interference" << endl;
 
     const BandListening *bandListening = check_and_cast<const BandListening *>(listening);
     Hz centerFrequency = bandListening->getCenterFrequency();
@@ -104,9 +104,9 @@ const INoise *WaicDimensionalAnalogModel::computeNoise(const IListening *listeni
         const DimensionalReception *dimensionalReception = check_and_cast<const DimensionalReception *>(interferingReception);
         auto receptionPower = dimensionalReception->getPower();
         receptionPowers.push_back(receptionPower);
-        EV_DETAIL << "Interference power begin " << endl;
-        EV_DETAIL << *receptionPower << endl;
-        EV_DETAIL << "Interference power end" << endl;
+        EV_DEBUG << "Interference power begin " << endl;
+        EV_DEBUG << *receptionPower << endl;
+        EV_DEBUG << "Interference power end" << endl;
     }
 
     //==================================================================================================
@@ -114,36 +114,36 @@ const INoise *WaicDimensionalAnalogModel::computeNoise(const IListening *listeni
     // Time duraton of RA-Interference-Forecast:
     simsec startTime = simsec(listening->getStartTime());
     simsec endTime = simsec(listening->getEndTime());
-    //EV_DETAIL <<"startime=" << startTime << endl;
-    //EV_DETAIL <<"endtime =" << endTime << endl;
+    //EV_DEBUG <<"startime=" << startTime << endl;
+    //EV_DEBUG <<"endtime =" << endTime << endl;
 
     // should be zero, which causes trouble in division -> choosen value close enough to zero
     WpHz altimeterPowerSpectralDensity = WpHz(1e-30);
     // Check all participating RAs
     for (int k=0; k < V_AltimeterLocation.size(); k++){
-        EV_DETAIL << "V_AltimeterLocation[" <<k <<"] = " << V_AltimeterLocation[k]  << endl;
+        EV_DEBUG << "V_AltimeterLocation[" <<k <<"] = " << V_AltimeterLocation[k]  << endl;
 
         auto distToAltimeter = listening->getEndPosition().distance(V_AltimeterLocation[k]);
-        EV_DETAIL << "distToAltimeter = " << distToAltimeter <<" m"<< endl;
+        EV_DEBUG << "distToAltimeter = " << distToAltimeter <<" m"<< endl;
 
         if (isAltimeterInterfering(centerFrequency,  bandwidth, startTime, endTime, toDouble(RaOffSet[k]),Ra_Freq_OffSet[k])) {
-            EV_DETAIL << "==============>> isAltimeterInterfering is TRUE:" << endl;
+            EV_DEBUG << "==============>> isAltimeterInterfering is TRUE:" << endl;
             altimeterPowerSpectralDensity = altimeterPowerSpectralDensity + WpHz(AltimeterInterferingPower(distToAltimeter)/bandwidth.get());
         }
-        EV_DETAIL << "altimeterPowerSpectralDensity = " << altimeterPowerSpectralDensity << endl;
+        EV_DEBUG << "altimeterPowerSpectralDensity = " << altimeterPowerSpectralDensity << endl;
     }
     //==================================================================================================
 
         const Ptr<const IFunction<WpHz, Domain<simsec, Hz>>>& altimeterPower =
                 makeShared<ConstantFunction<WpHz, Domain<simsec, Hz>>>(altimeterPowerSpectralDensity);
-        EV_DETAIL << "Detected altimeter interference, created power function: " << *altimeterPower << endl;
+        EV_DEBUG << "Detected altimeter interference, created power function: " << *altimeterPower << endl;
         receptionPowers.push_back(altimeterPower);
 
     const Ptr<const IFunction<WpHz, Domain<simsec, Hz>>>& noisePower = makeShared<SummedFunction<WpHz, Domain<simsec, Hz>>>(receptionPowers);
 
-    EV_DETAIL << "Noise power begin " << endl;
-    EV_DETAIL << *noisePower << endl;
-    EV_DETAIL << "Noise power end" << endl;
+    EV_DEBUG << "Noise power begin " << endl;
+    EV_DEBUG << *noisePower << endl;
+    EV_DEBUG << "Noise power end" << endl;
     const auto& bandpassFilter = makeShared<Boxcar2DFunction<double, simsec, Hz>>(simsec(listening->getStartTime()), simsec(listening->getEndTime()), centerFrequency - bandwidth / 2, centerFrequency + bandwidth / 2, 1);
 
     return new DimensionalNoise(listening->getStartTime(), listening->getEndTime(), centerFrequency, bandwidth, noisePower->multiply(bandpassFilter));
@@ -151,12 +151,12 @@ const INoise *WaicDimensionalAnalogModel::computeNoise(const IListening *listeni
 
 const INoise *WaicDimensionalAnalogModel::computeNoise(const IReception *reception, const INoise *noise) const
 {
-    EV_DETAIL << "==============>> Inside computeNoise 2" << endl;
+    EV_DEBUG << "==============>> Inside computeNoise 2" << endl;
     auto dimensionalReception = check_and_cast<const DimensionalReception *>(reception);
     Hz centerFrequency=dimensionalReception->getCenterFrequency();
     Hz bandwidth = dimensionalReception->getBandwidth();
-    EV_DETAIL <<"centerFrequency=" << centerFrequency << endl;
-    EV_DETAIL <<"bandwidth =" << bandwidth << endl;
+    EV_DEBUG <<"centerFrequency=" << centerFrequency << endl;
+    EV_DEBUG <<"bandwidth =" << bandwidth << endl;
 
     auto dimensionalNoise = check_and_cast<const DimensionalNoise *>(noise);
     const Ptr<const IFunction<WpHz, Domain<simsec, Hz>>>& noisePower = makeShared<AddedFunction<WpHz, Domain<simsec, Hz>>>(dimensionalReception->getPower(), dimensionalNoise->getPower());
@@ -166,7 +166,7 @@ const INoise *WaicDimensionalAnalogModel::computeNoise(const IReception *recepti
 const Coord& WaicDimensionalAnalogModel::getAltimeterLocation() const {
 //std::vector<Coord> WaicDimensionalAnalogModel::getAltimeterLocation() const {
 
-    EV_DETAIL << "==============>> Inside getAltimeterLocation" << endl;
+    EV_DEBUG << "==============>> Inside getAltimeterLocation" << endl;
     std::vector<Coord> V_AltimeterLocation;
     // Find NED network module
     auto simul = cModule::getParentModule()->getParentModule();
@@ -177,18 +177,18 @@ const Coord& WaicDimensionalAnalogModel::getAltimeterLocation() const {
         altimeter = *it;
         std::string submFullName(altimeter->getFullName());
 
-        EV_DETAIL << "==============>> altimeter = " <<altimeter << endl;
+        EV_DEBUG << "==============>> altimeter = " <<altimeter << endl;
 
         if (submFullName.find(std::string("Altimeter")) != std::string::npos) {
            auto altiMobility = check_and_cast<StationaryMobilityBase*> (altimeter->getSubmodule("mobility"));
            auto altimeterLocation = new Coord(altiMobility->getCurrentPosition());
            V_AltimeterLocation.push_back(*altimeterLocation);
-           EV_DETAIL << "==============>> *altimeterLocation = " <<*altimeterLocation << endl;
+           EV_DEBUG << "==============>> *altimeterLocation = " <<*altimeterLocation << endl;
         }
     }
 
     for (auto i = V_AltimeterLocation.begin(); i != V_AltimeterLocation.end(); ++i)
-        EV_DETAIL << *i << " \n";
+        EV_DEBUG << *i << " \n";
 
     // In case no altimeter was found, the previous iterator will just return the last module,
     // so need to double-check
@@ -202,14 +202,14 @@ const Coord& WaicDimensionalAnalogModel::getAltimeterLocation() const {
     auto altiMobility = check_and_cast<StationaryMobilityBase*> (altimeter->getSubmodule("mobility"));
     auto altimeterLocation = new Coord(altiMobility->getCurrentPosition());
 
-    EV_DETAIL << "==============>> *altimeterLocation = " <<*altimeterLocation << endl;
+    EV_DEBUG << "==============>> *altimeterLocation = " <<*altimeterLocation << endl;
 
     return *altimeterLocation;
 }
 
 const std::vector<Coord> WaicDimensionalAnalogModel::getAltimeterLocation_v() const {
 
-    EV_DETAIL << "==============>> Inside getAltimeterLocation_v" << endl;
+    EV_DEBUG << "==============>> Inside getAltimeterLocation_v" << endl;
     std::vector<Coord> V_AltimeterLocation;
     // Find NED network module
     auto simul = cModule::getParentModule()->getParentModule();
@@ -224,12 +224,12 @@ const std::vector<Coord> WaicDimensionalAnalogModel::getAltimeterLocation_v() co
            auto altiMobility = check_and_cast<StationaryMobilityBase*> (altimeter->getSubmodule("mobility"));
            auto altimeterLocation = new Coord(altiMobility->getCurrentPosition());
            V_AltimeterLocation.push_back(*altimeterLocation);
-           //EV_DETAIL << "==============>> *altimeterLocation = " <<*altimeterLocation << endl;
+           //EV_DEBUG << "==============>> *altimeterLocation = " <<*altimeterLocation << endl;
         }
     }
 
     for (auto i = V_AltimeterLocation.begin(); i != V_AltimeterLocation.end(); ++i)
-        EV_DETAIL << *i << " \n";
+        EV_DEBUG << *i << " \n";
 
     // In case no altimeter was found, the previous iterator will just return the last module,
     // so need to double-check
@@ -245,7 +245,7 @@ const std::vector<Coord> WaicDimensionalAnalogModel::getAltimeterLocation_v() co
     auto altiMobility = check_and_cast<StationaryMobilityBase*> (altimeter->getSubmodule("mobility"));
     auto altimeterLocation = new Coord(altiMobility->getCurrentPosition());
 
-//  EV_DETAIL << "==============>> *altimeterLocation = " <<*altimeterLocation << endl;
+//  EV_DEBUG << "==============>> *altimeterLocation = " <<*altimeterLocation << endl;
 //    return *altimeterLocation;
     return V_AltimeterLocation;
 }
@@ -292,7 +292,7 @@ const std::vector<Coord> WaicDimensionalAnalogModel::getAltimeterLocation_v_str(
     }
 
     for (int k=0; k < V_AltimeterLocation.size(); k++){
-        EV_DETAIL << "V_AltimeterLocation[" <<k <<"] = " << V_AltimeterLocation[k]  << endl;
+        EV_DEBUG << "V_AltimeterLocation[" <<k <<"] = " << V_AltimeterLocation[k]  << endl;
     }
     //===========================================================================================================
 
@@ -337,7 +337,7 @@ return Ra_Freq_OffSet;
 
 const bool WaicDimensionalAnalogModel::isAltimeterInterfering(Hz centerFrequency,  Hz bandwidth, simsec startTime, simsec endTime, double RA_OffSet, double Ra_Freq_OffSet) const {
 
-    EV_DETAIL << "==============>> Inside isAltimeterInterfering" << endl;
+    EV_DEBUG << "==============>> Inside isAltimeterInterfering" << endl;
 
     bool Interference_Impact_In_T_forecast=false;
 
@@ -369,20 +369,20 @@ const bool WaicDimensionalAnalogModel::isAltimeterInterfering(Hz centerFrequency
     t_mod_stop=fmod(t_start+RA_OffSet+T_forecast,T_chirp);
     if (T_forecast >= T_chirp){
        // single box - full range:
-       // EV_DETAIL <<"==========>> single box - full range \n";
+       // EV_DEBUG <<"==========>> single box - full range \n";
        f_0_0=f_chirp_min+Ra_Freq_OffSet;
        f_1_0=f_chirp_max+Ra_Freq_OffSet;
     }
     else{
        if (t_mod_stop < t_mod_start){
-           //EV_DETAIL <<"==========>> two boxes \n";
+           //EV_DEBUG <<"==========>> two boxes \n";
            f_0_0=f_chirp_min+Ra_Freq_OffSet;
            f_1_0=f_chirp_min+Ra_Freq_OffSet+Delta_F/T_chirp*t_mod_stop;
            f_0_1=f_chirp_min+Ra_Freq_OffSet+Delta_F/T_chirp*t_mod_start;
            f_1_1=f_chirp_max+Ra_Freq_OffSet;
        }
        else{
-           //EV_DETAIL <<"==========>> single box - extenuated range \n";
+           //EV_DEBUG <<"==========>> single box - extenuated range \n";
            f_0_0=f_chirp_min+Ra_Freq_OffSet+Delta_F/T_chirp*t_mod_start;
            f_1_0=f_chirp_min+Ra_Freq_OffSet+Delta_F/T_chirp*t_mod_stop;
        }
@@ -394,38 +394,38 @@ const bool WaicDimensionalAnalogModel::isAltimeterInterfering(Hz centerFrequency
          (((current_channel_freq+channel_BW/2.0) >= f_0_1 ) &&
          (f_1_1 >= (current_channel_freq-channel_BW/2.0)) ) ){
          Interference_Impact_In_T_forecast=true;
-         //EV_DETAIL <<"=====================================>> RA Interference exists!" <<endl;
+         //EV_DEBUG <<"=====================================>> RA Interference exists!" <<endl;
     }
     else {
-         //EV_DETAIL <<"=====================================>> RA Interference does not exists!" <<endl;
+         //EV_DEBUG <<"=====================================>> RA Interference does not exists!" <<endl;
          Interference_Impact_In_T_forecast=false;
     }
 
-    EV_DETAIL <<"========================================================================" << endl;
-    EV_DETAIL <<"isAltimeterInterfering(...):  Interference_Impact_In_T_forecast = " << Interference_Impact_In_T_forecast << endl;
-    //EV_DETAIL <<"D = " << D <<",  d = " << d <<endl;
-    EV_DETAIL <<"========================================================================" << endl;
-    EV_DETAIL <<"Actual transmission:"<< endl;
-    EV_DETAIL <<"startime        = " << t_start << endl;
-    EV_DETAIL <<"endtime         = " << t_start+T_forecast << endl << endl;
-    EV_DETAIL <<"centerFrequency = " << centerFrequency << endl;
-    EV_DETAIL <<"bandwidth       = " << bandwidth << endl;
-    //EV_DETAIL <<"channel_BW      = " << channel_BW << endl;
-    EV_DETAIL <<"------------------------------------------------------------------------" << endl;
-    EV_DETAIL <<"Actual RA:"<< endl;
-    EV_DETAIL <<"T_chirp         = " << T_chirp  <<" s" << endl;
-    EV_DETAIL <<"f_chirp_min     = " << f_chirp_min <<" Hz" << endl;
-    EV_DETAIL <<"f_chirp_max     = " << f_chirp_max <<" Hz" << endl;
-    EV_DETAIL <<"RA_OffSet       = " << RA_OffSet <<" s" << endl;
-    EV_DETAIL <<"Ra_Freq_OffSet  = " << Ra_Freq_OffSet  <<" Hz" << endl;
-    //EV_DETAIL <<"------------------------------------------------------------------------" << endl;
-    EV_DETAIL <<"T_forecast      = " << T_forecast  <<" s" << endl;
-    EV_DETAIL <<"Delta_F         = " << Delta_F/1e6 <<" MHz" << endl << endl;
-    EV_DETAIL <<"f_0_0 = " << f_0_0/1e6 <<" MHz, f_1_0 = " << f_1_0/1e6 <<" MHz" << endl;
-    EV_DETAIL <<"f_1_0 - f_0_0 = " << (f_1_0 - f_0_0)/1e6 <<" MHz"<< endl;
-    EV_DETAIL <<"f_0_1=" << f_0_1/1e6 <<" MHz, f_1_1=" << f_1_1/1e6 <<" MHz" << endl;
-    EV_DETAIL <<"f_1_1 - f_0_1 = " << (f_1_1 - f_0_1)/1e6 <<" MHz" << endl;
-    EV_DETAIL <<"========================================================================" << endl;
+    EV_DEBUG <<"========================================================================" << endl;
+    EV_DEBUG <<"isAltimeterInterfering(...):  Interference_Impact_In_T_forecast = " << Interference_Impact_In_T_forecast << endl;
+    //EV_DEBUG <<"D = " << D <<",  d = " << d <<endl;
+    EV_DEBUG <<"========================================================================" << endl;
+    EV_DEBUG <<"Actual transmission:"<< endl;
+    EV_DEBUG <<"startime        = " << t_start << endl;
+    EV_DEBUG <<"endtime         = " << t_start+T_forecast << endl << endl;
+    EV_DEBUG <<"centerFrequency = " << centerFrequency << endl;
+    EV_DEBUG <<"bandwidth       = " << bandwidth << endl;
+    //EV_DEBUG <<"channel_BW      = " << channel_BW << endl;
+    EV_DEBUG <<"------------------------------------------------------------------------" << endl;
+    EV_DEBUG <<"Actual RA:"<< endl;
+    EV_DEBUG <<"T_chirp         = " << T_chirp  <<" s" << endl;
+    EV_DEBUG <<"f_chirp_min     = " << f_chirp_min <<" Hz" << endl;
+    EV_DEBUG <<"f_chirp_max     = " << f_chirp_max <<" Hz" << endl;
+    EV_DEBUG <<"RA_OffSet       = " << RA_OffSet <<" s" << endl;
+    EV_DEBUG <<"Ra_Freq_OffSet  = " << Ra_Freq_OffSet  <<" Hz" << endl;
+    //EV_DEBUG <<"------------------------------------------------------------------------" << endl;
+    EV_DEBUG <<"T_forecast      = " << T_forecast  <<" s" << endl;
+    EV_DEBUG <<"Delta_F         = " << Delta_F/1e6 <<" MHz" << endl << endl;
+    EV_DEBUG <<"f_0_0 = " << f_0_0/1e6 <<" MHz, f_1_0 = " << f_1_0/1e6 <<" MHz" << endl;
+    EV_DEBUG <<"f_1_0 - f_0_0 = " << (f_1_0 - f_0_0)/1e6 <<" MHz"<< endl;
+    EV_DEBUG <<"f_0_1=" << f_0_1/1e6 <<" MHz, f_1_1=" << f_1_1/1e6 <<" MHz" << endl;
+    EV_DEBUG <<"f_1_1 - f_0_1 = " << (f_1_1 - f_0_1)/1e6 <<" MHz" << endl;
+    EV_DEBUG <<"========================================================================" << endl;
 
     return Interference_Impact_In_T_forecast;
 }
@@ -441,10 +441,10 @@ const double WaicDimensionalAnalogModel::AltimeterInterferingPower(double distan
     P_rx_dB=P_RA_dBm - ipl_dB;
     P_rx_lin=pow(10.0, P_rx_dB/10.0);
 
-    EV_DETAIL <<"========================================================================" << endl;
-    EV_DETAIL <<"Hello from AltimeterInterferingPower, distance to Altimeter is: " << distance << endl;
-    EV_DETAIL <<"P_rx_dB = " << P_rx_dB <<" dB, P_rx_lin = " << P_rx_lin << endl;
-    EV_DETAIL <<"========================================================================" << endl;
+    EV_DEBUG <<"========================================================================" << endl;
+    EV_DEBUG <<"Hello from AltimeterInterferingPower, distance to Altimeter is: " << distance << endl;
+    EV_DEBUG <<"P_rx_dB = " << P_rx_dB <<" dB, P_rx_lin = " << P_rx_lin << endl;
+    EV_DEBUG <<"========================================================================" << endl;
 
     return P_rx_lin;
 }
