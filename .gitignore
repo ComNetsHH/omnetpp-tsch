@@ -5,8 +5,10 @@ src/Makefile
 *_m.cc
 *_sm.h
 *_sm.cc
-#.oppfeaturestate
-#.nedexclusions
+.oppfeaturestate
+.nedexclusions
+.cproject
+.project
 src/inet/features.h
 src/inet/opp_defines.h
 precompiled_*.h.*
