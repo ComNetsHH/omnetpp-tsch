@@ -294,6 +294,10 @@ void TschMSF::handleMaxCellsReached(cMessage* msg) {
 
     if (usage >= pLimNumCellsUsedHigh && !isLossyLink()) // Avoid attempts to schedule more cells if the lossy-link imitation has started
     {
+
+//        if (!par("scheduleUplinkOnJoin").boolValue() && isLeafNode && rplRank == 2)
+//            return;
+
         addCells(neighborId, pCellIncrement, MAC_LINKOPTIONS_TX, pSend6pDelayed ? uniform(1, 3) : 0); // FIXME: magic numbers
     }
     else if (usage <= pLimNumCellsUsedLow)
@@ -695,8 +699,7 @@ std::vector<offset_t> TschMSF::getAvailableSlotsInRange(int slOffsetEnd) {
 
 int TschMSF::createCellList(uint64_t destId, std::vector<cellLocation_t> &cellList, int numCells)
 {
-    EV_DETAIL << "Creating cell list for " << MacAddress(destId)
-            << "currently occupied slots: " << reservedTimeOffsets[destId] << endl;
+    EV_DETAIL << "Creating cell list for " << MacAddress(destId) << endl;
     Enter_Method_Silent();
 
     if (cellList.size()) {
@@ -731,8 +734,13 @@ int TschMSF::createCellList(uint64_t destId, std::vector<cellLocation_t> &cellLi
             freeSlots = getAvailableSlotsInRange(startOffset > 0 ? startOffset : 0, uplinkSlotOffset);
         } else
         {
+            auto llStartOffset = par("lowLatencyStartingOffset").intValue();
+
             // 1-hop sink neighbors select slot offsets later in the slotframe to facilitate "longer" daisy-chains
-            freeSlots = getAvailableSlotsInRange((int) pSlotframeLength / 2, pSlotframeLength);
+            if (llStartOffset > 0)
+                freeSlots = getAvailableSlotsInRange(llStartOffset, pSlotframeLength);
+            else
+                freeSlots = getAvailableSlotsInRange((int) pSlotframeLength / 2, pSlotframeLength);
         }
     }
     else
@@ -1260,9 +1268,12 @@ void TschMSF::handlePacketEnqueued(uint64_t dest) {
         checkScheduleConsistency(dest);
 
     // Heuristic, checking if there's a dedicated cell to preferred parent whenever a packet is enqueued
-    if ((rplParentId == dest || par("downlinkDedicated").boolValue())
-            && !(!par("scheduleUplinkOnJoin").boolValue() && isLeafNode && rplRank == 2)) // EXPERIMENTAL: forbid leaf nodes (seatbelts) at the sink to schedule uplink
+    if (rplParentId == dest || par("downlinkDedicated").boolValue())
     {
+        // EXPERIMENTAL: forbid leaf nodes (seatbelts) at the sink to schedule uplink
+//        if (!par("scheduleUplinkOnJoin").boolValue() && isLeafNode && rplRank == 2)
+//            return;
+
         auto dedicatedCells = pTschLinkInfo->getDedicatedCells(dest);
 
         if (!dedicatedCells.size() && !pTschLinkInfo->inTransaction(dest)) {
@@ -1366,6 +1377,7 @@ void TschMSF::receiveSignal(cComponent *src, simsignal_t id, long value, cObject
 
     std::string signalName = getSignalName(id);
 
+
     if (std::strcmp(signalName.c_str(), "parentChanged") == 0) {
         auto rplControlInfo = (RplGenericControlInfo*) details;
         handleParentChangedSignal(rplControlInfo->getNodeId());
@@ -1378,13 +1390,12 @@ void TschMSF::receiveSignal(cComponent *src, simsignal_t id, long value, cObject
         return;
     }
 
-
     // CUSTOM ReSA handler procedure
     if (std::strcmp(signalName.c_str(), "rankUpdated") == 0) {
         rplRank = (int) value;
         EV_DETAIL << "Set RPL rank inside SF to " << rplRank << endl;
 
-        // For seatbelts which are not direct neighbors of sink, schedule dedicated cell with the parent
+        // For seatbelts which are not direct neighbors of the sink, schedule dedicated cell with the parent
         // to avoid blocking his auto RX cell when the applications start
         if (!par("scheduleUplinkOnJoin").boolValue() && rplRank > 2) {
             auto dedicatedCells = pTschLinkInfo->getDedicatedCells(rplParentId);

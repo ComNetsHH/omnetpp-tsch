@@ -72,6 +72,7 @@ simple TschMSF like TschSF
 		
 		// Misc
 		bool lowLatencyMode = default(false);
+		int lowLatencyStartingOffset = default(-1);
 		bool scheduleUplinkOnJoin = default(true);
 		
 		bool allowAutoCellDeletion = default(false);
