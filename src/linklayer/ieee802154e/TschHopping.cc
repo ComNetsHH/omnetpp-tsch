@@ -62,16 +62,17 @@ void TschHopping::initialize(int stage)
 
     if (stage == inet::INITSTAGE_LOCAL) {
         const char *patternstr = par("pattern").stringValue();
+        // TODO: how to couple these tighter with radio medium parameters?
         centerFrequency = units::values::Hz(par("centerFrequency"));
-        // TODO: move the radio channels definition either down to radio or to the topmost network module
         numChannels = par("nbRadioChannels").intValue();
 
         if (par("useRandomPattern").boolValue()) {
             std::list<int> l(numChannels);
             std::iota(l.begin(), l.end(), getMinChannel());
             std::copy(l.begin(), l.end(), std::back_inserter(pattern));
-            std::random_device rd;
-            std::mt19937 e{rd()};
+
+            std::mt19937 e((unsigned int) intrand(100));
+
             std::shuffle(pattern.begin(), pattern.end(), e);
 
             EV_DETAIL << "Shuffled hopping pattern: " << pattern << endl;
@@ -92,7 +93,6 @@ int TschHopping::channel(int64_t asn, int channelOffset)
         EV_DETAIL << "Seems channel hopping is disabled" << endl;
         return channelOffset;
     }
-
 
     return pattern[((asn + channelOffset) % pattern.size())];
 }

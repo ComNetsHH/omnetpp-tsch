@@ -51,10 +51,10 @@ class TschHopping: public omnetpp::cSimpleModule, public IChannelPlan
             this->pattern = pattern;
         }
 
+        /** Get the lowest/highest channel number for the given frequency band (WAIC or ISM) */
         virtual int getMinChannel();
         virtual int getMaxChannel();
-        //virtual units::values::Hz getMinCenterFrequency() { return units::values::Hz(2.405e9); }
-        //virtual units::values::Hz getMaxCenterFrequency() { return units::values::Hz(2.405e9); }
+
         virtual units::values::Hz getMinCenterFrequency();
         virtual units::values::Hz getMaxCenterFrequency();
         virtual units::values::Hz getChannelSpacing() { return units::values::Hz(5.0e6); }
