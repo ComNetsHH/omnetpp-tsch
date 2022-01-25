@@ -27,9 +27,9 @@
 
 #include <omnetpp.h>
 
-#include "Tsch6pInterface.h"
-#include "TschLinkInfo.h"
-#include "TschSF.h"
+#include "../Tsch6pInterface.h"
+#include "../TschLinkInfo.h"
+#include "../TschSF.h"
 
 class TschSFX: public TschSF {
 public:

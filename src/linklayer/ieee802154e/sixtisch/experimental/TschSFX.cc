@@ -26,8 +26,8 @@
 #include <stdlib.h>
 #include <numeric>
 #include "inet/networklayer/common/InterfaceTable.h"
-#include "../Ieee802154eMac.h"
-#include "Tsch6topSublayer.h"
+#include "../../Ieee802154eMac.h"
+#include "../Tsch6topSublayer.h"
 
 using namespace tsch;
 using namespace inet;
