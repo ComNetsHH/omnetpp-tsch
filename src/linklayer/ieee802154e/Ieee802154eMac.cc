@@ -610,9 +610,7 @@ int Ieee802154eMac::selectVirtualQueue(MacAddress nbrAddr) {
 void Ieee802154eMac::updateStatusIdle(t_mac_event event, cMessage *msg) {
     switch (event) {
     case EV_TIMER_SLOT: {
-        EV_DETAIL
-                         << "(1) FSM State IDLE_1, EV_TIMER_SLOT: startTimerSlot -> idle."
-                         << endl;
+        EV_DETAIL << "(1) FSM State IDLE_1, EV_TIMER_SLOT: startTimerSlot -> idle." << endl;
         // directly schedule next slot
         startTimer(TIMER_SLOT);
 
@@ -626,7 +624,19 @@ void Ieee802154eMac::updateStatusIdle(t_mac_event event, cMessage *msg) {
         if (!currentLink)
             return;
 
-        currentChannel = hopping->channel(currentAsn, currentLink->getChannelOffset());
+        // Only for 6TiSCH:
+        // If the minimal cell channel offset is set to the maximum value, i.e. highest frequency,
+        // to ensure reliable connectivity, this cell should NOT channel-hop
+        if ((sf && sf->par("minCellChannelOffset").intValue() == 39) // WAIC
+                || (sf && sf->par("minCellChannelOffset").intValue() == 15)) // ISM
+        {
+            if (currentLink->getAddr() == MacAddress::BROADCAST_ADDRESS) // checking if current link is a minimal cell
+                currentChannel = sf->par("minCellChannelOffset").intValue();
+            else
+                currentChannel = hopping->channel(currentAsn, currentLink->getChannelOffset());
+        }
+        else
+            currentChannel = hopping->channel(currentAsn, currentLink->getChannelOffset());
 
         emit(currentFreqSignal, hopping->channelToCenterFrequencyPlain(currentChannel));
 
@@ -741,9 +751,7 @@ void Ieee802154eMac::updateStatusCCA(t_mac_event event, cMessage *msg) {
             isIdle = radio->getReceptionState() == IRadio::RECEPTION_STATE_IDLE;
         }
         if (isIdle) {
-            EV_DETAIL
-                             << "(3) FSM State CCA_3, EV_TIMER_CCA, [Channel Idle]: -> TRANSMITFRAME_4."
-                             << endl;
+            EV_DETAIL << "(3) FSM State CCA_3, EV_TIMER_CCA, [Channel Idle]: -> TRANSMITFRAME_4." << endl;
             updateMacState(TRANSMITFRAME_4);
             radio->setRadioMode(IRadio::RADIO_MODE_TRANSMITTER);
             Packet *mac =  check_and_cast<Packet *>(neighbor->getCurrentNeighborQueueFirstPacket()->dup());
@@ -758,8 +766,7 @@ void Ieee802154eMac::updateStatusCCA(t_mac_event event, cMessage *msg) {
             EV << "Number of transmitted frames: " << nbTxFrames << endl;
         } else {
             // Channel was busy, increment 802.15.4 backoff timers as specified.
-            EV_DETAIL << "(7) FSM State CCA_3, EV_TIMER_CCA, [Channel Busy]: "
-                             << " skipping slot." << endl;
+            EV_DETAIL << "(7) FSM State CCA_3, EV_TIMER_CCA, [Channel Busy]: " << " skipping slot." << endl;
 
             radio->setRadioMode(IRadio::RADIO_MODE_SLEEP);
             manageFailedTX();
@@ -784,12 +791,10 @@ void Ieee802154eMac::updateStatusTransmitFrame(t_mac_event event, cMessage *msg)
     if (!csmaHeader->getDestAddr().isBroadcast() && !csmaHeader->getDestAddr().isMulticast())
     {
         //unicast
-        EV_DETAIL << "(4) FSM State TRANSMITFRAME_4, "
-                         << "EV_FRAME_TRANSMITTED [Unicast]: ";
+        EV_DETAIL << "(4) FSM State TRANSMITFRAME_4, EV_FRAME_TRANSMITTED [Unicast]: ";
     } else {
         //broadcast
-        EV_DETAIL << "(27) FSM State TRANSMITFRAME_4, EV_FRAME_TRANSMITTED "
-                         << " [Broadcast]";
+        EV_DETAIL << "(27) FSM State TRANSMITFRAME_4, EV_FRAME_TRANSMITTED [Broadcast] ";
         expectAck = false;
     }
 
@@ -812,25 +817,15 @@ void Ieee802154eMac::updateStatusWaitAck(t_mac_event event, cMessage *msg) {
     assert(useMACAcks);
     switch (event) {
     case EV_ACK_RECEIVED: {
-        EV_DETAIL << "(5) FSM State WAITACK_5, EV_ACK_RECEIVED: "
-                         << " ProcessAck..." << endl;
+        EV_DETAIL << "(5) FSM State WAITACK_5, EV_ACK_RECEIVED: ProcessAck..." << endl;
         radio->setRadioMode(IRadio::RADIO_MODE_SLEEP);
         if (rxAckTimer->isScheduled())
             cancelEvent(rxAckTimer);
         cMessage *mac = neighbor->getCurrentNeighborQueueFirstPacket();
         neighbor->removeFirstPacketFromQueue();
-        if(neighbor->isDedicated()){
-            if(neighbor->getCurrentNeighborQueueSize() == 0){
-                neighbor->terminateCurrentTschCSMA();
-            }
-            neighbor->reset();
-        }else{
-            neighbor->terminateCurrentTschCSMA();
-        }
-        //PacketDropDetails details;
-        //details.setReason(RETRY_LIMIT_REACHED);
-        //details.setLimit(macMaxFrameRetries);
-        emit(packetSentSignal, mac, nullptr); //&details);
+        neighbor->terminateCurrentTschCSMA();
+        neighbor->reset();
+        emit(packetSentSignal, mac, nullptr);
         delete mac;
         delete msg;
         updateMacState(IDLE_1);
@@ -838,8 +833,7 @@ void Ieee802154eMac::updateStatusWaitAck(t_mac_event event, cMessage *msg) {
     }
     case EV_ACK_TIMEOUT:
         EV_DETAIL << "(12) FSM State WAITACK_5, EV_ACK_TIMEOUT:"
-                         << " start TschCSMA,incrementCounter/dropPacket"
-                         << endl;
+                         << " start TschCSMA,incrementCounter/dropPacket" << endl;
         radio->setRadioMode(IRadio::RADIO_MODE_SLEEP);
 
         if (!neighbor->isDedicated() && !neighbor->getCurrentTschCSMAStatus())
@@ -895,24 +889,23 @@ list<uint64_t> Ieee802154eMac::getNeighborsInRange() {
 
         // look for a WirelessInterface and get it's address
         // TODO currently takes first WirelessInterface, does not filter for interface type
-        if (interfaceModule->getNumInterfaces() > 0) {
+        if (interfaceModule->getNumInterfaces() > 0)
             for (int y = 0; y < interfaceModule->getNumInterfaces(); y++) {
                 if (strcmp(interfaceModule->getInterface(y)->getNedTypeName(), "inet.linklayer.common.WirelessInterface") == 0) {
                     addr = interfaceModule->getInterface(y)->getMacAddress();
                     break;
                 }
             }
-        }
 
         // we found no mac address to use or we found ourself
-        if (addr.isUnspecified() || addr.getInt() == nodeId) {
+        if (addr.isUnspecified() || addr.getInt() == nodeId)
             continue;
-        }
 
         // verify distance to ourself
         if (myCoords.distance(coords) <= range) {
             resultingList.push_back(addr.getInt());
-            EV_DETAIL << "node " << addr.str() << " (" << coords.str() << ") is a neighbor of " << MacAddress(nodeId).str() << " (" << myCoords.str() << ")" << endl;
+            EV_DEBUG << "node " << addr.str() << " (" << coords.str() << ") is a neighbor of "
+                    << MacAddress(nodeId).str() << " (" << myCoords.str() << ")" << endl;
         }
     }
 
@@ -1142,8 +1135,8 @@ void Ieee802154eMac::startTimer(t_mac_timer timer) {
         assert(useMACAcks);
 //        EV_DETAIL << "(startTimer) rxAckTimer value=" << macAckWaitDuration
 //                                 << endl;
-        EV_DEBUG << "(startTimer) rxAckTimer value=" << macTsRxAckDelay + macTsAckWait + macTsMaxAck
-                         << endl;
+        EV_DEBUG << "(startTimer) rxAckTimer value="
+                <<  macTsRxAckDelay + macTsAckWait + macTsMaxAck << endl;
         //scheduleAt(simTime() + macAckWaitDuration, rxAckTimer);
         scheduleAt(simTime() + macTsRxAckDelay + macTsAckWait + macTsMaxAck, rxAckTimer);
     } else if (timer == TIMER_HOPPING) {
