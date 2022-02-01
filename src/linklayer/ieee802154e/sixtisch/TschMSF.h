@@ -138,9 +138,16 @@ class TschMSF: public TschSF, public cListener {
 
         friend std::ostream& operator<<(std::ostream& os, CellStatistic const& stat)
         {
-            os << "TX: " << stat.NumTx
-                    << ", ACKs: " << stat.NumTxAck
-                    << ", RX: " << stat.NumRx << endl;
+//            os << "TX: " << stat.NumTx
+//                    << ", ACKs: " << stat.NumTxAck
+//                    << ", RX: " << stat.NumRx << endl;
+//            return os;
+
+            if (stat.NumTx > 0)
+                os << "PDR: " << (double) stat.NumTxAck / stat.NumTx * 100 << "%";
+            else
+                os << "No packets transmitted";
+
             return os;
         }
     };
@@ -332,6 +339,7 @@ class TschMSF: public TschSF, public cListener {
 
     bool isSink;
 
+    int numCellsRequired; // for delay testing scenarios only
     int pMaxNumCells;
     int pMaxNumTx;
     int tsch6pRtxThresh;

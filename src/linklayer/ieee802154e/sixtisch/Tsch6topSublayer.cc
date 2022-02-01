@@ -844,7 +844,8 @@ Packet* Tsch6topSublayer::handleResponseMsg(Packet* pkt, inet::IntrusivePtr<cons
         }
 
         /* let SF know the transaction it initiated was a success */
-        pTschSF->handleResponse(sender, returnCode, cellList.size(), cellList);
+        // for SF to handle the RELOCATE properly provide the list of to-be-deleted cells rather than newly added ones
+        pTschSF->handleResponse(sender, returnCode, cellList.size(), lastCmd == CMD_RELOCATE ? deleteCells : cellList);
 
         /* tell mac layer to update hopping patterns
            (we can do this here because we will ACK the message we've just

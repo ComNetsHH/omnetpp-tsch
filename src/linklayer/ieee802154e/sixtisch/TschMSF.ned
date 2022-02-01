@@ -21,7 +21,9 @@ simple TschMSF like TschSF
         int numMinCells = default(5); // number of minimal cells (broadcast / control traffic) to schedule
         double upperCellUsageLimit = default(0.75);
         double lowerCellUsageLimit = default(0.25);
-        int housekeepingPeriod @unit("s") = default(60s); // how often should we check cell PDR 	 
+        int housekeepingPeriod @unit("s") = default(60s); // how often should we check cell PDR
+        int housekeepingStart @unit("s") = default(60s);
+         	 
         double relocatePdrThresh = default(0.50); // if cell exhibits PDR worse than this, relocate it!
         int maxNumCells = default(intuniform(4, 10)); // sliding window size to esmitate cell utilization
         int maxNumTx = default(254); // maximum number of elapsed cells to consider for PDR calculation
