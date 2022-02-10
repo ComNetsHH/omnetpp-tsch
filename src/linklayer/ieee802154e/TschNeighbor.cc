@@ -60,12 +60,12 @@ void TschNeighbor::handleMessage(cMessage *msg) {
     throw cRuntimeError("This module doesn't process messages");
 }
 // New virtual queue
-bool TschNeighbor::add2Queue(Packet *packet,MacAddress macAddr, int virtualLinkID) {
+bool TschNeighbor::add2Queue(Packet *packet,MacAddress macAddr, int virtualLinkId) {
     // Priority queue disabled but virtualLinkID modified??
     // Guess: for test purposes, just to toggle the enablePriorityQueue
     // If priority disabled, override the virtualLinkID other than 0 to 0
-    if(!this->enablePriorityQueue && (virtualLinkID == -1))
-        virtualLinkID = 0;
+    if(!this->enablePriorityQueue && (virtualLinkId == -1))
+        virtualLinkId = 0;
 
     bool added = false;
     auto macToQueueEntry = this->macToQueueMap.find(macAddr);
@@ -87,12 +87,13 @@ bool TschNeighbor::add2Queue(Packet *packet,MacAddress macAddr, int virtualLinkI
         macToQueueEntry->second->insert(std::make_pair(-1, createQueue()));
         macToQueueEntry->second->insert(std::make_pair(0, createQueue()));
         macToQueueEntry->second->insert(std::make_pair(1, createQueue()));
-        macToQueueEntry->second->insert(std::make_pair(virtualLinkID, createQueue()));
-        auto searchVirtualQueue = macToQueueEntry->second->find(virtualLinkID);
-        auto virtualQueueSize = (int)(searchVirtualQueue->second->size());
-        EV_DETAIL << "[TschNeighbor] The current queue for this Neighbor is: " << virtualQueueSize << endl;
+        macToQueueEntry->second->insert(std::make_pair(virtualLinkId, createQueue()));
+        auto searchVirtualQueue = macToQueueEntry->second->find(virtualLinkId);
 
-        if (virtualQueueSize < this->queueLength) {
+        auto actualQueueSize = getTotalQueueSizeAt(macAddr);
+        EV_DETAIL << "[TschNeighbor] The current queue for this Neighbor is: " << actualQueueSize << endl;
+
+        if (actualQueueSize < this->queueLength || virtualLinkId == LINK_PRIO_CONTROL) {
             searchVirtualQueue->second->push_back(packet);
             EV_DETAIL << "[TschNeighbor] Packet is added to the queue." << endl;
             added = true;
