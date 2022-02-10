@@ -30,9 +30,9 @@ import inet.networklayer.configurator.ipv6.Ipv6FlatNetworkConfigurator;
 import inet.physicallayer.contract.packetlevel.IRadioMedium;
 import inet.visualizer.contract.IIntegratedVisualizer;
 import inet.node.inet.WirelessHost;
-import rpl.configurator.RplNetConfigurator;
 import rpl.RplRouter;
 import rpl.Rpl;
+import tsch.linklayer.ieee802154e.TschHopping;
 
 network HighDensity
 {
@@ -40,12 +40,12 @@ network HighDensity
         @display("bgb=20,110");
         int numHosts = default(1);
         int numSinks = default(1);
-        int numAltimeters = default(0);
     submodules:
-        configurator: RplNetConfigurator {
+        configurator: Ipv6FlatNetworkConfigurator {
             parameters:
                 @display("p=1013.768,81.872;is=s");
         }
+        channelHopping: TschHopping;
         radioMedium: <> like IRadioMedium {
             parameters:
                 @display("p=1011.36,228.76;is=s");
@@ -59,8 +59,5 @@ network HighDensity
             parameters:
                 @6tisch;
                 @display("r=,,#707070;p=313.04,416.58398");
-        }
-        radioAltimeter[numAltimeters]: RplRouter {
-        	@display("r=,,#707070;p=313.04,416.58398");
         }
 }
