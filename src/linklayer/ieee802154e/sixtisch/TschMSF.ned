@@ -27,10 +27,15 @@ simple TschMSF like TschSF
         double relocatePdrThresh = default(0.50); // if cell exhibits PDR worse than this, relocate it!
         int maxNumCells = default(intuniform(4, 10)); // sliding window size to esmitate cell utilization
         int maxNumTx = default(254); // maximum number of elapsed cells to consider for PDR calculation
+        // determines how much the MAX_NUM_CELLS window size increases with respect to the number of cells scheduled
+        double maxNumCellsScalingFactor = default(10);  
 //        int slotframeLen = default(101);
-        int cellListRedundancy = default(3); // number of additional cells to pad CELL_LIST in 6P transcations
 
-        int cellsToAdd = default(1); // number of cells to add with neighbor if cell usage is excessive
+		// this value + number of cells required = CELL_LIST size in 6P transactions, 
+		// e.g. requesting to schedule 1 cell would result in a 4 + 1 = 5 cells proposed to the neighbor
+        int cellListRedundancy = default(4);   
+
+        int cellsToAdd = default(1); // number of cells to add with neighbor if cell usage exceeds threshold
         bool disable = default(false);
         // determines whether auto TX cells to neighbors are scheduled on demand (per transmission), or globally during initialization stage
         bool clearQueueOnReset = default(false); // if enabled, completely flushes regular queue with a neighbor when the link is reset    
