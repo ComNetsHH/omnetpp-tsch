@@ -3,7 +3,7 @@
  * Stores and handles information about all links maintained by
  * this node.
  *
- * Copyright (C) 2019  Institute of Communication Networks (ComNets),
+ * Copyright (C) 2021  Institute of Communication Networks (ComNets),
  *                     Hamburg University of Technology (TUHH)
  *           (C) 2017  Lotte Steenbrink
  *
@@ -22,6 +22,7 @@
  */
 
 #include "TschLinkInfo.h"
+#include "../../../common/TschUtils.h"
 #include "inet/linklayer/common/MacAddress.h"
 
 Define_Module(TschLinkInfo);
@@ -30,22 +31,30 @@ TschLinkInfo::TschLinkInfo() {
 }
 
 TschLinkInfo::~TschLinkInfo() {
-    // TODO: delete structs in linkInfo
     for (auto& entry: linkInfo) {
         cancelAndDelete(entry.second.tom);
     }
+    linkInfo.clear();
 }
 
 void TschLinkInfo::initialize(int stage) {
     if (stage == 0) {
         sublayerControlOut = findGate("sublayerControlOut");
     }
+//    for (auto li : linkInfo)
+//        WATCH_VECTOR(std::get<1>(li).scheduledCells);
+
+    numScheduleClears = 0;
+
+    WATCH_MAP(linkInfo);
+    WATCH(numScheduleClears);
 }
 
 bool TschLinkInfo::linkInfoExists(uint64_t nodeId) {
     Enter_Method_Silent();
 
     auto it = linkInfo.find(nodeId);
+
     if (it == linkInfo.end()) {
         return false;
     }
@@ -72,26 +81,25 @@ int TschLinkInfo::addLink(uint64_t nodeId, bool inTransaction,
         return -EEXIST;
     }
 
-    linkInfo[nodeId] = {
-        .nodeId = nodeId,
-        .inTransaction = inTransaction,
-        .tom = new tschLinkInfoTimeoutMsg(),
-        .lastKnownSeqNum = lastKnownSeqNum
-    };
-
+    linkInfo[nodeId] = {};
+    linkInfo[nodeId].nodeId = nodeId;
+    linkInfo[nodeId].inTransaction= inTransaction;
+    linkInfo[nodeId].tom = new tschLinkInfoTimeoutMsg();
     linkInfo[nodeId].tom->setNodeId(nodeId);
+    linkInfo[nodeId].lastKnownSeqNum = lastKnownSeqNum;
+    linkInfo[nodeId].lastKnownType = MSG_NONE;
+    linkInfo[nodeId].lastKnownCommand = CMD_NONE;
 
-    if (inTransaction) {
+    if (inTransaction)
         startTimeoutTimer(nodeId, transactionTimeout);
-    }
 
     return 0;
 }
 
 void TschLinkInfo::resetLink(uint64_t nodeId, tsch6pMsg_t lastKnownType) {
+    resetSeqNum(nodeId);
     abortTransaction(nodeId);
     clearCells(nodeId);
-    resetSeqNum(nodeId);
     setLastKnownType(nodeId, lastKnownType);
     setLastLinkOption(nodeId, MAC_LINKOPTIONS_NONE);
 }
@@ -100,23 +108,34 @@ void TschLinkInfo::revertLink(uint64_t nodeId, tsch6pMsg_t lastKnownType) {
     abortTransaction(nodeId);
     setLastKnownType(nodeId, lastKnownType);
     setLastLinkOption(nodeId, MAC_LINKOPTIONS_NONE);
+    EV_DETAIL << "Reverted link with " << MacAddress(nodeId) << endl;
 }
 
 bool TschLinkInfo::inTransaction(uint64_t nodeId) {
     Enter_Method_Silent();
 
-    if (linkInfoExists(nodeId)) {
+    if (linkInfoExists(nodeId))
         return linkInfo[nodeId].inTransaction;
-    }
+
     return false;
+}
+
+int TschLinkInfo::setInTransaction(uint64_t nodeId) {
+    Enter_Method_Silent();
+
+    if (!linkInfoExists(nodeId))
+        return -EINVAL;
+
+    linkInfo[nodeId].inTransaction = true;
+
+    return 0;
 }
 
 int TschLinkInfo::setInTransaction(uint64_t nodeId, simtime_t transactionTimeout) {
     Enter_Method_Silent();
 
-    if (!linkInfoExists(nodeId)) {
+    if (!linkInfoExists(nodeId))
         return -EINVAL;
-    }
 
     linkInfo[nodeId].inTransaction = true;
     startTimeoutTimer(nodeId, transactionTimeout);
@@ -132,7 +151,8 @@ int TschLinkInfo::abortTransaction(uint64_t nodeId) {
     }
 
     if (linkInfo[nodeId].inTransaction) {
-        if (linkInfo[nodeId].tom){
+        EV_DETAIL << "Closing " << getLastKnownCommand(nodeId) << " with " << inet::MacAddress(nodeId) << endl;
+        if (linkInfo[nodeId].tom) {
             linkInfo[nodeId].tom->setSeqNum(linkInfo[nodeId].lastKnownSeqNum);
             cancelEvent(linkInfo[nodeId].tom);
         }
@@ -144,13 +164,11 @@ int TschLinkInfo::abortTransaction(uint64_t nodeId) {
     return 0;
 }
 
-int TschLinkInfo::addCell(uint64_t nodeId, cellLocation_t cell,
-                            uint8_t linkOption) {
+int TschLinkInfo::addCell(uint64_t nodeId, cellLocation_t cell, uint8_t linkOption) {
     Enter_Method_Silent();
 
-    if (!linkInfoExists(nodeId)) {
+    if (!linkInfoExists(nodeId) || isCellAlreadyScheduled(cell.timeOffset, nodeId))
         return -EINVAL;
-    }
 
     std::tuple<cellLocation_t, uint8_t> cellTuple = std::make_tuple(cell, linkOption);
     linkInfo[nodeId].scheduledCells.push_back(cellTuple);
@@ -158,18 +176,26 @@ int TschLinkInfo::addCell(uint64_t nodeId, cellLocation_t cell,
     return 0;
 }
 
-int TschLinkInfo::addCells(uint64_t nodeId, const std::vector<cellLocation_t> &cellList,
-                            uint8_t linkOption) {
+bool TschLinkInfo::isCellAlreadyScheduled(offset_t slotOffset, uint64_t neighborId) {
+    for (auto link : linkInfo[neighborId].scheduledCells)
+        if (std::get<0>(link).timeOffset == slotOffset)
+            return true;
+
+    return false;
+}
+
+int TschLinkInfo::addCells(uint64_t nodeId, const std::vector<cellLocation_t> &cellList, uint8_t linkOption)
+{
     Enter_Method_Silent();
 
-    if (!linkInfoExists(nodeId)) {
+    EV_DETAIL << "Adding cells: " << cellList << " " << printLinkOptions(linkOption) << endl;
+
+    if (!linkInfoExists(nodeId))
         return -EINVAL;
-    }
 
     auto it = cellList.begin();
-    for(; it != cellList.end(); ++it) {
+    for(; it != cellList.end(); ++it)
         addCell(nodeId, *it, linkOption);
-    }
 
     return 0;
 }
@@ -177,13 +203,122 @@ int TschLinkInfo::addCells(uint64_t nodeId, const std::vector<cellLocation_t> &c
 cellVector TschLinkInfo::getCells(uint64_t nodeId) {
     Enter_Method_Silent();
 
-    if (!linkInfoExists(nodeId)) {
+    if (!linkInfoExists(nodeId))
         return {};
-    }
 
-    cellVector cv (linkInfo[nodeId].scheduledCells);
+    cellVector cv(linkInfo[nodeId].scheduledCells);
     return cv;
 }
+
+bool TschLinkInfo::sharedTxScheduled(uint64_t nodeId) {
+    for (auto link: linkInfo[nodeId].scheduledCells) {
+        auto opts = std::get<1>(link);
+        if (getCellOptions_isSHARED(opts) && getCellOptions_isTX(opts))
+            return true;
+    }
+    return false;
+}
+
+std::vector<cellLocation_t> TschLinkInfo::getSharedCellsWith(uint64_t nodeId) {
+    std::vector<cellLocation_t> sharedCells = {};
+
+    for (auto link: linkInfo[nodeId].scheduledCells) {
+        auto opts = std::get<1>(link);
+        if (getCellOptions_isSHARED(opts) && getCellOptions_isTX(opts))
+            sharedCells.push_back(std::get<0>(link));
+    }
+    return sharedCells;
+}
+
+// TODO: refactor to be more clear
+std::vector<cellLocation_t> TschLinkInfo::getCellLocations(uint64_t nodeId) {
+    Enter_Method_Silent();
+
+    if (!linkInfoExists(nodeId))
+        return {};
+
+    std::vector<cellLocation_t> res = {};
+    // DO NOT take the auto-cell, since it may just leave remaining queued packets there for a long time
+    for (auto cell_tuple: linkInfo[nodeId].scheduledCells)
+        if (!getCellOptions_isAUTO(std::get<1>(cell_tuple)))
+            res.push_back(std::get<0>(cell_tuple));
+
+    return res;
+}
+
+cellVector TschLinkInfo::getMinimalCells() {
+    return linkInfo[inet::MacAddress::BROADCAST_ADDRESS.getInt()].scheduledCells;
+}
+
+cellListVector TschLinkInfo::getMinimalCells(offset_t slotOffset) {
+    auto minCellLinks = getMinimalCells();
+    cellListVector cv = {};
+    for (auto mc : minCellLinks) {
+        if (std::get<0>(mc).timeOffset == slotOffset)
+            cv.push_back(std::get<0>(mc));
+    }
+
+    return cv;
+}
+
+std::vector<cellLocation_t> TschLinkInfo::getCellList(uint64_t nodeId) {
+    Enter_Method_Silent();
+
+    if (!linkInfoExists(nodeId))
+        return {};
+
+    std::vector<cellLocation_t> cellList = {};
+    for (auto cellInfo : linkInfo[nodeId].scheduledCells)
+        cellList.push_back(std::get<0>(cellInfo));
+
+    return cellList;
+}
+
+//std::vector<cellLocation_t> TschLinkInfo::getDedicatedTxCells(uint64_t nodeId) {
+//    std::vector<cellLocation_t> res = {};
+//
+//    for (auto link : linkInfo[nodeId].scheduledCells) {
+//        auto cellOp = std::get<1>(link);
+//        if (getCellOptions_isTX(cellOp) && !getCellOptions_isAUTO(cellOp) && !getCellOptions_isSHARED(cellOp))
+//            res.push_back(std::get<0>(link));
+//    }
+//
+//    return res;
+//}
+
+std::vector<cellLocation_t> TschLinkInfo::getDedicatedCells(uint64_t nodeId, bool requireRx) {
+    std::vector<cellLocation_t> res = {};
+
+    for (auto link : linkInfo[nodeId].scheduledCells) {
+        auto cellOp = std::get<1>(link);
+        if (getCellOptions_isAUTO(cellOp) || getCellOptions_isSHARED(cellOp))
+            continue;
+
+        if (requireRx && getCellOptions_isRX(cellOp))
+            res.push_back(std::get<0>(link));
+
+        if (!requireRx && getCellOptions_isTX(cellOp))
+            res.push_back(std::get<0>(link));
+    }
+
+    return res;
+}
+
+std::vector<cellLocation_t> TschLinkInfo::getCellsByType(uint64_t nodeId, uint8_t requiredCellType) {
+    std::vector<cellLocation_t> res = {};
+
+    for (auto link : linkInfo[nodeId].scheduledCells) {
+        auto cellOp = std::get<1>(link);
+        if (getCellOptions_isTX(cellOp) && requiredCellType == MAC_LINKOPTIONS_TX)
+            res.push_back(std::get<0>(link));
+        if (getCellOptions_isRX(cellOp) && requiredCellType == MAC_LINKOPTIONS_RX)
+            res.push_back(std::get<0>(link));
+    }
+
+    return res;
+}
+
+
 
 uint8_t TschLinkInfo::getCellOptions(uint64_t nodeId, cellLocation_t candidate) {
     Enter_Method_Silent();
@@ -216,13 +351,16 @@ int TschLinkInfo::getNumCells(uint64_t nodeId) {
 
 uint64_t TschLinkInfo::getNodeOfCell(cellLocation_t candidate) {
     /* loop through all links */
-    for(auto & info: linkInfo) {
+    for (auto & info: linkInfo) {
+
         auto it = std::find_if(info.second.scheduledCells.begin(), info.second.scheduledCells.end(),
-                       [candidate](const std::tuple<cellLocation_t, uint8_t> & t) -> bool {
-                         return std::get<0>(t) == candidate; });
-        if (it != info.second.scheduledCells.end()) {
+               [candidate](const std::tuple<cellLocation_t, uint8_t> & t) -> bool {
+                 return std::get<0>(t) == candidate;
+            }
+        );
+
+        if (it != info.second.scheduledCells.end())
             return info.first;
-        }
     }
 
     return 0;
@@ -231,47 +369,58 @@ uint64_t TschLinkInfo::getNodeOfCell(cellLocation_t candidate) {
 void TschLinkInfo::clearCells(uint64_t nodeId) {
     Enter_Method_Silent();
 
-    if (linkInfoExists(nodeId)) {
-        EV_INFO << "clearing cells scheduled with " << inet::MacAddress(nodeId).str() << endl;
-        linkInfo[nodeId].scheduledCells.erase(
-            std::remove_if(
-                linkInfo[nodeId].scheduledCells.begin(),
-                linkInfo[nodeId].scheduledCells.end(),
-                [](decltype(linkInfo[nodeId].scheduledCells)::value_type l) -> bool {
-                    return !getCellOptions_isAUTO(std::get<1>(l));
-                }
-            ),
-            linkInfo[nodeId].scheduledCells.end()
-        );
-    } else {
-        EV_WARN << "instructed to clear but no linkInfo exists" << endl;
+    if (!linkInfoExists(nodeId)) {
+        EV_WARN << "Instructed to clear but no linkInfo exists" << endl;
+        return;
     }
+
+    EV_INFO << "Clearing cells scheduled with " << inet::MacAddress(nodeId)
+        << "\nBefore erasure: " << linkInfo[nodeId].scheduledCells << endl;
+
+    linkInfo[nodeId].scheduledCells.erase(
+        std::remove_if( linkInfo[nodeId].scheduledCells.begin(), linkInfo[nodeId].scheduledCells.end(),
+            [] (decltype(linkInfo[nodeId].scheduledCells)::value_type link) -> bool {
+                return !getCellOptions_isAUTO(std::get<1>(link));
+            }
+        ),
+        linkInfo[nodeId].scheduledCells.end()
+    );
+
+    EV_DETAIL << "After: " << linkInfo[nodeId].scheduledCells << endl;
+
+    numScheduleClears++;
 }
 
-void TschLinkInfo::deleteCells(uint64_t nodeId, const std::vector<cellLocation_t> &cellList,
-                                uint8_t linkOption) {
+void TschLinkInfo::deleteCells(uint64_t nodeId, const std::vector<cellLocation_t> &cellList, uint8_t linkOption) {
     Enter_Method_Silent();
 
-    if (linkInfoExists(nodeId)) {
-        cellVector scheduledCells = linkInfo[nodeId].scheduledCells;
-        EV_INFO << "deleting cells scheduled with " << inet::MacAddress(nodeId).str() << ": ";
-        auto it = cellList.begin();
-        for(; (it != cellList.end()); ++it) {
-            EV_INFO << "(" << it->timeOffset << "," << it->channelOffset << ") ";
-            auto elem = std::find_if(scheduledCells.begin(), scheduledCells.end(), [it](decltype(scheduledCells)::value_type a) -> bool {
-                return std::get<0>(a) == *it;
-            });
+    if (cellList.empty())
+        return;
 
-            if (elem != scheduledCells.end()) {
-                scheduledCells.erase(elem);
-            } else {
-                EV_WARN << "instructed to delete but not found" << endl;
-            }
-        }
-        EV_INFO << endl;
-    } else {
-        EV_WARN << "instructed to delete but no linkInfo exists" << endl;
+    EV_DETAIL << "Deleting cells scheduled with " << inet::MacAddress(nodeId) << " : " << cellList << endl;
+
+    if (!linkInfoExists(nodeId)) {
+        EV_WARN << "No linkInfo found" << endl;
+        return;
     }
+
+    cellVector *scheduledCells = &(linkInfo[nodeId].scheduledCells); // TODO: replace with a proper getter method
+
+    auto it = cellList.begin();
+    for(; it != cellList.end(); ++it)
+    {
+        auto elem = std::find_if(scheduledCells->begin(), scheduledCells->end(),
+                        [it](std::tuple<cellLocation_t, uint8_t> link) -> bool {
+            return std::get<0>(link) == *it;
+        });
+
+        if (elem != scheduledCells->end())
+            scheduledCells->erase(elem);
+        else
+            EV_WARN << "Instructed to delete cell " << *it << " but not found" << endl;
+    }
+
+    EV_DETAIL << "Scheduled cells after erasure:\n" << *scheduledCells << endl;
 }
 
 bool TschLinkInfo::timeOffsetScheduled(offset_t timeOffset) {
@@ -280,9 +429,10 @@ bool TschLinkInfo::timeOffsetScheduled(offset_t timeOffset) {
     /* loop through all links */
     for(auto & info: linkInfo) {
         auto it = std::find_if(info.second.scheduledCells.begin(), info.second.scheduledCells.end(),
-                          [timeOffset](const std::tuple<cellLocation_t, uint8_t> & t) -> bool {
-                            cellLocation_t cell = std::get<0>(t);
-                            return cell.timeOffset == timeOffset; });
+          [timeOffset] (const std::tuple<cellLocation_t, uint8_t> & t) -> bool {
+            return std::get<0>(t).timeOffset == timeOffset;
+        });
+
         if (it != info.second.scheduledCells.end()) {
             return true;
         }
@@ -291,23 +441,21 @@ bool TschLinkInfo::timeOffsetScheduled(offset_t timeOffset) {
     return false;
 }
 
-bool TschLinkInfo::cellsInSchedule(uint64_t nodeId,
-                                   std::vector<cellLocation_t> &cellList,
-                                   uint8_t linkOption) {
+bool TschLinkInfo::cellsInSchedule(uint64_t nodeId, std::vector<cellLocation_t> &cellList, uint8_t linkOption)
+{
     Enter_Method_Silent();
 
     bool inSchedule = false;
 
-    if (linkInfoExists(nodeId)) {
-        inSchedule = true;
-        cellVector scheduledCells = linkInfo[nodeId].scheduledCells;
-        std::vector<cellLocation_t>::iterator it;
-        for(it = cellList.begin();
-            (it != cellList.end()) && (inSchedule == true); ++it) {
-            auto currCell = std::make_tuple(*it, linkOption);
-            inSchedule = std::find(scheduledCells.begin(), scheduledCells.end(),
-                                   currCell) != scheduledCells.end();
-        }
+    if (linkInfo.find(nodeId) == linkInfo.end())
+        return false;
+
+    inSchedule = true;
+    cellVector scheduled = linkInfo[nodeId].scheduledCells;
+//    std::vector<cellLocation_t>::iterator it;
+    for (auto it = cellList.begin(); it != cellList.end() && inSchedule; ++it) {
+        auto currCell = std::make_tuple(*it, linkOption);
+        inSchedule = std::find(scheduled.begin(), scheduled.end(), currCell) != scheduled.end();
     }
 
     return inSchedule;
@@ -318,13 +466,11 @@ int TschLinkInfo::setRelocationCells(uint64_t nodeId,
                                      uint8_t linkOption) {
     Enter_Method_Silent();
 
-    if (!linkInfoExists(nodeId)) {
+    if (!linkInfoExists(nodeId))
         return -EINVAL;
-    }
-    if ((linkInfo[nodeId].relocationCells.size() != 0) ||
-        (linkInfo[nodeId].inTransaction == true)) {
+
+    if (linkInfo[nodeId].relocationCells.size() || linkInfo[nodeId].inTransaction)
         return -EINVAL;
-    }
 
     for (auto cell: cellList) {
         auto cellTuple = std::make_tuple(cell, linkOption);
@@ -348,26 +494,34 @@ std::vector<cellLocation_t> TschLinkInfo::getRelocationCells(uint64_t nodeId) {
     return result;
 }
 
-int TschLinkInfo::relocateCells(uint64_t nodeId, std::vector<cellLocation_t> &newCells,
-                                uint8_t linkOption) {
+int TschLinkInfo::relocateCells(uint64_t nodeId, std::vector<cellLocation_t> &newCells, uint8_t linkOption)
+{
     Enter_Method_Silent();
 
     if (!linkInfoExists(nodeId)) {
-        return -EINVAL;
-    }
-    if ((linkInfo[nodeId].inTransaction == false) ||
-            (linkInfo[nodeId].inTransaction == true &&
-            linkInfo[nodeId].lastKnownCommand != CMD_RELOCATE) ) {
+        EV_DETAIL << "Cannot relocate, link info for this node doesn't exist!" << endl;
         return -EINVAL;
     }
 
-    cellVector scheduledCells  = linkInfo[nodeId].scheduledCells;
-    cellVector relocationCells = linkInfo[nodeId].relocationCells;
-    /* remove the first n cells that were nominated for relocation */
-    for(int i = 0; i < (int)newCells.size(); ++i) {
-        scheduledCells.erase(std::find(scheduledCells.begin(),
-                             scheduledCells.end(), relocationCells[i]));
+    if (!linkInfo[nodeId].inTransaction || (linkInfo[nodeId].inTransaction && linkInfo[nodeId].lastKnownCommand != CMD_RELOCATE)) {
+        EV_DETAIL << "We are either not in transaction with this node, or last command wasn't RELOCATE" << endl;
+        return -EINVAL;
     }
+
+//    cellVector scheduledCells  = linkInfo[nodeId].scheduledCells;
+    cellVector relocationCells = linkInfo[nodeId].relocationCells;
+
+//    EV_DETAIL << "Relocating cells:""\n newCells: " << newCells << "\nscheduledCells:\n"
+//            << scheduledCells << "\nrelocationCells: " << relocationCells << endl;
+
+    /* remove the first n cells that were nominated for relocation */
+    for (int i = 0; i < (int) newCells.size(); ++i) {
+        linkInfo[nodeId].scheduledCells.erase(std::find(
+                linkInfo[nodeId].scheduledCells.begin(), linkInfo[nodeId].scheduledCells.end(), relocationCells[i]));
+    }
+
+//    EV_DETAIL << "scheduledCells after erasing " << newCells.size() << " relocationCells: " << scheduledCells << endl;
+
     /* add the new cells to our schedule */
     addCells(nodeId, newCells, linkOption);
     /* reset the record of cells nominated for relocation */
@@ -476,32 +630,49 @@ uint8_t TschLinkInfo::getLastLinkOption(uint64_t nodeId) {
 }
 
 void TschLinkInfo::startTimeoutTimer(uint64_t nodeId, simtime_t timeout) {
-    if (linkInfoExists(nodeId)) {
-        linkInfo[nodeId].tom->setSeqNum(linkInfo[nodeId].lastKnownSeqNum);
-        if (linkInfo[nodeId].tom->isScheduled()) {
-            EV_WARN << "tschLinkInfoTimeoutMsg still scheduled, unsure if bug?" << endl;
-            cancelEvent(linkInfo[nodeId].tom);
-        }
-        scheduleAt(timeout, linkInfo[nodeId].tom);
+    if (!linkInfoExists(nodeId)) {
+        EV_WARN << "Tried scheduling timeout timer, but no link info found for " << inet::MacAddress(nodeId) << endl;
+        return;
     }
+
+    if (!linkInfo[nodeId].tom) {
+        linkInfo[nodeId].tom = new tschLinkInfoTimeoutMsg();
+        linkInfo[nodeId].tom->setNodeId(nodeId);
+    }
+
+    linkInfo[nodeId].tom->setSeqNum(linkInfo[nodeId].lastKnownSeqNum);
+    if (linkInfo[nodeId].tom->isScheduled()) {
+        EV_WARN << "tschLinkInfoTimeoutMsg still scheduled, unsure if bug?" << endl;
+        cancelEvent(linkInfo[nodeId].tom);
+    }
+
+    EV_DETAIL << "Scheduling timeout msg at " << timeout <<  "s for transaction to " << inet::MacAddress(nodeId) << endl;
+
+    scheduleAt(timeout, linkInfo[nodeId].tom);
 }
 
 void TschLinkInfo::handleMessage(cMessage *msg) {
     tschLinkInfoTimeoutMsg* tom = dynamic_cast<tschLinkInfoTimeoutMsg*> (msg);
 
     if (tom && msg->isSelfMessage()) {
-        /* time hath runneth out, abort transaction */
-        const char* w = ("transaction with " + std::to_string(tom->getNodeId()) + " timed out").c_str();
+        EV_DETAIL << "TschLinkInfo received timeout msg" << endl;
+        /* Abort transaction due to timeout */
+//        auto type = to_string(linkInfo[tom->getNodeId()].lastKnownType);
+//        auto cmd = to_string(linkInfo[tom->getNodeId()].lastKnownCommand);
+//        auto seqNum = linkInfo[tom->getNodeId()].lastKnownSeqNum;
+
+//        auto wstr = tsch::string_format("%s %s, seqNum %d with %s has timed out", type, cmd, seqNum, inet::MacAddress(tom->getNodeId()).str());
+
+//        const char* w = (" with " + inet::MacAddress(tom->getNodeId()).str() + " timed out").c_str();
         //opp_warning(w);
-        EV_WARN << w << endl;
-        /* forward msg to sublayer so it can react properly */
+//        EV_WARN << wstr << endl;
+        /* Forward msg to sublayer so it can react properly */
         send(tom->dup(), sublayerControlOut);
 
         abortTransaction(tom->getNodeId());
     }
-    else {
+    else
         delete msg;
-    }
 }
 
 bool TschLinkInfo::matchingTimeOffset(std::tuple<cellLocation_t, uint8_t> const& obj,

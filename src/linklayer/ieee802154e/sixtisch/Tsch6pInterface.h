@@ -3,7 +3,7 @@
  * Interface for a 6P implementation. Used to enable Scheduling Function
  * implementations to send messages via the Tsch6topSublayer they are a part of.
  *
- * Copyright (C) 2019  Institute of Communication Networks (ComNets),
+ * Copyright (C) 2021  Institute of Communication Networks (ComNets),
  *                     Hamburg University of Technology (TUHH)
  *           (C) 2017  Lotte Steenbrink
  *
@@ -40,7 +40,7 @@ public:
      * @param timeout      Timespan in ms after which a response is
      *                     expected at the latest
      */
-    virtual void sendAddRequest(uint64_t destId, uint8_t cellOptions, int numCells,
+    virtual bool sendAddRequest(uint64_t destId, uint8_t cellOptions, int numCells,
                         std::vector<cellLocation_t> &cellList, int timeout) = 0;
 
     /**
@@ -55,7 +55,7 @@ public:
      *                     expected at the latest
      */
     virtual void sendDeleteRequest(uint64_t destId, uint8_t cellOptions, int numCells,
-                           std::vector<cellLocation_t> &cellList, int timeout) = 0;
+                           std::vector<cellLocation_t> cellList, int timeout) = 0;
 
     /**
      * @brief Send a 6P Relocation request.

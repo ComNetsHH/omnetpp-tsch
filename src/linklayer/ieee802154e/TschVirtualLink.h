@@ -1,7 +1,7 @@
 /*
  * Simulation model for IEEE 802.15.4 Time Slotted Channel Hopping (TSCH)
  *
- * Copyright (C) 2019  Institute of Communication Networks (ComNets),
+ * Copyright (C) 2021  Institute of Communication Networks (ComNets),
  *                     Hamburg University of Technology (TUHH)
  *           (C) 2019  Leo Krueger, Louis Yin
  *           (C) 2004-2006 Andras Varga
@@ -25,6 +25,13 @@
 #define __TSCH_TSCHVIRTUALLINK_H
 
 #include "TschLink.h"
+
+typedef enum VirtualLinkPriorities {
+    LINK_PRIO_CONTROL = -2,
+    LINK_PRIO_HIGH = -1,
+    LINK_PRIO_NORMAL = 0,
+    LINK_PRIO_LOW = 1
+} linkPrio_t;
 
 namespace tsch {
 

@@ -1,7 +1,7 @@
 /*
  * Simulation model for IEEE 802.15.4 Time Slotted Channel Hopping (TSCH)
  *
- * Copyright   (C) 2019  Institute of Communication Networks (ComNets),
+ * Copyright   (C) 2021  Institute of Communication Networks (ComNets),
  *                       Hamburg University of Technology (TUHH)
  *                       Leo Krueger, Louis Yin
  *
@@ -37,13 +37,20 @@
 #include "inet/linklayer/common/MacAddress.h"
 #include "inet/linklayer/contract/IMacProtocol.h"
 #include "inet/physicallayer/contract/packetlevel/IRadio.h"
+#include "inet/physicallayer/common/packetlevel/MediumLimitCache.h"
+#include "inet/networklayer/common/InterfaceTable.h"
 #include "TschSlotframe.h"
 #include "Ieee802154eASN.h"
 #include "TschHopping.h"
 #include "TschNeighbor.h"
+#include "sixtisch/TschSF.h"
 #include "inet/common/Units.h"
+#include <vector>
+#include <tuple>
+#include "sixtisch/Tsch6tischComponents.h"
 
 using namespace inet;
+using namespace std;
 
 namespace tsch {
 
@@ -56,10 +63,25 @@ namespace tsch {
 class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
 {
   public:
+
+    class MacGenericInfo : public cObject {
+        private:
+            uint64_t nodeId;
+
+        public:
+            MacGenericInfo() {}
+            MacGenericInfo(uint64_t nodeId) { this->nodeId = nodeId; }
+
+            uint64_t getNodeId() { return this->nodeId; }
+            void setNodeId(uint64_t nodeId) { this->nodeId = nodeId; }
+    };
+
     Ieee802154eMac()
         : MacProtocolBase()
         , nbTxFrames(0)
         , nbRxFrames(0)
+        , udpSentCtn(0)
+        , udpDroppedCtn(0)
         , nbMissedAcks(0)
         , nbRecvdAcks(0)
         , nbDroppedFrames(0)
@@ -72,13 +94,17 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
         , status(STATUS_OK)
         , radio(nullptr)
         , transmissionState(inet::physicallayer::IRadio::TRANSMISSION_STATE_UNDEFINED)
-        , sifs()
-        , macAckWaitDuration()
+        //, sifs()
+        , macTsTxAckDelay()
+        //, macAckWaitDuration()
+        , macTsRxAckDelay()
+        , macTsAckWait()
+        , macTsMaxAck()
         , headerLength(0)
         , transmissionAttemptInterruptedByRx(false)
         , ccaDetectionTime()
         , rxSetupTime()
-        , aTurnaroundTime()
+        , macTsRxTx()
         , channelSwitchingTime()
         , macMaxFrameRetries(0)
         , useMACAcks(false)
@@ -87,10 +113,13 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
         , NB(0)
         , txAttempts(0)
         , bitrate(0)
+        , pLinkCollision(-1)
         , ackLength(0)
         , ackMessage(nullptr)
         , SeqNrParent()
         , SeqNrChild()
+        , wrr_be_ctn(0)
+        , wrr_np_ctn(0)
     {
     }
 
@@ -112,6 +141,8 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
 
     virtual bool isUpperMessage(cMessage *message) override;
 
+    virtual bool isControlPacket(Packet *packet);
+
     /** @brief Handle messages from lower layer */
     virtual void handleLowerPacket(inet::Packet *packet) override;
 
@@ -128,10 +159,47 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
 
     void sendUp(cMessage *message) override;
 
+    InterfaceEntry *getInterfaceEntry();
+
+    // Get current cell frequency based on ASN, required for radio altimeter interference calculation
+    units::values::Hz getCurrentFrequency();
+
     // OperationalBase:
     virtual void handleStartOperation(inet::LifecycleOperation *operation) override {}    //TODO implementation
     virtual void handleStopOperation(inet::LifecycleOperation *operation) override {}    //TODO implementation
     virtual void handleCrashOperation(inet::LifecycleOperation *operation) override {}    //TODO implementation
+
+    simsignal_t pktRecFromUpperSignal; // emitted when packet is received from upper layers
+    simsignal_t highPrioQueueOverflowSignal;
+
+    // Utility
+    list<uint64_t> getNeighborsInRange(); // get list of neighbors based on maximum communication range
+
+    vector<tuple<int, int>> getQueueSizes(MacAddress neighbor, vector<int> virtualLinkIds = {-1, 0});
+    virtual void flushQueue(MacAddress neighborAddr, int vlinkId);
+    virtual void flush6pQueue(MacAddress neighborAddr);
+
+    /**
+     * Compute queue utilization as number of packets in queue / queue size
+     *
+     * @param neighbor neighbor MAC address to compute the queue size for
+     *
+     * @return queue utilization
+     */
+    double getQueueUtilization(MacAddress nbrAddr);
+    double getQueueUtilization(MacAddress nbrAddr, int virtualLinkId);
+
+    /**
+     * Get maximum possible backoff interval, i.e. each retry draws a maximum backoff
+     */
+    int getMacMaxBackoff();
+
+    int getQueueSize(MacAddress nbrAddr);
+
+    // See the same method in TschNeighbor
+    void terminateTschCsmaWith(MacAddress nbrAddr) {
+        neighbor->terminateTschCsmaWith(nbrAddr);
+    }
 
   protected:
     /** @name Different tracked statistics.*/
@@ -147,6 +215,11 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
     double backoffValues;
     /*@}*/
 
+    bool isSink; // root of RPL DODAG
+
+    int udpSentCtn;
+    int udpDroppedCtn;
+
     /** @brief MAC states
      * see states diagram.
      */
@@ -160,6 +233,22 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
         WAITSIFS_7,
         TRANSMITACK_8
     };
+
+    friend std::ostream& operator<<(std::ostream& out, const t_mac_states state) {
+        const char* s = 0;
+        switch(state) {
+            PRINT_ENUM(IDLE_1, s);
+            PRINT_ENUM(HOPPING_2, s);
+            PRINT_ENUM(CCA_3, s);
+            PRINT_ENUM(TRANSMITFRAME_4, s);
+            PRINT_ENUM(WAITACK_5, s);
+            PRINT_ENUM(RECEIVEFRAME_6, s);
+            PRINT_ENUM(WAITSIFS_7, s);
+            PRINT_ENUM(TRANSMITACK_8, s);
+        }
+        return out << s;
+    }
+
 
     /*************************************************************/
     /****************** TYPES ************************************/
@@ -196,7 +285,8 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
         EV_TIMER_CCA,
         EV_TIMER_SLOT,
         EV_TIMER_HOPPING,
-        EV_TIMER_SLOTEND
+        EV_TIMER_SLOTEND,
+        MAC_ENABLE_DROPS // TEST EVENT, not part of the normal MAC operation, enable packet drops after a timeout
     };
 
     /** @brief Types for frames sent by the CSMA.*/
@@ -255,7 +345,8 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
      * Usually this is slightly more then the tx-rx turnaround time
      * The channel should stay clear within this period of time.
      */
-    omnetpp::simtime_t sifs;
+    //omnetpp::simtime_t sifs;
+    omnetpp::simtime_t macTsTxAckDelay;
 
     /** @brief timeslot length
      *
@@ -267,7 +358,13 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
     bool useCCA;
 
     /** @brief The amount of time the MAC waits for the ACK of a packet.*/
-    omnetpp::simtime_t macAckWaitDuration;
+    //omnetpp::simtime_t macAckWaitDuration;
+    /** @brief The amount of offset time the Tx MAC waits for the ACK of a packet.*/
+    omnetpp::simtime_t macTsRxAckDelay;
+    /** @brief The amount of time the MAC waits for the ACK of a packet.*/
+    omnetpp::simtime_t macTsAckWait;
+    /** @brief The amount of time the ACK needs to be transmitted completly.*/
+    omnetpp::simtime_t macTsMaxAck;
 
     /** @brief Length of the header*/
     int headerLength;
@@ -278,12 +375,14 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
     /** @brief Time to setup radio from sleep to Rx state */
     omnetpp::simtime_t rxSetupTime;
     /** @brief Time to switch radio from Rx to Tx state */
-    omnetpp::simtime_t aTurnaroundTime;
+    omnetpp::simtime_t macTsRxTx;
     omnetpp::simtime_t channelSwitchingTime;
     /** @brief maximum number of frame retransmissions without ack */
     unsigned int macMaxFrameRetries;
     /** @brief Stores if the MAC expects Acks for Unicast packets.*/
     bool useMACAcks;
+
+    bool ignoreBitErrors;
 
     /** @brief Defines the backoff method to be used.*/
     backoff_methods backoffMethod;
@@ -320,23 +419,56 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
     cProperty *statisticTemplate;
 
     std::vector<simsignal_t> channelSignals;
+    simsignal_t pktEnqueuedSignal;
+    simsignal_t currentFreqSignal; // ping current frequency to RPL
 
     std::vector<std::string> registeredSignals;
 
     TschNeighbor *neighbor;
     TschSlotframe *schedule;
     Ieee802154eASN asn;
+    TschSF *sf;
 
     int64_t currentAsn;
     TschLink *currentLink;
     int currentChannel;
 
+    double pLinkCollision;
+
+    class MacHeaderAddresses : public cObject {
+        private:
+            MacAddress src;
+            MacAddress dest;
+
+        public:
+            MacHeaderAddresses() {}
+            MacHeaderAddresses(MacAddress src, MacAddress dest) {
+                this->src = src;
+                this->dest = dest;
+            }
+
+            friend ostream& operator<<(ostream& os, MacHeaderAddresses mc)
+            {
+                os << mc.src << " =>" << mc.dest;
+                return os;
+            }
+
+            friend bool operator< (const MacHeaderAddresses& mc1, const MacHeaderAddresses& mc2) {
+                return mc1.src < mc2.src;
+            }
+            friend bool operator== (const MacHeaderAddresses& mc1, const MacHeaderAddresses& mc2) {
+                return mc1.src == mc2.src && mc1.dest == mc2.dest;
+            }
+    };
+
+    map<MacHeaderAddresses, int> packetsIncorrectlyReceived;
+
+    void recordIncorrectlyReceived(Packet *packet);
+
   protected:
-    /** @brief Generate new interface address*/
+    /** @brief Generate new interface addres*/
     virtual void configureInterfaceEntry() override;
     virtual void handleCommand(omnetpp::cMessage *msg) {}
-
-    virtual void flushQueue();
 
     virtual void emitSignal(signal_names signalName);
 
@@ -370,6 +502,24 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
 
     omnetpp::simtime_t scheduleSlot();
 
+    int getVirtualLinkId(TschLink* link);
+
+    /**
+     * --Yevhenii
+     *
+     * Custom functions to handle cell overlapping in time.
+     *
+     * Select current active link by iterating through all links / cells
+     * and applying the following "priorities", rather than selecting the first one found:
+     *  1. Dedicated TX link with non-empty queue (if @param prioAppData is true)
+     *  2. Shared TX link with non-empty queue
+     *  3. Random RX link
+     *
+     *  @param links list of all links scheduled with neigbhors
+     *  @return link selected to be active for current ASN
+     */
+    TschLink* selectActiveLink(std::vector<TschLink*> links);
+
     virtual void decapsulate(inet::Packet *packet);
 
     inet::Packet *ackMessage;
@@ -380,6 +530,40 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
 
     //sequence numbers for receiving
     std::map<inet::MacAddress, std::map<int, unsigned long>> SeqNrChild;    //child -> sequence number
+
+    // Util
+    list<MacAddress> neighbors; // list of neighbors MAC addresses
+    bool artificiallyDropAppPacket(Packet *packet);
+
+    bool drop6pPacket(Packet *packet, std::string cmdType, std::string pktType);
+
+
+    /**
+     * Determine whether a packet belongs to IPv6, IPv6 Neighbor Discovery or RPL control packets based on its name
+     *
+     * @param packetName name of the packet to check its affiliation
+     */
+    bool isControlPacket(std::string packetName);
+
+    //
+    // Hybrid Priority Queueing
+    //
+
+    // Weighted Round Robin (WRR) scheduler parameters
+    bool wrr_enabled;
+    int w_np;       // weight of normal priority (NP) packets
+    int wrr_np_ctn; // counter for number of NP packets transmitted
+    int w_be;       // weight of best-effort (BE) packets
+    int wrr_be_ctn; // counter for number of BE packets transmitted
+
+    /**
+     * Select one of the virtual queues on the link with neighbor following the priorities and
+     * WRR weights. The packet taken from the selected queue is transmitted in the current cell
+     *
+     * @param neighbor MAC address of the neighbor with whom the current active cell (based on ASN) is scheduled
+     */
+    int selectVirtualQueue(MacAddress neighbor);
+
 
   private:
     /** @brief Copy constructor is not allowed.

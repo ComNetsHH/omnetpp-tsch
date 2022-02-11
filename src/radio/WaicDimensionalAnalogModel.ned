@@ -1,0 +1,41 @@
+//
+// Copyright (C) 2013 OpenSim Ltd
+//
+// This program is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public License
+// as published by the Free Software Foundation; either version 2
+// of the License, or (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public License
+// along with this program; if not, see <http://www.gnu.org/licenses/>.
+//
+package tsch.radio;
+
+import inet.physicallayer.analogmodel.packetlevel.DimensionalAnalogModel;
+
+//
+// This analog model computes with dimensional analog power representation. In
+// other words the signal power may change over time and/or frequency.
+//
+@namespace(tsch);
+
+module WaicDimensionalAnalogModel extends DimensionalAnalogModel
+{
+    parameters:
+        //int numAltimeters = default(0);
+        string RA_OffSet = default("0.01s 0.02s 0.03s 0.04s 0.005s");
+        string RA_Freq_OffSet = default("0 5E6 10E6 0 5E6");        
+        string AltimeterLocations=default("(0,0,0)m (0,0,0)m (0,0,0)m (0,0,0)m (0,0,0)m ");
+        
+        double T_chirp=default(0.02);
+        double f_chirp_min=default(4200.0e6);
+        double f_chirp_max=default(4400.0e6);
+        
+    	@class(WaicDimensionalAnalogModel);
+}
+

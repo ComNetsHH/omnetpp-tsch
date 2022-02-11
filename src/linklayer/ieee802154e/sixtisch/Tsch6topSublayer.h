@@ -11,8 +11,9 @@
  * For more details on the sublayer see
  * https://tools.ietf.org/html/draft-ietf-6tisch-architecture
  *
- * Copyright (C) 2019  Institute of Communication Networks (ComNets),
+ * Copyright (C) 2021  Institute of Communication Networks (ComNets),
  *                     Hamburg University of Technology (TUHH)
+ *           (C) 2021  Yevhenii Shudrenko
  *           (C) 2017  Lotte Steenbrink
  *
  * This program is free software: you can redistribute it and/or modify
@@ -34,7 +35,6 @@
 
 #include <omnetpp.h>
 
-//#include "MiXiMDefs.h"
 //#include "BaseApplLayer.h"
 #include "inet/applications/base/ApplicationBase.h"
 
@@ -51,8 +51,6 @@
 #include "../Ieee802154eMac.h"
 #include "../TschSlotframe.h"
 
-
-
 using namespace tsch;
 using namespace inet;
 
@@ -64,17 +62,26 @@ public:
     virtual int numInitStages() const override {return 5;}
 
     virtual void initialize(int) override;
+    virtual void finish() override;
 
     /**
-     * @brief Handle messages containing 6top Data that are sent over from
+     * @brief Handle messages containing 6top data that are sent over from
      *        the MAC layer.
      *        If @p msg is a Tsch6pPacket, handle it according to
      *        the 6P specifications. If it is a tschLinkInfoTimeoutMsg, handle
-     *        the timeout it symbolizes.
+     *        the respective timeout.
      *
      * @param msg          The message to be handled
      */
     virtual void handleMessage(cMessage* msg) override;
+
+    virtual Packet* handleSelfMessage(cMessage* msg);
+    virtual Packet* handleExternalMessage(cMessage* msg);
+
+    /**
+     * Check the status of piggybackable data on link-layer (LL) ACK reception
+     */
+    virtual void handlePiggybackData(uint64_t destId, bool txSuccess);
 
     /**
      * @brief Send a 6P Add request.
@@ -87,8 +94,10 @@ public:
      * @param timeout      Timespan in ms after which a response is
      *                     expected at the latest
      */
-    void sendAddRequest(uint64_t destId, uint8_t cellOptions, int numCells,
+    bool sendAddRequest(uint64_t destId, uint8_t cellOptions, int numCells,
                         std::vector<cellLocation_t> &cellList, int timeout) override;
+    bool sendAddRequest(uint64_t destId, uint8_t cellOptions, int numCells,
+                            std::vector<cellLocation_t> &cellList, int timeout, double delay);
 
     /**
      * @brief Send a 6P Delete request.
@@ -102,7 +111,7 @@ public:
      *                     expected at the latest
      */
     void sendDeleteRequest(uint64_t destId, uint8_t cellOptions, int numCells,
-                           std::vector<cellLocation_t> &cellList, int timeout) override;
+                           std::vector<cellLocation_t> cellList, int timeout) override;
 
     /**
      * @brief Send a 6P Relocation request.
@@ -157,12 +166,24 @@ public:
     void setCellOption(uint8_t* cellOptions, uint8_t option) override;
 
     /**
-     * @brief get list of all neighbors in transmission range
+     * @brief Get list of all neighbors in transmission range
      *
      * @param pnodeId ID of the node
      * @param mac pointer to the maclayer
      */
     std::list<uint64_t> getNeighborsInRange(uint64_t pnodeId, Ieee802154eMac* mac);
+
+    /**
+     * @brief Update the schedule of the MAC layer
+     */
+    void updateSchedule(tsch6topCtrlMsg msg);
+
+    /** TSCH schedule */
+    TschSlotframe *schedule;
+
+    // RPL router
+    cModule *host;
+
 
 protected:
     /**
@@ -206,6 +227,16 @@ private:
      */
     simtime_t TxQueueTTL;
 
+    // transaction stats
+    int numTimeouts;
+    int numConcurrentTransactionErrors;
+    int numUnexpectedResponses;
+    int numDuplicateResponses;
+    int numExpiredReq;
+    int numExpiredRsp;
+    int numClearReqReceived;
+    int numResetsReceived;
+
     /** Data to be piggybacked (if any), indexed by destination. */
     std::map<uint64_t, std::vector<tsch6pPiggybackTimeoutMsg*>> piggybackableData;
 
@@ -233,14 +264,24 @@ private:
 
     /** Identifier of pTschSF. */
     tsch6pSFID_t pSFID;
-    /** The Scheduling Function of the mac layer*/
-    TschSlotframe *schedule;
 
     /** The time at which the SF actively starts sending requests */
     simtime_t pSFStarttime;
 
     /** statistics: number of 6p messages sent */
     simsignal_t s_6pMsgSent;
+
+    simsignal_t sent6pClearSignal;
+    simsignal_t sent6pAddSignal;
+    simsignal_t sent6pRelocateSignal;
+    simsignal_t sent6pDeleteSignal;
+    simsignal_t sent6pResponseSignal;
+
+    /** stats: number of 6p messages ACKed */
+    simsignal_t acked6pAddSignal;
+    simsignal_t acked6pRelocateSignal;
+    simsignal_t acked6pDeleteSignal;
+    simsignal_t acked6pResponseSignal;
 
     enum tsch6topSelfMessage_t {
         SF_START,
@@ -257,6 +298,14 @@ private:
      * @brief Handle 6p message @p pkt of type MSG_REQUEST.
      */
     Packet* handleRequestMsg(Packet* pkt, inet::IntrusivePtr<const tsch::sixtisch::SixpHeader>& hdr, inet::IntrusivePtr<const tsch::sixtisch::SixpData>& data);
+
+    /**
+     * Handle link-layer ACK received for the last 6P request
+     *
+     * @param destId id of the destination-originator of the ACK
+     * @param cmd 6top command type - ADD/DELETE/RELOCATE
+     */
+    void handleRequestAck(uint64_t destId, tsch6pCmd_t cmd);
 
     /**
      * @brief Handle 6p packet @p pkt of type MSG_RESPONSE.
@@ -326,7 +375,7 @@ private:
      *                     NULL otherwise
      */
     Packet* createDeleteRequest(uint64_t destId, uint8_t seqNum, uint8_t cellOptions,
-                            int numCells, std::vector<cellLocation_t> &cellList,
+                            int numCells, std::vector<cellLocation_t> cellList,
                             simtime_t timeout);
 
     /**
@@ -513,16 +562,16 @@ private:
     /**
      * @brief Send @p msg to its destination (via MAC, PHY etc)
      */
-    void sendMessageToRadio(cMessage *msg);
+    void sendMessageToRadio(cMessage *msg) { sendMessageToRadio(msg, 0); } ;
+    void sendMessageToRadio(cMessage *msg, double delay);
+
+    bool hasPatternUpdateFor(uint64_t nodeId);
 
     /**
      * @brief Send control message to the MAC layer.
      */
     //void sendControlDown(cMessage *msg);
-    /**
-     * @brief Update the Schedule of the MAC layer
-     */
-    void updateSchedule(tsch6topCtrlMsg* msg);
+
 
 };
 

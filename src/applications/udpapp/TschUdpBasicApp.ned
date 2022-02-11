@@ -27,6 +27,6 @@ import inet.applications.udpapp.UdpBasicApp;
 simple TschUdpBasicApp extends UdpBasicApp
 {
     parameters:
-    	int VirtualLinkID = default(0);
+    	int virtualLinkId = default(0);
     	@class(TschUdpBasicApp);
 }

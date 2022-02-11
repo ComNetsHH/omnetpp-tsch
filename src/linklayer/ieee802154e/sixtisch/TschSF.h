@@ -3,7 +3,7 @@
  * Interface that must be implemented by each 6TiSCH
  * Scheduling Function.
  *
- * Copyright (C) 2019  Institute of Communication Networks (ComNets),
+ * Copyright (C) 2021  Institute of Communication Networks (ComNets),
  *                     Hamburg University of Technology (TUHH)
  *           (C) 2017  Lotte Steenbrink
  *
@@ -108,10 +108,30 @@ public:
                                 std::vector<cellLocation_t> *cellList = NULL) = 0;
 
     /**
+     * @brief More "nullptr exceptions"-safe version of handleResponse().
+     *
+     * @overload
+     */
+    virtual void handleResponse(uint64_t sender, tsch6pReturn_t code, int numCells = -1,
+                                        std::vector<cellLocation_t> cellList = {}) = 0;
+
+    /**
      * @brief Handle the inconsistency which was uncovered by @p seqnum
      *        in the schedule maintained with @p destId
      */
     virtual void handleInconsistency(uint64_t destId, uint8_t seqNum) = 0;
+
+    virtual void handleTransactionTimeout(uint64_t sender) = 0;
+
+
+    /**
+     * Invoked by the 6top sublayer when a 6P CLEAR request is received.
+     * The SF is supposed to clear the schedule as well as all the associated info
+     * from TschLinkInfo
+     */
+    virtual void handle6pClearReq(uint64_t nodeId) = 0;
+
+    virtual void freeReservedCellsWith(uint64_t nodeId) = 0;
 
     /**
      * @return The 6P Timeout value defined by this Scheduling Function in ms
@@ -130,6 +150,11 @@ public:
      *        to escape circular dependency hell.
      */
     virtual void recordPDR(cMessage* msg) = 0;
+
+    virtual void incrementNeighborCellElapsed(uint64_t neighborId) = 0;
+
+    /** Workaround function used to account for cell usage in overlapping links */
+    virtual void decrementNeighborCellElapsed(uint64_t neighborId) = 0;
 
     /**
      * @brief Handle an update from the @ref TschSpectrumSensing module.

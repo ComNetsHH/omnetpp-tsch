@@ -1,7 +1,7 @@
 /*
  * Simulation model for IEEE 802.15.4 Time Slotted Channel Hopping (TSCH)
  *
- * Copyright (C) 2019  Institute of Communication Networks (ComNets),
+ * Copyright (C) 2021  Institute of Communication Networks (ComNets),
  *                     Hamburg University of Technology (TUHH)
  *           (C) 2019  Louis Yin
  *
@@ -112,6 +112,17 @@ class TschNeighbor : public cSimpleModule, protected cListener
          * Shows the maximum queue length
          */
         int queueLength;
+
+        int W_npq;
+        int C_npq;
+        int W_nq;
+        int C_nq;
+
+        int macMaxBe; // maximum backoff exponent for CSMA
+        int macMinBe; // minimum backoff exponent for CSMA
+
+        cModule *hostNode; // reference to this host node's module
+
     public:
         /**
          * Default constructor
@@ -133,6 +144,7 @@ class TschNeighbor : public cSimpleModule, protected cListener
          * @return Packet is successfully added or not
          */
         bool add2Queue(inet::Packet *, MacAddress macAddr, int virtualLinkID);
+
         /**
          * A public member function to reset the private member variables to determine the current neighbor and virtualLinkId
          */
@@ -142,18 +154,15 @@ class TschNeighbor : public cSimpleModule, protected cListener
          * @param macaddress a inet::MacAddress argument to search for that MacAddress in the queue
          * @return Summed-up size of the normal and priority queue with the input MacAddress or 0 if the queue with that MacAddress is not found
          */
-        int checkQueueSizeAt(inet::MacAddress macAddress);
-        /**
-         * Determines the total queue size of a specific neighbor identified by its MAC address
-         * @param macaddress a inet::MacAddress argument to search for that MacAddress in the queue
-         * @return Summed-up size of the normal and priority queue with the input MacAddress or 0 if the queue with that MacAddress is not found
-         */
-        int checkVirtualQueueSizeAt(MacAddress macAddress,int virtualLinkID);
+        int getTotalQueueSizeAt(inet::MacAddress macAddress);
+
         /**
          * A public member function to return the size of the currently used neighbor queue
          * @return Size of the currently used queue
          */
         int getCurrentNeighborQueueSize();
+
+        int getCurrentVirtualLinkIDKey();
         /**
          * A public member function to return the first packet of the currently used neighbor queue
          * @return Pointer to the first packet of the currently used queue
@@ -164,6 +173,10 @@ class TschNeighbor : public cSimpleModule, protected cListener
          * @param addr a inet::MacAddress argument to the set the selected queue
          */
         void setSelectedQueue(MacAddress macAddr, int linkID);
+
+        void flushQueue(MacAddress neighbor, int vlinkId);
+        void flush6pQueue(MacAddress neighbor);
+
         /**
          * A public member function to get the total number of all packets in all queues
          * @return Total packets
@@ -184,6 +197,11 @@ class TschNeighbor : public cSimpleModule, protected cListener
          * @return pointer to the TschCSMA
          */
         TschCSMA* getCurrentTschCSMA();
+
+        void terminateTschCsmaWith(MacAddress neighborAddr);
+        TschCSMA* getTschCsmaWith(MacAddress neighborAddr);
+
+
         /**
          * A public member function checking if the slot is dedicated
          * @return  State of the slot
@@ -194,12 +212,7 @@ class TschNeighbor : public cSimpleModule, protected cListener
          * @param value a bool to set the dedicated variable
          */
         void setDedicated(bool);
-        /**
-         * A public member function taking one std::vector<inet::MacAddress > selecting an alternative and appropriate queue and returning a true in case one is found.
-         * @param tempMacDedicated a std::vector<inet::MacAddress > which represents all neighbors which met the criteria of having no dedicated link, not in backoff and the queue is not empty
-         * @return True if one is found otherwise false
-         */
-        bool checkAndselectQueue(std::vector<inet::MacAddress >,TschSlotframe* sf);
+
         /**
          * A public member function taking one std::string to select the selection method for the checkAndselectQueue function.
          * @param type a std::string which represents the selection method for the checkAndselectQueue (Set in the TschNeighbor.ned)
@@ -264,27 +277,32 @@ class TschNeighbor : public cSimpleModule, protected cListener
          */
         void clearQueue();
 
+        int getMacMaxBe() { return this->macMaxBe; }
+
+        void setVirtualQueue(MacAddress macAddr, int linkId);
+
+        int getVirtualQueueSizeAt(MacAddress macAddress, int virtualLinkId);
+
+        friend std::ostream& operator<<(std::ostream& out, Queue q) {
+            for (auto pkt : *q)
+                out << pkt->getFullName() << endl;
+            return out;
+        }
+
+        std::string printPacketQueue(Queue q) {
+            std::ostringstream out;
+
+            for (auto pkt : *q)
+                out << pkt->getFullName() << endl;
+
+            return out.str();
+        }
+
     protected:
+        virtual void refreshDisplay() const override;
         virtual int numInitStages() const override { return NUM_INIT_STAGES; }
         virtual void initialize(int stage) override;
         virtual void handleMessage(cMessage *) override;
-
-        /**
-         * returns if mac is a suitable neighbor (not broadcast & not in backoff & no tx links scheduled)
-         */
-        bool _isSuitable(inet::MacAddress mac, TschSlotframe* sf);
-        /**
-         * returns if mac is a suitable neighbor (not broadcast & not in backoff)
-         */
-        bool _isSuitableRelaxed(inet::MacAddress mac);
-        /**
-         * returns if entry has packets in queue
-         */
-        bool _hasPacketsInQueue(decltype(macToQueueMap)::value_type entry, int queue);
-        /**
-         * returns if b has a fuller queue than a
-         */
-        bool _hasFullerQueue(decltype(macToQueueMap)::value_type a, decltype(macToQueueMap)::value_type b, int queue);
 };
 }
 #endif /* LINKLAYER_IEEE802154E_TSCHNEIGHBOR_H_ */

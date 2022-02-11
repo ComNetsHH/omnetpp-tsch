@@ -63,7 +63,7 @@ void TschUdpBasicApp::initialize(int stage){
             stopTime = par("stopTime");
             packetName = par("packetName");
             dontFragment = par("dontFragment");
-            virtualLinkID = par("VirtualLinkID");
+            virtualLinkId = par("virtualLinkId");
             if (stopTime >= SIMTIME_ZERO && stopTime < startTime)
                 throw cRuntimeError("Invalid startTime/stopTime parameters");
             selfMsg = new cMessage("sendTimer");
@@ -77,7 +77,7 @@ void TschUdpBasicApp::sendPacket(){
     if(dontFragment)
         packet->addTagIfAbsent<FragmentationReq>()->setDontFragment(true);
     auto tag = packet->addTagIfAbsent<VirtualLinkTagReq>();
-    tag->setVirtualLinkID(virtualLinkID);
+    tag->setVirtualLinkID(virtualLinkId);
     const auto& payload = makeShared<ApplicationPacket>();
     payload->setChunkLength(B(par("messageLength")));
     payload->setSequenceNumber(numSent);

@@ -1,7 +1,7 @@
 // 
 // Simulation model for IEEE 802.15.4 Time Slotted Channel Hopping (TSCH)
 //
-// Copyright (C) 2019  Institute of Communication Networks (ComNets), 
+// Copyright (C) 2021  Institute of Communication Networks (ComNets), 
 //                     Hamburg University of Technology (TUHH)
 //           (C) 2019  Leo Krueger, Louis Yin
 //
@@ -25,7 +25,6 @@ import inet.linklayer.base.MacProtocolBase;
 import inet.common.LayeredProtocolBase;
 import inet.linklayer.contract.IMacProtocol;
 import tsch.linklayer.ieee802154e.TschSlotframe;
-import tsch.linklayer.ieee802154e.TschHopping;
 import tsch.linklayer.ieee802154e.TschNeighbor;
 import tsch.linklayer.ieee802154e.Ieee802154eMac;
 
@@ -39,7 +38,6 @@ module Ieee802154eLinklayer like IMacProtocol
     submodules:
         schedule: TschSlotframe;
         neighbor: TschNeighbor;
-        channelHopping: TschHopping;
         mac: Ieee802154eMac;
 	connections:
 	    mac.lowerLayerIn <-- lowerLayerIn;

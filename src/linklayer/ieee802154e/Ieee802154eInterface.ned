@@ -1,7 +1,7 @@
 // 
 // Simulation model for IEEE 802.15.4 Time Slotted Channel Hopping (TSCH)
 //
-// Copyright (C) 2019  Institute of Communication Networks (ComNets), 
+// Copyright (C) 2021  Institute of Communication Networks (ComNets), 
 //                     Hamburg University of Technology (TUHH)
 //                     Leo Krueger, Louis Yin
 //           
@@ -57,10 +57,6 @@ module Ieee802154eInterface like IMacProtocol
         schedule: TschSlotframe {
             parameters:
                 @display("p=300,200");
-        }
-        channelHopping: TschHopping {
-            parameters:
-                @display("p=300,300");
         }
         neighbor: TschNeighbor {
             parameters:

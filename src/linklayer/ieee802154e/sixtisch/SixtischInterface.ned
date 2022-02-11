@@ -1,8 +1,9 @@
 //
 // Simulation model for IEEE 802.15.4 Time Slotted Channel Hopping (TSCH)
 //
-// Copyright (C) 2019  Institute of Communication Networks (ComNets),
+// Copyright (C) 2021  Institute of Communication Networks (ComNets),
 //                     Hamburg University of Technology (TUHH)
+//			 (C) 2021  Yevhenii Shudrenko
 //           (C) 2017  Lotte Steenbrink
 //
 // This program is free software: you can redistribute it and/or modify
@@ -22,17 +23,15 @@
 package tsch.linklayer.ieee802154e.sixtisch;
 
 import tsch.linklayer.ieee802154e.sixtisch.TschSF;
+import tsch.linklayer.ieee802154e.sixtisch.TschMSF;
 import tsch.linklayer.ieee802154e.sixtisch.TschSFSB;
 import tsch.linklayer.ieee802154e.sixtisch.Tsch6TopSublayer;
-
-
 
 module SixtischInterface
 {
     parameters:
         bool stats = false;
-        int nbRadioChannels = default(0);
-        string sfid = default("TschSFSB");
+        string sfid = default("TschMSF");
         @display("i=block/ifcard;bgb=750,443");
     gates:
         input lowerLayerIn;
@@ -44,7 +43,7 @@ module SixtischInterface
         sixtop: Tsch6TopSublayer {
             @display("p=400,100;i=block/layer");
         }
-        sf: <sfid> like TschSF {
+        sf: <default("TschMSF")> like TschSF {
             @display("p=600,100;i=block/layer");
         }
         linkinfo: TschLinkInfo {

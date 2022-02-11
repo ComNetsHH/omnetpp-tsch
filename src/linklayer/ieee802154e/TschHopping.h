@@ -1,7 +1,7 @@
 /*
  * Simulation model for IEEE 802.15.4 Time Slotted Channel Hopping (TSCH)
  *
- * Copyright (C) 2019  Institute of Communication Networks (ComNets),
+ * Copyright (C) 2021  Institute of Communication Networks (ComNets),
  *                     Hamburg University of Technology (TUHH)
  *           (C) 2019  Leo Krueger
  *           (C) 2004-2006 Andras Varga
@@ -34,11 +34,8 @@ using namespace inet;
 
 class TschHopping: public omnetpp::cSimpleModule, public IChannelPlan
 {
-    protected:
-        typedef std::vector<int> PatternVector;
-    private:
-        PatternVector pattern;
     public:
+        typedef std::vector<int> PatternVector;
         TschHopping();
         virtual ~TschHopping();
 
@@ -54,12 +51,36 @@ class TschHopping: public omnetpp::cSimpleModule, public IChannelPlan
             this->pattern = pattern;
         }
 
-        virtual inline int getMinChannel() { return 11; }
-        virtual inline int getMaxChannel() { return 26; }
-        virtual units::values::Hz getMinCenterFrequency() { return units::values::Hz(2.405e9); }
-        virtual units::values::Hz getMaxCenterFrequency() { return units::values::Hz(2.405e9); }
+        /** Get the lowest/highest channel number for the given frequency band (WAIC or ISM) */
+        virtual int getMinChannel();
+        virtual int getMaxChannel();
+
+        virtual units::values::Hz getMinCenterFrequency();
+        virtual units::values::Hz getMaxCenterFrequency();
         virtual units::values::Hz getChannelSpacing() { return units::values::Hz(5.0e6); }
         virtual units::values::Hz channelToCenterFrequency(int channel);
+        virtual double channelToCenterFrequencyPlain(int channel);
+
+        std::string printPattern(PatternVector pv) {
+            std::ostringstream out;
+            for (auto el: pv)
+                out << el << ", ";
+
+            return out.str();
+        }
+
+        // TODO: why the heck does it not work??
+//        friend std::ostream& operator<<(std::ostream& out, const PatternVector& pv) {
+//            for (auto el: pv)
+//                out << el << ", ";
+//
+//            return out;
+//        }
+
+    private:
+        PatternVector pattern;
+        units::values::Hz centerFrequency;
+        int numChannels;
 };
 
 } // namespace tsch

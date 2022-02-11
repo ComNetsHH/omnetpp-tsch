@@ -1,7 +1,7 @@
 // 
 // Simulation model for IEEE 802.15.4 Time Slotted Channel Hopping (TSCH)
 //
-// Copyright (C) 2019  Institute of Communication Networks (ComNets), 
+// Copyright (C) 2021  Institute of Communication Networks (ComNets), 
 //                     Hamburg University of Technology (TUHH)
 //                     Leo Krueger, Louis Yin
 //           
@@ -55,22 +55,24 @@ simple Ieee802154eMac extends MacProtocolBase like IMacProtocol
         // Time to setup radio to reception state
         double rxSetupTime @unit(s) = default(0 s); // TODO put reasonable value
         // Time to switch radio from Rx to Tx state
-        double aTurnaroundTime @unit(s) = default(0.000192 s);    // 12 symbols
+        // macTsRxTx
+        double macTsRxTx @unit(s) = default(0.000192 s);    // 12 symbols
+        // Is not used in an executable way
         double channelSwitchingTime @unit(s) = default(0.000192 s); // 12 symbols TODO put reasonable value
         // Send/Expect MAC acks for unicast traffic?
         bool useMACAcks = default(true);
         // Maximum number of frame retransmission,
         // only used when usage of MAC acks is enabled.
         int macMaxFrameRetries = default(3);
-        // Time to wait for an acknowledgement after transmitting a unicast frame.
-        // Only used when usage of MAC acks is enabled.
-        // Value is calculated from 1+12+10+12 symbols, which is defined for nonbeacon-enabled PAN.
-        // In the non-beacon-enabled case, the receiver responds at aTurnaroundTime
-        // (i.e. the time for the sender and receiver to both be guaranteed to have
-        // switched from Tx to Rx and vice verse).  This gives the value 192us +
-        // 352us = 544us (there's been some discussion about the "extra" 1 symbol == 16us)
-        // [section 7.5.6.4.2 of the specification].
-        double macAckWaitDuration @unit(s) = default(0.00056 s);
+        // Time to wait before expecting an acknowledgement after transmitting a unicast frame.
+        // In case power consumption needs to be researched the on/off of the TschNode needs to be adjusted
+        double macTsRxAckDelay @unit(s) = default(0.0008 s);
+        // Duration during which the acknowledgement is expected to start: macTsAckWait=400us.
+        // For simulation, the value macTsMaxAck=160 us needs to be added, 
+        // since the detection is done at the end of the fully transmitted packet
+        double macTsAckWait @unit(s) = default(0.0004 s);
+        // Maximum transmission duration of (Imm-)Ack (5 Octets)
+        double macTsMaxAck @unit(s) = default(0.00016 s);
         // Complete MAC ack message length (in bits)
         // (! headerLength is not added to this),
         // only used when usage of MAC acks is enabled.
@@ -78,19 +80,36 @@ simple Ieee802154eMac extends MacProtocolBase like IMacProtocol
         // Simple interframe space (12 symbols). Time to wait between receiving a frame and acknowledging it.
         // Should be bigger than the maximum time for switching between Tx and Rx at the receiver.
         // Only used when usage of MAC acks is enabled.
-        double sifs @unit(s) = default(0.000192 s);
+        // sifs = macTsTxAckDelay
+        //double sifs @unit(s) = default(0.000192 s);
+        double macTsTxAckDelay @unit(s) = default(0.001 s);
 		// "The total length of the timeslot including any unused time after
 		//  frame transmission and acknowledgment, in us"
 		double macTsTimeslotLength @unit(s) = default(0.01 s);
-		bool useCCA = default(false);
+		bool useCCA = default(true);
         //Backoff method to use: constant, linear or exponential
         // "The device shall use an exponential backoff mechanism [..]"
         string backoffMethod = default("exponential");
         // The path to the Radio module  //FIXME remove default value
         string radioModule = default("^.^.radio");
+        
+        // TEST parameters for simulating lossy links
+        double pLinkCollision = default(-1);
+        // when MAC starts to apply artifical packet drops
+        double lossyLinkTimeout @unit(s) = default(60s);
+        
+        // Hybrid Priority Queuing Weight Round Robin scheduler parameters
+        int wrrWeigthNp = default(4); // weight of normal priority (NP) traffic 
+        int wrrWeigthBe = default(1); // weight of best-effort (BE) traffic
+        bool wrrEnabled = default(false);     
+        
+        
+        bool ignoreBitErrors = default(false);
 
         @class(Ieee802154eMac);
         @signal[linkBroken](type=inet::Packet);
+        @signal[queueUtilization](type=double);
+        
         @statistic[linkBroken](title="link break"; source=linkBroken; record=count; interpolationmode=none);
         @statistic[packetDropNotAddressToUs](title="packet drop: not addressed to us"; source=packetDropReasonIsNotAddressedToUs(packetDropped); record=count,sum(packetBytes),vector(packetBytes); interpolationmode=none);
         @statistic[packetDropIncorrectlyReceived](title="packet drop: incorrectly received"; source=packetDropReasonIsIncorrectlyReceived(packetDropped); record=count,sum(packetBytes),vector(packetBytes); interpolationmode=none);
@@ -105,8 +124,9 @@ simple Ieee802154eMac extends MacProtocolBase like IMacProtocol
         @signal[nbTxAcks-*](type=long);
         @signal[nbDuplicates-*](type=long);
         @signal[nbSlot-*](type=long);
+        @signal[pktEnqueued](type=long);
         
-        @statisticTemplate[nbStats](record=count,vector?; interpolationmode=none);
+        @statisticTemplate[nbStats](record=count?,vector?; interpolationmode=none);
         
         int numSignals = default(0);
         
