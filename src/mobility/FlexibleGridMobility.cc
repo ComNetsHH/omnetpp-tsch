@@ -31,7 +31,7 @@ void FlexibleGridMobility::initialize(int stage) {
     auto rotatedCoords = new Coord();
 
     // apply coordinates transformation only after initial positions are set
-    if (stage == INITSTAGE_SINGLE_MOBILITY + 1) {
+    if (stage == INITSTAGE_SINGLE_MOBILITY + 1 && par("rotateHorizontally").boolValue()) {
 
         auto network = getContainingNode(this)->getParentModule();
 

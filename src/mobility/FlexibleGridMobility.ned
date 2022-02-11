@@ -17,5 +17,7 @@ simple FlexibleGridMobility extends StaticGridMobility
         // parameters to help align seatbelts grid with the center of the aircraft from ReSA Demo 
         double gridOffsetX = default(0);
         double gridOffsetY = default(0);
+        
+        bool rotateHorizontally = default(true); // rotates the seat belt grid horizontally from left to right 
 }
 
