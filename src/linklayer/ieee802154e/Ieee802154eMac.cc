@@ -442,44 +442,40 @@ TschLink* Ieee802154eMac::selectActiveLink(std::vector<TschLink*> links) {
         {
             unicastTxLinks.push_back(link);
         }
-        // Update the elapsed counter also for inactive links!
-        sf->incrementNeighborCellElapsed(link->getAddr().getInt());
+
+        if (link->isTx())
+            // Update the elapsed counter also for inactive links!
+            // TODO: turns the following code really ugly with multiple decrements, find a leaner solution
+            sf->incrementNeighborCellElapsed(link->getAddr().getInt());
     }
 
     if ((int) unicastTxLinks.size() == 1) {
         EV_DETAIL << "Found unicast TX link with non-empty queue: " << unicastTxLinks.back()->str() << endl;
+
+        // Compensate for the "catch-all" increment above, since active link is handled accounted for also by the SF
+        sf->decrementNeighborCellElapsed(unicastTxLinks.back()->getAddr().getInt());
         return unicastTxLinks.back();
-    } else if ((int) unicastTxLinks.size() > 1) {
+    }
+    else if ((int) unicastTxLinks.size() > 1) {
         EV_DETAIL << "Multiple unicast links with non-empty queues found, selecting one randomly: " << endl;
 
         auto selectedId = intrand((int) unicastTxLinks.size());
         auto selectedLink = unicastTxLinks[selectedId];
 
-        // Compensate for the "catch-all" increment above, since active link is handled by the SF properly
         sf->decrementNeighborCellElapsed(selectedLink->getAddr().getInt());
 
         return selectedLink;
     }
-//
-//    // Then check for AUTO TX cells with packets in queues
-//    for (auto link : links) {
-//        if (link->isTx() && link->isAuto()
-//                && link->getAddr() != MacAddress::BROADCAST_ADDRESS
-//                && neighbor->getTotalQueueSizeAt(link->getAddr()) > 0)
-//        {
-//            EV_DETAIL << "Found auto TX link with non-empty queue: " << link->str() << endl;
-//            return link;
-//        }
-//    }
 
-    // Secondly check if there's any other TX link: shared, broadcast with packets in queue
-    for (auto link : links) {
+    // Second, check if there's any other TX link: shared, broadcast with packets in queue
+    for (auto link : links)
         if (link->isTx() && neighbor->getTotalQueueSizeAt(link->getAddr()) > 0)
         {
             EV_DETAIL << "Found shared TX link with non-empty queue: " << link->str() << endl;
+
+            sf->decrementNeighborCellElapsed(link->getAddr().getInt());
             return link;
         }
-    }
 
     EV_DETAIL << "No active TX link detected, looking for RX" << endl;
 
@@ -502,7 +498,6 @@ TschLink* Ieee802154eMac::selectActiveLink(std::vector<TschLink*> links) {
         activeRxLink = rxLinks[intrand(rxLinks.size())];
 
     EV_DETAIL << "Selected active: " << activeRxLink->str() << endl;
-
     return activeRxLink;
 }
 
