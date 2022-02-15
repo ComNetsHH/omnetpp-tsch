@@ -133,7 +133,7 @@ def plot_hpq_theoretical_np_be_wrr(wrr_be = 1, wrr_np = 4):
 
 
 def plot_hpq_pdr(data, app_to_traffic_map):
-	df = pd.DataFrame(columns=['PDR', 'Traffic', 'Repetition', 'Experiment'])
+	df = pd.DataFrame(columns=['PDR', 'Traffic type', 'Repetition', 'Experiment'])
 
 	for sim_run in data:
 		# results for each application type (smoke / humidity / seatbelts)
@@ -163,15 +163,15 @@ def plot_hpq_pdr(data, app_to_traffic_map):
 				print(f"{experiment}, rep #{repetition}, app[{app_id}].received = {pdr_map[app_id]['rec']}, sent = {pdr_map[app_id]['sent']}")
 			df_row = {
 				'PDR': (pdr_map[app_id]["rec"] / pdr_map[app_id]["sent"]) if pdr_map[app_id]["sent"] > 0 else 0,
-				'Traffic': app_to_traffic_map[app_id],
+				'Traffic type': app_to_traffic_map[app_id],
 				'Repetition': repetition,
 				'Experiment': experiment
 				}
 			df = df.append(df_row, ignore_index=True)
 
 	df['Experiment'] = ['6TiSCH-HPQ' if x == 'HPQ' else '6TiSCH' for x in df['Experiment'].tolist()]
-	df = df.sort_values(by=['Traffic'])
-	ax = sns.barplot(data=df, x='Traffic', y='PDR', ci=95, hue='Experiment', hue_order=['6TiSCH-HPQ', '6TiSCH'])
+	df = df.sort_values(by=['Traffic type'])
+	ax = sns.barplot(data=df, x='Traffic type', y='PDR', ci=95, hue='Experiment', hue_order=['6TiSCH-HPQ', '6TiSCH'])
 
 	remove_legend_subtitle(ax)
 
@@ -218,7 +218,7 @@ def plot_hpq_wrr_be_verif(data):
 
 
 def plot_hpq_delays_verification(data, app_to_traffic_map):
-	data['Service Utilization'] = [float(x.split('=')[1]) for x in data['Measurement'].tolist()]
+	data['Service Utilization'] = [float( (x.split(',')[0]).split("=")[1]) for x in data['Measurement'].tolist()]
 	app_ids = [int(re.search('sink\[\d+\].app\[(\d+)\]', x).group(1)) for x in data['Module'].tolist()]
 	data['Traffic Class'] = [app_to_traffic_map[x] for x in app_ids]
 	
@@ -235,7 +235,7 @@ def plot_hpq_delays_verification(data, app_to_traffic_map):
 		ax.set_ylim([0, 10])
 
 def plot_hpq_delays(data, app_to_traffic_map, compare_num_sinks = False):
-	# df = pd.DataFrame(columns=['Delay', 'Traffic', 'Repetition', 'Experiment', 'Number of sinks'])
+	# df = pd.DataFrame(columns=['Delay', 'Traffic type', 'Repetition', 'Experiment', 'Number of sinks'])
 
 	df_list = []
 	for sim_run in data:
@@ -249,7 +249,7 @@ def plot_hpq_delays(data, app_to_traffic_map, compare_num_sinks = False):
 			df_list.append(
 				{
 					'Delay': mean_delay, 
-					'Traffic': app_to_traffic_map[app_id], 
+					'Traffic type': app_to_traffic_map[app_id], 
 					'Repetition': data[sim_run]["attributes"]["repetition"],
 					'Experiment': data[sim_run]["attributes"]["experiment"],
 					'Number of sinks': data[sim_run]["itervars"]["numSinks"]
@@ -258,7 +258,7 @@ def plot_hpq_delays(data, app_to_traffic_map, compare_num_sinks = False):
 
 			# df_row = {
 			# 		'Delay': mean_delay, 
-			# 		'Traffic': app_to_traffic_map[app_id], 
+			# 		'Traffic type': app_to_traffic_map[app_id], 
 			# 		'Repetition': data[sim_run]["attributes"]["repetition"],
 			# 		'Experiment': data[sim_run]["attributes"]["experiment"],
 			# 		'Number of sinks': data[sim_run]["itervars"]["numSinks"]
@@ -274,8 +274,8 @@ def plot_hpq_delays(data, app_to_traffic_map, compare_num_sinks = False):
 
 	# df = df[df['Delay'] < 12]	
 
-	df = df.sort_values(by=['Number of sinks' if compare_num_sinks else 'Traffic'])
-	ax = sns.barplot(data=df, x='Number of sinks' if compare_num_sinks else 'Traffic', y='Delay', ci=95, hue='Experiment', 
+	df = df.sort_values(by=['Number of sinks' if compare_num_sinks else 'Traffic type'])
+	ax = sns.barplot(data=df, x='Number of sinks' if compare_num_sinks else 'Traffic type', y='Delay', ci=95, hue='Experiment', 
 		hue_order=['6TiSCH-HPQ', '6TiSCH'])
 
 	i = -1
@@ -304,7 +304,7 @@ def remove_legend_subtitle(ax):
 	ax.legend(handles=handles, labels=labels)
 
 def plot_hpq_delay_cdf(data, app_to_traffic_map):
-	# df = pd.DataFrame(columns=['Delay', 'Traffic', 'Experiment'], index=range(data.keys()))
+	# df = pd.DataFrame(columns=['Delay', 'Traffic type', 'Experiment'], index=range(data.keys()))
 
 	delays_per_app = {}
 
@@ -332,14 +332,14 @@ def plot_hpq_delay_cdf(data, app_to_traffic_map):
 				df_list.append(
 					{
 					'Delay': val, 
-					'Traffic': app_to_traffic_map[app_id], 
+					'Traffic type': app_to_traffic_map[app_id], 
 					'Experiment': exp
 					}
 				)
 				
 				# row = {
 				# 	'Delay': val, 
-				# 	'Traffic': app_to_traffic_map[app_id], 
+				# 	'Traffic type': app_to_traffic_map[app_id], 
 				# 	'Experiment': exp
 				# }
 				# df = df.append(row, ignore_index=True)
@@ -462,7 +462,7 @@ def get_arrivals_data(data):
 
 def plot_num_arrivals(samples):
 	fig1, ax1 = plt.subplots() # used only to contain all histograms before merging them in seaborn
-	fig2, ax2 = plt.subplots(figsize=(8, 6))
+	fig2, ax2 = plt.subplots(figsize=(8, 6), dpi=600)
 	max_y = 0
 
 	df = pd.DataFrame(columns=['Arrived', 'Occurrences', 'Repetition'])
@@ -526,7 +526,7 @@ parser.add_argument('-w', '--wrr', help='verify expected effect of WRR weights i
 args = parser.parse_args()
 print("result file: ", args.result_file)
 
-fig, ax = plt.subplots(figsize=(9, 6), dpi=100)
+fig, ax = plt.subplots(figsize=(9, 6), dpi=600)
 if args.verification:
 	data = pd.read_csv(args.result_file, sep="\t")
 
@@ -602,7 +602,7 @@ if args.save:
 	out_name = args.result_file.split('/')[-1].split('.')[0]
 	if args.cdf:
 		out_name += '_cdf'
-	out_name += '.pdf'
+	out_name += '.jpg'
 	print("saving plot as " + out_name)
 	plt.savefig(out_name)
 else:

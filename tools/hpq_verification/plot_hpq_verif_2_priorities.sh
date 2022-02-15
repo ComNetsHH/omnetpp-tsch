@@ -1,4 +1,4 @@
-python3 tools/parser.py $1 --verification-two-queues $2
+python3 ../parser.py $1 --verification-two-queues $2
 
 
 

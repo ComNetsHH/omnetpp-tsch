@@ -53,6 +53,7 @@ precompiled_*.h.*
 *.idx
 *.toc
 *.pdf
+*.jpg
 *.ilg
 *.ind
 *.synctex.gz
