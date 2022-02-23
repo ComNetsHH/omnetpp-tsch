@@ -233,7 +233,12 @@ void TschMSF::scheduleAutoCell(uint64_t neighborId) {
 
 void TschMSF::finish() {
     if (rplParentId) {
-        recordScalar("numUplinkCells", (int) pTschLinkInfo->getDedicatedCells(rplParentId).size());
+        auto dedCells = pTschLinkInfo->getDedicatedCells(rplParentId);
+
+        recordScalar("numUplinkCells", (int) dedCells.size());
+
+        if ((int) dedCells.size() == 1)
+            recordScalar("uplinkSlotOffset", dedCells.back().timeOffset);
     }
     recordScalar("numInconsistenciesDetected", numInconsistencies);
     recordScalar("numLinkResets", numLinkResets);
@@ -549,10 +554,21 @@ void TschMSF::handleRplRankUpdate(long rank, int numHosts, double lambda) {
      * from the descendant nodes (numHosts - rank) as well as the node itself (+1).
      * Additional +1 to account for the fact, that node closest to the sink are of rank 2 rather than 1.
      * 0.001 is added to account for cases lambda = mu.
-     * Each node is assumed to be M/D/1 or D/D/1 system with incoming rate of 1 packet per slotframe
      */
+    auto pc = mac->par("pLinkCollision").doubleValue();
+    pc = pc >= 0 ? pc : 0;
+    auto rtx = mac->par("macMaxFrameRetries").intValue();
+
+    /**
+     * Calculating amount of extra traffic induced by lossy link simulation
+     */
+    double lossyFactor = 0;
+    for (auto i = 1; i < rtx + 1; i++)
+        lossyFactor += (double) i * pow(pc, i);
+    lossyFactor = (1 - pc) * lossyFactor + 1;
+
     if (numCellsRequired <= 0)
-        numCellsRequired = ceil(0.001 + lambda * (numHosts + 2 - rank));
+        numCellsRequired = ceil(0.001 + lambda * lossyFactor * (numHosts + 2 - rank));
 
     auto numCellsLeft = numCellsRequired - (int) currentTxCells.size();
 
@@ -793,7 +809,7 @@ int TschMSF::createCellList(uint64_t destId, std::vector<cellLocation_t> &cellLi
 
     // Select only required number of cells from cell list
     cellList = pickRandomly(cellList, numCells);
-    EV_DETAIL << "After picking required number of cells (" << numCells << "): " << cellList << endl;
+    EV_DETAIL << "Randomly selected " << numCells << " cells: " << cellList << endl;
 
     // Block selected slot offsets until 6P transaction finishes
     for (auto c : cellList)
@@ -981,7 +997,6 @@ void TschMSF::handleSuccessAdd(uint64_t sender, int numCells, vector<cellLocatio
 
     if (sender == rplParentId)
         emit(uplinkScheduledSignal, (long) cellList.back().timeOffset);
-
 
     // for delay testing mode, need to confirm whether
     // ALL of the proposed cells were actually accepted
@@ -1325,8 +1340,6 @@ void TschMSF::receiveSignal(cComponent *src, simsignal_t id, cObject *value, cOb
 
     std::string signalName = getSignalName(id);
 
-    EV_DETAIL << "Received signal - " << signalName << endl;
-
     static std::vector<std::string> namesNeigh = {}; //{"nbSlot-neigh-", "nbTxFrames-neigh-", "nbRxFrames-neigh-"};
     static std::vector<std::string> namesLink = {"nbSlot-link-", "nbTxFrames-link-", "nbRecvdAcks-link-"};
 
@@ -1394,8 +1407,6 @@ void TschMSF::receiveSignal(cComponent *src, simsignal_t id, long value, cObject
         return;
 
     std::string signalName = getSignalName(id);
-
-    EV_DETAIL << "Received signal - " << signalName << endl;
 
     if (std::strcmp(signalName.c_str(), "parentChanged") == 0) {
         auto rplControlInfo = (RplGenericControlInfo*) details;

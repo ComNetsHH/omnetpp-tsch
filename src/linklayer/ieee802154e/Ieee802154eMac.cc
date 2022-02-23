@@ -1191,12 +1191,12 @@ bool Ieee802154eMac::artificiallyDropAppPacket(Packet *packet) {
         auto r = uniform(0, 1, 2);
         bool drop = r < pLinkCollision;
 
-        EV_DETAIL << "r = " << r;
-
-        if (drop)
-            EV_DETAIL << ", dropping Udp packet #" << udpDroppedCtn++ << endl;
-        else
-            EV_DETAIL << ", forwarding Udp packet #" << udpSentCtn++ << endl;
+//        EV_DETAIL << "r = " << r;
+//
+//        if (drop)
+//            EV_DETAIL << ", dropping Udp packet #" << udpDroppedCtn++ << endl;
+//        else
+//            EV_DETAIL << ", forwarding Udp packet #" << udpSentCtn++ << endl;
 
         return drop;
     }
@@ -1254,7 +1254,8 @@ void Ieee802154eMac::handleLowerPacket(Packet *packet) {
         delete packet;
         return;
     }
-    packet->setBitError(false);
+    if (ignoreBitErrors)
+        packet->setBitError(false);
     const auto& csmaHeader = packet->peekAtFront<Ieee802154eMacHeader>();
     const MacAddress& src = csmaHeader->getSrcAddr();
     const MacAddress& dest = csmaHeader->getDestAddr();
