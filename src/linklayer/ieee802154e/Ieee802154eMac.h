@@ -120,6 +120,7 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
         , SeqNrChild()
         , wrr_be_ctn(0)
         , wrr_np_ctn(0)
+        , lastAppPktArrivalTimestamp(0)
     {
     }
 
@@ -171,6 +172,8 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
 
     simsignal_t pktRecFromUpperSignal; // emitted when packet is received from upper layers
     simsignal_t highPrioQueueOverflowSignal;
+
+
 
     // Utility
     list<uint64_t> getNeighborsInRange(); // get list of neighbors based on maximum communication range
@@ -419,7 +422,11 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
     cProperty *statisticTemplate;
 
     std::vector<simsignal_t> channelSignals;
+    // emitted when a packet is added to the queue AND also
+    // when a link collision occurs and the retransmission threshold is not exceeded
     simsignal_t pktEnqueuedSignal;
+    simsignal_t pktInterarrivalTimeSignal; // much like the pktEnqueuedSignal before, but records the time elapsed between subsequent arrivals
+    double lastAppPktArrivalTimestamp; // helper variable for the "pktInterarrivalTime" stat
     simsignal_t currentFreqSignal; // ping current frequency to RPL
 
     std::vector<std::string> registeredSignals;
@@ -497,7 +504,8 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
 
     void attachSignal(inet::Packet *mac, omnetpp::simtime_t_cref startTime);
     void manageMissingAck(t_mac_event event, omnetpp::cMessage *msg);
-    void manageFailedTX();
+    void manageFailedTX() { manageFailedTX(false); } ;
+    void manageFailedTX(bool recordStats);
     void startTimer(t_mac_timer timer);
 
     omnetpp::simtime_t scheduleSlot();
@@ -544,6 +552,7 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
      * @param packetName name of the packet to check its affiliation
      */
     bool isControlPacket(std::string packetName);
+    bool isAppPacket(Packet *packet);
 
     //
     // Hybrid Priority Queueing

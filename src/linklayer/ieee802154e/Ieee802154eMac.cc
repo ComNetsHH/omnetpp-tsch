@@ -176,6 +176,7 @@ void Ieee802154eMac::initialize(int stage) {
         EV_DETAIL << "Finished tsch init stage 1." << endl;
 
         pktEnqueuedSignal = registerSignal("pktEnqueued");
+        pktInterarrivalTimeSignal = registerSignal("interarrivalTime");
         pktRecFromUpperSignal = registerSignal("pktReceviedFromUpperLayer");
         currentFreqSignal = registerSignal("currentFrequency");
     } else if (stage == INITSTAGE_LAST) {
@@ -385,6 +386,16 @@ void Ieee802154eMac::handleUpperPacket(Packet *packet) {
 
     if (neighbor->add2Queue(packet, dest, linkId)) {
         EV_DETAIL << "Added packet to queue with link ID " << linkId << endl;
+
+        if (!isAppPacket(packet))
+            return;
+
+        emit(pktEnqueuedSignal, simTime().dbl());
+
+        if (lastAppPktArrivalTimestamp > 0)
+            emit(pktInterarrivalTimeSignal, simTime().dbl() - lastAppPktArrivalTimestamp);
+
+        lastAppPktArrivalTimestamp = simTime().dbl();
     } else {
         EV_DETAIL << "Packet is dropped due to Queue Overflow" << endl;
         PacketDropDetails details;
@@ -393,6 +404,12 @@ void Ieee802154eMac::handleUpperPacket(Packet *packet) {
         emit(packetDroppedSignal, packet, &details);
         delete packet;
     }
+}
+
+bool Ieee802154eMac::isAppPacket(Packet *packet) {
+    std::string packetName(packet->getFullName());
+
+    return packetName.find("App") != std::string::npos;
 }
 
 int Ieee802154eMac::getVirtualLinkId(TschLink* link) {
@@ -764,7 +781,7 @@ void Ieee802154eMac::updateStatusCCA(t_mac_event event, cMessage *msg) {
             EV_DETAIL << "(7) FSM State CCA_3, EV_TIMER_CCA, [Channel Busy]: " << " skipping slot." << endl;
 
             radio->setRadioMode(IRadio::RADIO_MODE_SLEEP);
-            manageFailedTX();
+            manageFailedTX(false);
             updateMacState(IDLE_1);
         }
         break;
@@ -834,7 +851,7 @@ void Ieee802154eMac::updateStatusWaitAck(t_mac_event event, cMessage *msg) {
         if (!neighbor->isDedicated() && !neighbor->getCurrentTschCSMAStatus())
             neighbor->startTschCSMA();
         else
-            manageFailedTX();
+            manageFailedTX(true);
 
         updateMacState(IDLE_1);
         break;
@@ -907,7 +924,7 @@ list<uint64_t> Ieee802154eMac::getNeighborsInRange() {
     return resultingList;
 }
 
-void Ieee802154eMac::manageFailedTX() {
+void Ieee802154eMac::manageFailedTX(bool recordStats) {
     neighbor->failedTX();
 
     auto rtxAttempts = neighbor->getCurrentTschCSMA()->getNB();
@@ -926,7 +943,21 @@ void Ieee802154eMac::manageFailedTX() {
         emit(packetDroppedSignal, mac, &details);
         emit(linkBrokenSignal, mac);
         delete mac;
+    } else {
+        // another retransmit attempt is commencing, record it as if another packet arrival occurs
+        auto pkt = neighbor->getCurrentNeighborQueueFirstPacket();
+        if (isAppPacket(pkt) && recordStats)
+        {
+            emit(pktEnqueuedSignal, simTime().dbl());
+
+            if (lastAppPktArrivalTimestamp > 0)
+                emit(pktInterarrivalTimeSignal, simTime().dbl() - lastAppPktArrivalTimestamp);
+
+            lastAppPktArrivalTimestamp = simTime().dbl();
+        }
+
     }
+
     neighbor->reset();
 }
 
