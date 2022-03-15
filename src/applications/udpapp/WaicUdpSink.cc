@@ -61,7 +61,7 @@ void WaicUdpSink::finish()
     EV_INFO << getFullPath() << ": received " << numReceived << " packets\n";
     simtime_t meanJitter = 0;
     for (auto jt: jitterMap) {
-        auto jitter = UdpSink::computeJitter(jt.second);
+        auto jitter = computeJitter(jt.second);
         meanJitter += jitter;
         emit(jitterRecorder, jitter);
     }
