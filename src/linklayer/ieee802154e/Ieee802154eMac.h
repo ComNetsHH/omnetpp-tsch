@@ -424,7 +424,7 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
     std::vector<simsignal_t> channelSignals;
     // emitted when a packet is added to the queue AND also
     // when a link collision occurs and the retransmission threshold is not exceeded
-    simsignal_t pktEnqueuedSignal;
+    simsignal_t pktRetransmittedSignal;
     simsignal_t pktInterarrivalTimeSignal; // much like the pktEnqueuedSignal before, but records the time elapsed between subsequent arrivals
     double lastAppPktArrivalTimestamp; // helper variable for the "pktInterarrivalTime" stat
     simsignal_t currentFreqSignal; // ping current frequency to RPL
@@ -553,6 +553,7 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
      */
     bool isControlPacket(std::string packetName);
     bool isAppPacket(Packet *packet);
+    bool isSmokeAlarmPacket(Packet *packet);
 
     //
     // Hybrid Priority Queueing

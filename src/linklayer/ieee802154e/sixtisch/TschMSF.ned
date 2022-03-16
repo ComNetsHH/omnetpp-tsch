@@ -42,6 +42,7 @@ simple TschMSF like TschSF
         bool disableHousekeeping = default(false);
              
      	bool handleRankUpdates = default(false); // TEST parameter, only needed for delay-testing scenarios
+     	bool noRtxQueuing = default(false); // only for manual delay-testing scenarios to ensure no queuing through retransmissions is possible
      	
      	// node periodically checks the existence of a dedicated uplink cell until it one is successfully scheduled
      	bool scheduleUplinkManually = default(false);    
@@ -79,6 +80,8 @@ simple TschMSF like TschSF
 		
 		// Misc
 		bool lowLatencyMode = default(false);
+		bool cellBundlingEnabled = default(false);
+		int cellBundleSize = default(2);
 		int lowLatencyStartingOffset = default(-1);
 		bool scheduleUplinkOnJoin = default(true);
 		

@@ -61,7 +61,8 @@ TschMSF::TschMSF() :
     showLinkResets(false),
     pCheckScheduleConsistency(false),
     isLeafNode(true),
-    numCellsRequired(-1)
+    numCellsRequired(-1),
+    numDownlinkAbandonedMaxRetries(0)
 {
 }
 TschMSF::~TschMSF() {
@@ -133,6 +134,9 @@ void TschMSF::initialize(int stage) {
         WATCH_PTRMAP(nbrStatistic);
         WATCH_MAP(cellStatistic);
         WATCH(numCellsRequired);
+        WATCH(numDownlinkAbandonedMaxRetries);
+        WATCH_MAP(downlinkRequested);
+        WATCH_MAP(rtx6pTransactions);
 //        WATCH_MAP(reservedTimeOffsets);
 
 //        WATCH(util);
@@ -147,6 +151,7 @@ void TschMSF::initialize(int stage) {
             rpl->subscribe("parentChanged", this);
             rpl->subscribe("rankUpdated", this);
             rpl->subscribe("childJoined", this);
+            rpl->subscribe("tschScheduleDownlink", this);
             if (par("lowLatencyMode").boolValue())
                 rpl->subscribe("uplinkSlotOffset", this);
         }
@@ -239,15 +244,12 @@ void TschMSF::finish() {
 
         if ((int) dedCells.size() == 1)
             recordScalar("uplinkSlotOffset", dedCells.back().timeOffset);
+        else if (!dedCells.size())
+            recordScalar("uplinkSlotOffset", 0);
     }
     recordScalar("numInconsistenciesDetected", numInconsistencies);
     recordScalar("numLinkResets", numLinkResets);
     recordScalar("numUnhandledResponses", numUnhandledResponses);
-
-    if (par("handleRankUpdates").boolValue() && rplParentId) {
-        auto numScheduledCells = pTschLinkInfo->getDedicatedCells(rplParentId);
-        recordScalar("numUplinkCells", (int) numScheduledCells.size());
-    }
 
     if (par("trackFailed6pAddByNum").intValue() > 0)
         recordScalar("tracked6pFailed", numFailedTracked6p);
@@ -326,23 +328,22 @@ bool TschMSF::isLossyLink() {
             && simTime().dbl() > mac->par("lossyLinkTimeout").doubleValue();
 }
 
-void TschMSF::addCells(SfControlInfo *retryInfo)
+bool TschMSF::addCells(SfControlInfo *retryInfo)
 {
     auto numCells = retryInfo->getNumCells();
     auto nodeId = retryInfo->getNodeId();
     if (!pTschLinkInfo->inTransaction(nodeId)) {
         EV_DETAIL << "Seems we can send 6P ADD" << endl;
-        addCells(nodeId, numCells, retryInfo->getCellOptions());
-        return;
+        return addCells(nodeId, numCells, retryInfo->getCellOptions());
     }
 
     EV_WARN << "Can't add " << numCells << " to " << MacAddress(nodeId)
-            << " currently in transaction with this node" << endl;
+            << ", currently in transaction with this node" << endl;
     retryInfo->incRtxCtn();
     if (retryInfo->getRtxCtn() > par("maxRetries").intValue()) {
         EV_DETAIL << "Maximum number of retransmits attempted, dropping packet" << endl;
         delete retryInfo;
-        return;
+        return false;
     }
     auto backoff = pow(4, retryInfo->getRtxCtn());
     auto retryMsg = new cMessage("Retry self-msg", SEND_6P_REQ);
@@ -351,6 +352,8 @@ void TschMSF::addCells(SfControlInfo *retryInfo)
     scheduleAt(timeout, retryMsg);
     EV_DETAIL << "Another transmission attempt scheduled at " << timeout
             << ", " << retryInfo->getRtxCtn() << " retry" << endl;
+
+    return false;
 }
 
 
@@ -475,6 +478,35 @@ void TschMSF::handleScheduleUplink() {
         scheduleAt(simTime() + 20, new cMessage("", SCHEDULE_UPLINK));
 }
 
+void TschMSF::handleScheduleDownlink(uint64_t nodeId) {
+    EV_DETAIL << "Attempting downlink scheduling to " << MacAddress(nodeId) << endl;
+
+    auto res = addCells(nodeId, 1, MAC_LINKOPTIONS_TX);
+
+    // Something went wrong, try again
+    if (!res) {
+        EV_DETAIL << "Couldn't send 6P ADD request for some reason (check above), retrying in 20s" << endl;
+        auto msg = new cMessage("", SCHEDULE_DOWNLINK);
+        auto ci = new SfControlInfo(nodeId);
+        msg->setControlInfo(ci);
+        scheduleAt(simTime() + 20, msg);
+        return;
+    }
+
+    if (rtx6pTransactions.find(nodeId) != rtx6pTransactions.end()) {
+        std::ostringstream out;
+        out << simTime() << ": trying to schedule a downlink cell to " << MacAddress(nodeId)
+                << ", but the retransmission info is not empty!" << endl;
+        throw cRuntimeError(out.str().c_str());
+    }
+
+    auto ci = new SfControlInfo(nodeId);
+    ci->set6pCmd(CMD_ADD);
+    ci->setCellOptions(MAC_LINKOPTIONS_TX);
+
+    rtx6pTransactions[nodeId] = ci;
+}
+
 void TschMSF::handleSelfMessage(cMessage* msg) {
     switch (msg->getKind()) {
         case REACHED_MAXNUMCELLS: {
@@ -493,11 +525,15 @@ void TschMSF::handleSelfMessage(cMessage* msg) {
             handleScheduleUplink();
             break;
         }
+        case SCHEDULE_DOWNLINK: {
+            handleScheduleDownlink( (check_and_cast<SfControlInfo*> (msg->getControlInfo()))->getNodeId() );
+            break;
+        }
         case SEND_6P_REQ: {
             EV_DETAIL << "Preparing to send a 6P request" << endl;
             auto ctrlInfo = check_and_cast<SfControlInfo*> (msg->getControlInfo());
 
-            // If this 6P request needs to be retransmitted, this check would means
+            // If this 6P request needs to be retransmitted, this check would mean
             // that the first attempt has already failed and we have to retry more
             // TODO: make separation between these two methods more clear, or just merge the two
             if (ctrlInfo->getRtxCtn())
@@ -536,6 +572,43 @@ void TschMSF::handleMessage(cMessage* msg) {
         handleSelfMessage(msg);
 }
 
+double TschMSF::getExpectedWaitingTime(int m, double pc, int rtx) {
+    double lossMultiplier = 0;
+    for (auto i = 1; i < rtx + 1; i++)
+        lossMultiplier += (double) i * pow(pc, i);
+
+    return getExpectedWaitingTime(m) * (1 + lossMultiplier);
+}
+
+int TschMSF::getRequiredServiceRate(double l, double pc, int rtx, bool noQueuing) {
+
+    // service rate to ensure queuing of to-be-retransmitted packets is not possible
+    if (noQueuing) {
+        auto retransmissionsRate = ceil(l * (double) (pc/(1 - pc) > rtx ? rtx : pc/(1 - pc)));
+        EV_DETAIL << "Calculating required service rate:\n"
+                << "expected avg retransmissions from collisions: " << pc/(1 - pc)
+                << "\nrequired service rate: " << l * (double) (pc/(1 - pc) > rtx ? rtx : pc/(1 - pc))
+                << ", ceiled: " << retransmissionsRate << endl;
+
+        return retransmissionsRate;
+    }
+
+    auto service_rate = getExpectedServiceRate(l);
+    EV_DETAIL << "Expected service rate (base): " << service_rate << endl;
+    auto wt = getExpectedWaitingTime(service_rate, pc, rtx);
+    EV_DETAIL << "Expected waiting time (base): " << getExpectedWaitingTime(service_rate) << endl;
+    EV_DETAIL << "Expected waiting time (base rtx): " << wt << endl;
+
+    while ( (wt > (double) 1/l) ) {
+        service_rate += 1;
+        wt = getExpectedWaitingTime(service_rate, pc, rtx);
+        EV_DETAIL <<  "Service rate: " << service_rate << ", expected waiting time: "
+                << wt <<  " > interarrival period (" << 1/l  << ")? " << (wt > (double) 1/l) << endl;
+    }
+
+    return service_rate;
+}
+
 void TschMSF::handleRplRankUpdate(long rank, int numHosts, double lambda) {
     EV_DETAIL << "Trying to schedule TX cells according to our rank - "
             << rank << " and total number of hosts - " << numHosts << endl;
@@ -562,13 +635,14 @@ void TschMSF::handleRplRankUpdate(long rank, int numHosts, double lambda) {
     /**
      * Calculating amount of extra traffic induced by lossy link simulation
      */
-    double lossyFactor = 0;
-    for (auto i = 1; i < rtx + 1; i++)
-        lossyFactor += (double) i * pow(pc, i);
-    lossyFactor = (1 - pc) * lossyFactor + 1;
+//    double lossyFactor = 0;
+//    for (auto i = 1; i < rtx + 1; i++)
+//        lossyFactor += (double) i * pow(pc, i);
+//    lossyFactor = (1 - pc) * lossyFactor + 1;
 
     if (numCellsRequired <= 0)
-        numCellsRequired = ceil(0.001 + lambda * lossyFactor * (numHosts + 2 - rank));
+//        numCellsRequired = ceil(0.001 + lambda * lossyFactor * (numHosts + 2 - rank));
+        numCellsRequired = getRequiredServiceRate(lambda, pc, rtx, par("noRtxQueuing").boolValue());
 
     auto numCellsLeft = numCellsRequired - (int) currentTxCells.size();
 
@@ -589,7 +663,7 @@ void TschMSF::handleRplRankUpdate(long rank, int numHosts, double lambda) {
 void TschMSF::send6topRequest(SfControlInfo *ctrlInfo) {
     auto sixTopCmd = ctrlInfo->get6pCmd();
     auto nodeId = ctrlInfo->getNodeId();
-    auto cellOp = ctrlInfo->getCellOptions();
+    auto cellOp = ctrlInfo->getCellOptions(); // TODO: unused
     auto numCells = ctrlInfo->getNumCells();
 
     switch (sixTopCmd) {
@@ -723,7 +797,6 @@ std::vector<offset_t> TschMSF::getAvailableSlotsInRange(int slOffsetEnd) {
 
 int TschMSF::createCellList(uint64_t destId, std::vector<cellLocation_t> &cellList, int numCells)
 {
-    EV_DETAIL << "Creating cell list for " << MacAddress(destId) << endl;
     Enter_Method_Silent();
 
     if (cellList.size()) {
@@ -745,18 +818,19 @@ int TschMSF::createCellList(uint64_t destId, std::vector<cellLocation_t> &cellLi
     std::vector<offset_t> availableSlots = {};
     std::vector<offset_t> blacklisted = {}; // slot offsets previously rejected by the receiver node
 
-    /** Low-latency part */
-    if (par("lowLatencyMode").boolValue()) {
-
+    /** Low-latency part: schedule daisy-chained cells in uplink */
+    if (par("lowLatencyMode").boolValue() && destId == rplParentId)
+    {
         if (uplinkSlotOffset > 0) {
 
             if (num6pAddSent > 0)
                 numCells *= num6pAddFailed + 1; // OG: numCells *= num6pAddFailed + 1;
 
-            // slowly increase acceptable range to offer in CELL_LIST
+            // slowly increase range offered in CELL_LIST
             auto startOffset = (int) uplinkSlotOffset - numCells;
             freeSlots = getAvailableSlotsInRange(startOffset > 0 ? startOffset : 0, uplinkSlotOffset);
-        } else
+        }
+        else
         {
             auto llStartOffset = par("lowLatencyStartingOffset").intValue();
 
@@ -807,9 +881,21 @@ int TschMSF::createCellList(uint64_t destId, std::vector<cellLocation_t> &cellLi
 
     EV_DETAIL << "Initialized cell list: " << cellList << endl;
 
+    std::vector<cellLocation_t> temp;
+
     // Select only required number of cells from cell list
-    cellList = pickRandomly(cellList, numCells);
-    EV_DETAIL << "Randomly selected " << numCells << " cells: " << cellList << endl;
+    if (par("cellBundlingEnabled").boolValue()) {
+        for (auto i = intrand(pSlotframeLength); i < cellList.size(); i++) {
+            if ((int) temp.size() >= numCells)
+                break;
+            temp.push_back(cellList[i]);
+        }
+        cellList = temp;
+    }
+
+//            std::copy(cellList.begin(), cellList.begin() + numCells, cellList.begin());
+    else
+        cellList = pickRandomly(cellList, numCells);
 
     // Block selected slot offsets until 6P transaction finishes
     for (auto c : cellList)
@@ -842,8 +928,10 @@ int TschMSF::pickCells(uint64_t destId, std::vector<cellLocation_t> &cellList,
     }
     cellList.clear();
 
-    std::mt19937 e(intrand(1000));
-    std::shuffle(pickedCells.begin(), pickedCells.end(), e);
+    if (!par("cellBundlingEnabled").boolValue()) {
+        std::mt19937 e(intrand(1000));
+        std::shuffle(pickedCells.begin(), pickedCells.end(), e);
+    }
 
     for (auto i = 0; i < numCells && i < (int) pickedCells.size(); i++) {
         cellList.push_back(pickedCells[i]);
@@ -985,8 +1073,21 @@ void TschMSF::handleSuccessAdd(uint64_t sender, int numCells, vector<cellLocatio
         return;
     }
 
+    // Check if this transaction was an attempt to schedule a dedicated downlink and retry if necessary
+    if (rtx6pTransactions.find(sender) != rtx6pTransactions.end() && rtx6pTransactions[sender])
+    {
+        if (!cellList.size())
+            retryDownlinkScheduling(sender, "received empty response");
+        else {
+            EV_DETAIL << "Seems a downlink cell is scheduled to " << MacAddress(sender)
+                    << " successfully, erasing the entry from retransmissions map" << endl;
+            rtx6pTransactions.erase(sender);
+        }
+    }
+
     // if we successfully scheduled dedicated TX we don't need an auto, shared TX cell anymore
-    removeAutoTxCell(sender);
+    if (cellList.size())
+        removeAutoTxCell(sender);
 
     // adapt the estimation window based on the up-to-date number of scheduled cells
     pMaxNumCells = ceil(par("maxNumCellsScalingFactor").doubleValue() * ((int) pTschLinkInfo->getDedicatedCells(sender).size())) + par("maxNumCells").intValue();
@@ -998,7 +1099,7 @@ void TschMSF::handleSuccessAdd(uint64_t sender, int numCells, vector<cellLocatio
     if (sender == rplParentId)
         emit(uplinkScheduledSignal, (long) cellList.back().timeOffset);
 
-    // for delay testing mode, need to confirm whether
+    // for delay testing mode only, need to confirm whether
     // ALL of the proposed cells were actually accepted
     if (sender == rplParentId && par("handleRankUpdates").boolValue())
         scheduleAt(simTime() + uniform(1, 3), new cMessage("", DELAY_TEST));
@@ -1018,8 +1119,6 @@ void TschMSF::handleSuccessResponse(uint64_t sender, tsch6pCmd_t cmd, int numCel
             break;
         }
         case CMD_DELETE: {
-            EV_DETAIL << "Deleted cells: " << cellList << endl;
-            // remove cell statistics for cells that have been deleted
             clearCellStats(cellList);
             break;
         }
@@ -1030,6 +1129,7 @@ void TschMSF::handleSuccessResponse(uint64_t sender, tsch6pCmd_t cmd, int numCel
         case CMD_CLEAR: {
             clearScheduleWithNode(sender);
             scheduleAutoCell(sender);
+            rtx6pTransactions.erase(sender);
 
             break;
         }
@@ -1111,6 +1211,7 @@ void TschMSF::handleResponse(uint64_t sender, tsch6pReturn_t code, int numCells,
         }
         case RC_RESET: {
             pTsch6p->sendClearRequest(sender, pTimeout);
+            rtx6pTransactions.erase(sender);
             numLinkResets++;
             break;
         }
@@ -1136,10 +1237,31 @@ void TschMSF::handleTransactionTimeout(uint64_t nodeId)
     // FIXME: obsolete if 6P transaction timeout is set properly
     mac->flush6pQueue(MacAddress(nodeId));
     mac->terminateTschCsmaWith(MacAddress(nodeId));
+
+    if (rtx6pTransactions.find(nodeId) != rtx6pTransactions.end() && rtx6pTransactions[nodeId])
+        retryDownlinkScheduling(nodeId, "timeout");
+}
+
+void TschMSF::retryDownlinkScheduling(uint64_t nodeId, std::string reasonStr) {
+    EV_DETAIL << "Seems a request to schedule a downlink has " << reasonStr << ", retransmission attempts: "
+            << rtx6pTransactions[nodeId]->getRtxCtn() << endl;
+
+    if (rtx6pTransactions[nodeId]->getRtxCtn() < par("maxRetries").intValue())
+    {
+        rtx6pTransactions[nodeId]->incRtxCtn();
+        EV_DETAIL << "Attempting " << rtx6pTransactions[nodeId]->getRtxCtn() << " retransmit in 2s" << endl;
+        scheduleAt(simTime() + 2, new cMessage("Schedule downlink", SCHEDULE_DOWNLINK));
+    }
+    else {
+        EV_DETAIL << "Max retries attempted, erasing the entry from retransmissions map" << endl;
+        rtx6pTransactions.erase(nodeId);
+        numDownlinkAbandonedMaxRetries++;
+    }
 }
 
 void TschMSF::handle6pClearReq(uint64_t nodeId) {
     reservedTimeOffsets[nodeId].clear();
+    rtx6pTransactions.erase(nodeId);
     clearScheduleWithNode(nodeId);
     scheduleAutoCell(nodeId);
 }
@@ -1150,6 +1272,7 @@ void TschMSF::handleInconsistency(uint64_t destId, uint8_t seqNum) {
     /* Free already reserved cells to avoid race conditions */
     reservedTimeOffsets[destId].clear();
     numInconsistencies++;
+    rtx6pTransactions.erase(destId);
 
     pTsch6p->sendClearRequest(destId, pTimeout);
 }
@@ -1160,11 +1283,13 @@ int TschMSF::getTimeout() {
     return pTimeout;
 }
 
-void TschMSF::addCells(uint64_t nodeId, int numCells, uint8_t cellOptions, double delay) {
+bool TschMSF::addCells(uint64_t nodeId, int numCells, uint8_t cellOptions, double delay) {
     if (numCells < 1) {
         EV_WARN << "Invalid number of cells requested - " << numCells << endl;
-        return;
+        return false;
     }
+
+    bool res = false; // indication of whether 6P request has been sent
 
     EV_DETAIL << "Trying to add " << numCells << " cell(s) to " << MacAddress(nodeId) << endl;
 
@@ -1188,18 +1313,22 @@ void TschMSF::addCells(uint64_t nodeId, int numCells, uint8_t cellOptions, doubl
 
     if (pTschLinkInfo->inTransaction(nodeId)) {
         EV_WARN << "Can't add cells, currently in another transaction with this node" << endl;
-        return;
+        return false;
     }
 
     std::vector<cellLocation_t> cellList = {};
     createCellList(nodeId, cellList, numCells + pCellListRedundancy);
 
     if (!cellList.size())
-        EV_DETAIL << "No cells could be added to cell list, aborting ADD" << endl;
+        EV_DETAIL << "No cells could be added to the cell list, aborting ADD" << endl;
     else {
-        if (pTsch6p->sendAddRequest(nodeId, cellOptions, numCells, cellList, pTimeout))
+        res = pTsch6p->sendAddRequest(nodeId, cellOptions, numCells, cellList, pTimeout);
+
+        if (res)
             num6pAddSent++;
     }
+
+    return res;
 }
 
 void TschMSF::deleteCells(uint64_t nodeId, int numCells) {
@@ -1263,8 +1392,11 @@ void TschMSF::handleParentChangedSignal(uint64_t newParentId) {
         rplParentId = newParentId;
 
         // To control whether secondary nodes are allowed to occupy the cells (mainly an issue at the sink)
-        if (par("scheduleUplinkOnJoin").boolValue())
-            addCells(rplParentId, par("initialNumCells").intValue());
+        if (par("scheduleUplinkOnJoin").boolValue()) {
+            int numCellsToSchedule = par("cellBundlingEnabled").boolValue()
+                    ? par("cellBundleSize").intValue() : par("initialNumCells").intValue();
+            addCells(rplParentId, numCellsToSchedule);
+        }
 
         // FIXME: magic numbers
         if (par("scheduleUplinkManually").boolValue())
@@ -1302,8 +1434,8 @@ void TschMSF::handlePacketEnqueued(uint64_t dest) {
     if (rplParentId == dest || par("downlinkDedicated").boolValue())
     {
         // EXPERIMENTAL: forbid leaf nodes (seatbelts) at the sink to schedule uplink
-//        if (!par("scheduleUplinkOnJoin").boolValue() && isLeafNode && rplRank == 2)
-//            return;
+        if (!par("scheduleUplinkOnJoin").boolValue() && isLeafNode && rplRank == 2)
+            return;
 
         auto dedicatedCells = pTschLinkInfo->getDedicatedCells(dest);
 
@@ -1414,6 +1546,34 @@ void TschMSF::receiveSignal(cComponent *src, simsignal_t id, long value, cObject
         return;
     }
 
+    if (std::strcmp(signalName.c_str(), "tschScheduleDownlink") == 0) {
+
+        // this would work for IP addresses of advertised destinations,
+        // but the MAC we get in this signal is always only the "last hop"
+//        if (std::count(downlinkRequested.begin(), downlinkRequested.end(), value))
+//            return;
+
+        if (downlinkRequested.find(value) == downlinkRequested.end())
+            downlinkRequested[value] = 0;
+
+        downlinkRequested[value]++;
+
+        // FIXME: spaghetti
+        if (downlinkRequested[value] > 6)
+            return;
+
+
+        EV_DETAIL << "Downlink requested to child " << MacAddress(value) << endl;
+        auto msg = new cMessage("Schedule downlink", SCHEDULE_DOWNLINK);
+        auto ci = new SfControlInfo(value);
+        msg->setControlInfo(ci);
+        // Wait some time before sending ADD req, since the child is most likely
+        // trying to schedule an uplink cell with us at the same time
+        scheduleAt(simTime() + 20, msg);
+
+        return;
+    }
+
     if (id == mac->pktRecFromUpperSignal) {
         auto macCtrlInfo = (Ieee802154eMac::MacGenericInfo*) details;
         handlePacketEnqueued(macCtrlInfo->getNodeId());
@@ -1472,6 +1632,8 @@ void TschMSF::receiveSignal(cComponent *src, simsignal_t id, long value, cObject
         uplinkSlotOffset = (uint8_t) value;
         return;
     }
+
+
 
     std::string statisticStr;
     std::string scopeStr;

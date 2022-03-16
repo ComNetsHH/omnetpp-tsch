@@ -243,6 +243,10 @@ class TschMSF: public TschSF, public cListener {
     virtual void handleSuccessAdd(uint64_t sender, int numCells, vector<cellLocation_t> cellList, vector<offset_t> reservedSlots);
 
     void handleRplRankUpdate(long rank, int numHosts, double lambda);
+    double getExpectedWaitingTime(int m) { return 1/((double) m + 1); }
+    double getExpectedWaitingTime(int m, double pc, int rtx);
+    int getExpectedServiceRate(double l) { return ceil(l + 0.001); }
+    int getRequiredServiceRate(double l, double pc, int rtx, bool noRtxQueuing = false);
 
     /**
      * @brief Handle @p data that was piggybacked by @p sender.
@@ -379,6 +383,10 @@ class TschMSF: public TschSF, public cListener {
     std::vector<uint64_t> oneHopRplChildren;
     std::map<cellLocation_t, CellStatistic> cellStatistic;
     std::map<uint64_t, std::vector<offset_t>> blacklistedSlots;
+    std::map<uint64_t, SfControlInfo*> rtx6pTransactions; // stores info about outgoing 6P requests to enable retries
+    // stores info about nodes for whom downlink has been requested
+    // to avoid DAO retransmissions spawning more cells than necessary
+    std::map<uint64_t, int> downlinkRequested;
 
     // Stats
     int numInconsistencies;
@@ -387,6 +395,7 @@ class TschMSF: public TschSF, public cListener {
     int num6pAddSent;
     int num6pAddFailed;
     int numUnhandledResponses;
+    int numDownlinkAbandonedMaxRetries;
     double util; // queue utilization with preferred parent
     double uplinkCellUtil; // cell utilization with pref. parent
 
@@ -424,6 +433,7 @@ class TschMSF: public TschSF, public cListener {
         CHECK_DAISY_CHAIN, // message type for CLX scheduling
         DEBUG_TEST,
         SCHEDULE_UPLINK,
+        SCHEDULE_DOWNLINK,
         UNDEFINED
     };
 
@@ -432,10 +442,10 @@ class TschMSF: public TschSF, public cListener {
      *
      * @param delay (optional) additional timeout before sending out the request message
      */
-    void addCells(uint64_t nodeId, int numCells, uint8_t cellOptions, double delay);
-    void addCells(uint64_t nodeId, int numCells, uint8_t cellOptions) { addCells(nodeId, numCells, cellOptions, 0); };
-    void addCells(uint64_t nodeId, int numCells) { addCells(nodeId, numCells, MAC_LINKOPTIONS_TX, 0); }
-    void addCells(SfControlInfo *retryInfo);
+    bool addCells(uint64_t nodeId, int numCells, uint8_t cellOptions, double delay);
+    bool addCells(uint64_t nodeId, int numCells, uint8_t cellOptions) { return addCells(nodeId, numCells, cellOptions, 0); };
+    bool addCells(uint64_t nodeId, int numCells) { return addCells(nodeId, numCells, MAC_LINKOPTIONS_TX, 0); }
+    bool addCells(SfControlInfo *retryInfo);
 
     virtual void deleteCells(uint64_t nodeId, int numCells);
     void scheduleAutoCell(uint64_t neighbor);
@@ -443,7 +453,11 @@ class TschMSF: public TschSF, public cListener {
     void removeAutoTxCell(uint64_t neighbor);
 
     virtual void handleSelfMessage(cMessage* msg);
+
+    // TODO: revise whether it makes sense to have both of these
     void handleScheduleUplink();
+    void handleScheduleDownlink(uint64_t nodeId);
+    void retryDownlinkScheduling(uint64_t nodeId, std::string reasonStr);
 
     /**
      * Sends out 6P request according to the details of SfControlInfo object.

@@ -175,7 +175,7 @@ void Ieee802154eMac::initialize(int stage) {
         EV_DETAIL << "QueueLength = " << neighbor->getQueueLength() << " bitrate = " << bitrate << endl;
         EV_DETAIL << "Finished tsch init stage 1." << endl;
 
-        pktEnqueuedSignal = registerSignal("pktEnqueued");
+        pktRetransmittedSignal = registerSignal("pktRetransmitted");
         pktInterarrivalTimeSignal = registerSignal("interarrivalTime");
         pktRecFromUpperSignal = registerSignal("pktReceviedFromUpperLayer");
         currentFreqSignal = registerSignal("currentFrequency");
@@ -390,8 +390,6 @@ void Ieee802154eMac::handleUpperPacket(Packet *packet) {
         if (!isAppPacket(packet))
             return;
 
-        emit(pktEnqueuedSignal, simTime().dbl());
-
         if (lastAppPktArrivalTimestamp > 0)
             emit(pktInterarrivalTimeSignal, simTime().dbl() - lastAppPktArrivalTimestamp);
 
@@ -410,6 +408,12 @@ bool Ieee802154eMac::isAppPacket(Packet *packet) {
     std::string packetName(packet->getFullName());
 
     return packetName.find("App") != std::string::npos;
+}
+
+bool Ieee802154eMac::isSmokeAlarmPacket(Packet *packet) {
+    std::string packetName(packet->getFullName());
+
+    return packetName.find("HAZARD") != std::string::npos;
 }
 
 int Ieee802154eMac::getVirtualLinkId(TschLink* link) {
@@ -944,11 +948,10 @@ void Ieee802154eMac::manageFailedTX(bool recordStats) {
         emit(linkBrokenSignal, mac);
         delete mac;
     } else {
-        // another retransmit attempt is commencing, record it as if another packet arrival occurs
         auto pkt = neighbor->getCurrentNeighborQueueFirstPacket();
-        if (isAppPacket(pkt) && recordStats)
+        if (isSmokeAlarmPacket(pkt) && recordStats)
         {
-            emit(pktEnqueuedSignal, simTime().dbl());
+            emit(pktRetransmittedSignal, 1);
 
             if (lastAppPktArrivalTimestamp > 0)
                 emit(pktInterarrivalTimeSignal, simTime().dbl() - lastAppPktArrivalTimestamp);
