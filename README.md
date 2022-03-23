@@ -11,9 +11,10 @@ This model is developed and tested with the following library versions
 
 ## Installation
 1. To use with 6TiSCH, import RPL project from https://github.com/ComNetsHH/omnetpp-rpl first and follow its installation instructions.
-2. Add INET to project references by navigating TSCH project 'Properties' -> 'Project References'
-3. Add RPL project source directory to compile options of TSCH project by navigating `Properties` -> `OMNeT++` -> `Makemake` -> (select `src` folder) -> `Build Makemake Options...` -> `Compile` tab -> add absolute path containing RPL 'src' folder, e.g. '/home/yevhenii/omnetpp-5.6.2/samples/omnetpp-rpl/src'. Also make sure `Add include paths exported from referenced projects` is enabled
-4. In RPL `Properties`->`OMNeT++`-> `Makemake`-> (select `src` folder) -> `Build Makemake Options...`: 
+2. Replace _respective_ INET source files with the ones included in this repo under `inet` folder and rebuild INET.
+3. Add INET to project references by navigating TSCH project 'Properties' -> 'Project References'
+4. Add RPL project source directory to compile options of TSCH project by navigating `Properties` -> `OMNeT++` -> `Makemake` -> (select `src` folder) -> `Build Makemake Options...` -> `Compile` tab -> add absolute path containing RPL 'src' folder, e.g. '/home/yevhenii/omnetpp-5.6.2/samples/omnetpp-rpl/src'. Also make sure `Add include paths exported from referenced projects` is enabled
+5. In RPL `Properties`->`OMNeT++`-> `Makemake`-> (select `src` folder) -> `Build Makemake Options...`: 
    - Set `Target` to `Shared library` and enable `Export this shared library...`
 
 ## 6TiSCH-HPQ Simulations
