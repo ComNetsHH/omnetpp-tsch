@@ -80,9 +80,11 @@ simple TschMSF like TschSF
 		
 		// Misc
 		bool lowLatencyMode = default(false);
-		bool cellBundlingEnabled = default(false);
+		bool cellBundlingEnabled = default(false); // defines the rule for CELL_LIST creation
+		bool handleCellBundlingSignal = default(false); // determines whether to react to cell-bundling signal from RPL
 		int cellBundleSize = default(2);
 		int lowLatencyStartingOffset = default(-1);
+		int minimumUplinkBandwidth = default(1); // for nodes with "scheduleUplinkManually" enabled
 		bool scheduleUplinkOnJoin = default(true);
 		
 		bool allowAutoCellDeletion = default(false);

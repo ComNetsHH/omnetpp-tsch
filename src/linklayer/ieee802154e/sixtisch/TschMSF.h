@@ -383,7 +383,7 @@ class TschMSF: public TschSF, public cListener {
     std::vector<uint64_t> oneHopRplChildren;
     std::map<cellLocation_t, CellStatistic> cellStatistic;
     std::map<uint64_t, std::vector<offset_t>> blacklistedSlots;
-    std::map<uint64_t, SfControlInfo*> rtx6pTransactions; // stores info about outgoing 6P requests to enable retries
+    std::map<uint64_t, SfControlInfo*> retryInfo; // stores info about outgoing 6P requests to enable retries
     // stores info about nodes for whom downlink has been requested
     // to avoid DAO retransmissions spawning more cells than necessary
     std::map<uint64_t, int> downlinkRequested;
@@ -395,7 +395,8 @@ class TschMSF: public TschSF, public cListener {
     int num6pAddSent;
     int num6pAddFailed;
     int numUnhandledResponses;
-    int numDownlinkAbandonedMaxRetries;
+    int numTranAbandonedMaxRetries;
+    int numTranAbortedUnknownReason;
     double util; // queue utilization with preferred parent
     double uplinkCellUtil; // cell utilization with pref. parent
 
@@ -412,6 +413,8 @@ class TschMSF: public TschSF, public cListener {
     bool showQueueSize;
     bool showTxCellCount;
     bool showLinkResets;
+    bool pCellBundlingEnabled;
+    int pCellBundleSize;
 
     cellLocation_t autoRxCell;
 
@@ -434,6 +437,7 @@ class TschMSF: public TschSF, public cListener {
         DEBUG_TEST,
         SCHEDULE_UPLINK,
         SCHEDULE_DOWNLINK,
+        CELL_BUNDLE_REQ,
         UNDEFINED
     };
 
@@ -453,11 +457,12 @@ class TschMSF: public TschSF, public cListener {
     void removeAutoTxCell(uint64_t neighbor);
 
     virtual void handleSelfMessage(cMessage* msg);
+    void handleCellBundleReq();
 
     // TODO: revise whether it makes sense to have both of these
     void handleScheduleUplink();
     void handleScheduleDownlink(uint64_t nodeId);
-    void retryDownlinkScheduling(uint64_t nodeId, std::string reasonStr);
+    void retryTransaction(uint64_t nodeId, std::string reasonStr);
 
     /**
      * Sends out 6P request according to the details of SfControlInfo object.
