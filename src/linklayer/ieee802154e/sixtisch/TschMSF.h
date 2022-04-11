@@ -446,9 +446,7 @@ class TschMSF: public TschSF, public cListener {
      *
      * @param delay (optional) additional timeout before sending out the request message
      */
-    bool addCells(uint64_t nodeId, int numCells, uint8_t cellOptions, double delay);
-    bool addCells(uint64_t nodeId, int numCells, uint8_t cellOptions) { return addCells(nodeId, numCells, cellOptions, 0); };
-    bool addCells(uint64_t nodeId, int numCells) { return addCells(nodeId, numCells, MAC_LINKOPTIONS_TX, 0); }
+    bool addCells(uint64_t nodeId, int numCells, uint8_t cellOptions);
     bool addCells(SfControlInfo *retryInfo);
 
     virtual void deleteCells(uint64_t nodeId, int numCells);

@@ -88,4 +88,7 @@ simple TschMSF like TschSF
 		bool scheduleUplinkOnJoin = default(true);
 		
 		bool allowAutoCellDeletion = default(false);
+		// apply hash function to the node MAC before taking the modulo by number of channels, 
+		// diversifies auto RX channel offsets of nodes from the same module array 
+		bool useHashChOffsets = default(false); 
 }
