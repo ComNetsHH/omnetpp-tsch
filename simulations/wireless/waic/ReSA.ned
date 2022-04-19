@@ -3,6 +3,8 @@
 //
 // Copyright (C) 2019  Institute of Communication Networks (ComNets),
 //                     Hamburg University of Technology (TUHH)
+//			 (C) 2022  Gökay Apusoglu
+//			 (C) 2022  Yevhenii Shudrenko
 //           (C) 2019  Daniel Ploeger
 //           (C) 2019  Leo Krueger
 //           (C) 2006  Andras Varga
@@ -20,20 +22,38 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 //
-
 package tsch.simulations.wireless.waic;
 
+import inet.examples.wireless.throughput.WirelessAPWithSink;
 import inet.networklayer.configurator.ipv4.Ipv4NetworkConfigurator;
 import inet.networklayer.configurator.ipv6.Ipv6FlatNetworkConfigurator;
+import inet.node.inet.SensorNode;
 import inet.physicallayer.contract.packetlevel.IRadioMedium;
-import inet.visualizer.contract.IIntegratedVisualizer;
+import inet.physicallayer.common.packetlevel.RadioMedium;
+// import inet.visualizer.contract.IIntegratedVisualizer;
 import inet.node.inet.WirelessHost;
 import inet.node.inet.AdhocHost;
 import rpl.RplRouter;
-import rpl.configurator.RplNetConfigurator;
 import tsch.mobility.ReSaMobility;
 import tsch.linklayer.ieee802154e.TschHopping;
 
+// libraries for ISM interference
+import inet.node.ethernet.Eth100M;
+import inet.node.ethernet.EtherLink;
+import inet.node.ethernet.EtherSwitch;
+
+import inet.applications.contract.IApp;
+import inet.common.misc.ThruputMeteringChannel;
+import inet.physicallayer.ieee80211.packetlevel.Ieee80211ScalarRadioMedium;
+import inet.physicallayer.common.packetlevel.RadioMedium;
+
+import inet.node.inet.WirelessHost;
+import inet.node.wireless.AccessPoint;
+import inet.node.inet.Router;
+import inet.node.inet.StandardHost;
+import inet.node.wireless.Probe;
+import inet.environment.common.PhysicalEnvironment;
+// import inet.visualizer.integrated.IntegratedVisualizer;
 network ReSA
 {
     parameters:
@@ -45,29 +65,38 @@ network ReSA
         int numBM = default(1);
         int numWAS = default(1);
         int numHosts = default(0);
+        int numUsers = default(0);
+        int numAircrafts = default(1);
+        bool enableObstacles = default(false);
         double gridCenterX = default(0);
         double gridCenterY = default(0);
-        
+
     submodules:
         configurator: Ipv6FlatNetworkConfigurator {
             parameters:
                 @display("p=32.45,3.1166666;is=s");
         }
-        channelHopping: TschHopping;
-        radioMedium: <> like IRadioMedium {
+        channelHopping: TschHopping {
+            @display("p=18.62,4.2");
+        }
+        radioMedium: RadioMedium {
             parameters:
                 @display("p=6.6,3.1166666;is=s");
         }
+        physicalEnvironment: PhysicalEnvironment if enableObstacles==true {
+            parameters:
+                @display("p=7.6,3.1166666;is=s");
+        }
+//        integratedVisualizer: IntegratedVisualizer if enableObstacles==true {
+//            parameters:
+//                @display("p=8.6,3.1166666;is=s");
+//        }
         gw1[numGW]: RplRouter {
             parameters:
                 @6tisch;
                 @display("p=28.48,20.114;r=,,#707070");
-        }                      
-        am1[numAM]: RplRouter {
-            parameters:
-                @6tisch;
-                @display("r=,,#707070;p=28.48,34.354");
         }
+
         hs1[numHS]: RplRouter {
             parameters:
                 @6tisch;
@@ -76,127 +105,170 @@ network ReSA
         sos1[numSoS]: RplRouter {
             parameters:
                 @6tisch;
-                @display("i=misc/sensor2");
                 @display("r=,,#707070;p=28.48,34.354");
-        }                        
+        }
         bm1[numBM]: RplRouter {
             parameters:
                 @6tisch;
                 @display("p=28.48,20.114;r=,,#707070");
-        }                        
+        }
         was1[numWAS]: RplRouter {
             parameters:
                 @6tisch;
                 @display("p=28.48,20.114;r=,,#707070");
         }
+        am1[numAM]: RplRouter {
+            parameters:
+                @6tisch;
+                @display("r=,,#707070;p=28.48,34.354");
+        }
         host[numHosts]: RplRouter {
+            parameters:
+                @6tisch;
+                @display("p=28.48,20.114");
+        }
+        server1: StandardHost if numUsers>0 {
+            @display("p=20.02,12.04;i=device/mainframe");
+        }
+        user1[numUsers]: WirelessHost if numUsers>0 {
+            @display("p=13.86,36.12;is=n;i=misc/person3");
+        }
+        ap1[3]: AccessPoint if numUsers>0 {
+            @display("p=14.56,20.02;i=device/accesspoint,cyan;is=s");
+        }
+
+    
+        gw2[numGW]: RplRouter if numAircrafts>=2{
             parameters:
                 @6tisch;
                 @display("p=28.48,20.114;r=,,#707070");
         }
-//        interferer: WirelessHost {
-//            parameters:
-//                @display("p=28.48,20.114;r=,,#707070");
-//        }
-//        wifiSink: WirelessHost {
-//            parameters:
-//                @display("p=28.48,20.114;r=,,#707070");
-//        }
-//        gw2[numGW]: RplRouter {
-//            parameters:
-//                @6tisch;
-//                @display("p=28.48,20.114;r=,,#707070");
-//        } 
-//        gw3[numGW]: RplRouter {
-//            parameters:
-//                @6tisch;
-//                @display("p=28.48,20.114;r=,,#707070");
-//        } 
-//        gw4[numGW]: RplRouter {
-//            parameters:
-//                @6tisch;
-//                @display("p=28.48,20.114;r=,,#707070");
-//        }
-//		am2[numAM]: RplRouter {
-//            parameters:
-//                @6tisch;
-//                @display("r=,,#707070;p=28.48,34.354");
-//        }
-//        am3[numAM]: RplRouter {
-//            parameters:
-//                @6tisch;
-//                @display("r=,,#707070;p=28.48,34.354");
-//        }
-//        am4[numAM]: RplRouter {
-//            parameters:
-//                @6tisch;
-//                @display("r=,,#707070;p=28.48,34.354");
-//        }
-//        hs2[numHS]: RplRouter {
-//            parameters:
-//                @6tisch;
-//                @display("r=,,#707070;p=28.48,34.354");
-//        }
-//        hs3[numHS]: RplRouter {
-//            parameters:
-//                @6tisch;
-//                @display("r=,,#707070;p=28.48,34.354");
-//        }
-//        hs4[numHS]: RplRouter {
-//            parameters:
-//                @6tisch;
-//                @display("r=,,#707070;p=28.48,34.354");
-//        }
-//        sos2[numSoS]: RplRouter {
-//            parameters:
-//                @6tisch;
-//                @display("r=,,#707070;p=28.48,34.354");
-//        }
-//        sos3[numSoS]: RplRouter {
-//            parameters:
-//                @6tisch;
-//                @display("r=,,#707070;p=28.48,34.354");
-//        }
-//        sos4[numSoS]: RplRouter {
-//            parameters:
-//                @6tisch;
-//                @display("r=,,#707070;p=28.48,34.354");
-//        }
-//        bm2[numBM]: RplRouter {
-//            parameters:
-//                @6tisch;
-//                @display("p=28.48,20.114;r=,,#707070");
-//        }
-//        bm3[numBM]: RplRouter {
-//            parameters:
-//                @6tisch;
-//                @display("p=28.48,20.114;r=,,#707070");
-//        }
-//        bm4[numBM]: RplRouter {
-//            parameters:
-//                @6tisch;
-//                @display("p=28.48,20.114;r=,,#707070");
-//        }
-//        was2[numWAS]: RplRouter {
-//            parameters:
-//                @6tisch;
-//                @display("p=28.48,20.114;r=,,#707070");
-//        }
-//        was3[numWAS]: RplRouter {
-//            parameters:
-//                @6tisch;
-//                @display("p=28.48,20.114;r=,,#707070");
-//        }
-//        was4[numWAS]: RplRouter {
-//            parameters:
-//                @6tisch;
-//                @display("p=28.48,20.114;r=,,#707070");
-//        }          
-// 		 // purely for display purposes
-//        ra[2]: RplRouter {
-//            parameters:
-//                @6tisch;
-//                @display("i=device/antennatower");
-//                @display("p=28.48,20.114;r=,,#707070");
-//        }                             
+		am2[numAM]: RplRouter if numAircrafts>=2{
+            parameters:
+                @6tisch;
+                @display("r=,,#707070;p=28.48,34.354");
+        }
+        hs2[numHS]: RplRouter if numAircrafts>=2{
+            parameters:
+                @6tisch;
+                @display("r=,,#707070;p=28.48,34.354");
+        }
+        sos2[numSoS]: RplRouter if numAircrafts>=2{
+            parameters:
+                @6tisch;
+                @display("r=,,#707070;p=28.48,34.354");
+        }
+        bm2[numBM]: RplRouter if numAircrafts>=2{
+            parameters:
+                @6tisch;
+                @display("p=28.48,20.114;r=,,#707070");
+        }
+        was2[numWAS]: RplRouter if numAircrafts>=2{
+            parameters:
+                @6tisch;
+                @display("p=28.48,20.114;r=,,#707070");
+        }
+        server2: StandardHost if (numAircrafts>=2 && numUsers>0) {
+            @display("p=20.02,12.04;i=device/mainframe");
+        }
+        user2[numUsers]: WirelessHost if (numAircrafts>=2 && numUsers>0) {
+            @display("p=13.86,36.12;is=n;i=misc/person3");
+        }
+        ap2[3]: AccessPoint if (numAircrafts>=2 && numUsers>0) {
+            @display("p=14.56,20.02;i=device/accesspoint,cyan;is=s");
+        }
+
+        gw3[numGW]: RplRouter if numAircrafts>=3{
+            parameters:
+                @6tisch;
+                @display("p=28.48,20.114;r=,,#707070");
+        }
+		am3[numAM]: RplRouter if numAircrafts>=3{
+            parameters:
+                @6tisch;
+                @display("r=,,#707070;p=28.48,34.354");
+        }
+        hs3[numHS]: RplRouter if numAircrafts>=3{
+            parameters:
+                @6tisch;
+                @display("r=,,#707070;p=28.48,34.354");
+        }
+        sos3[numSoS]: RplRouter if numAircrafts>=3{
+            parameters:
+                @6tisch;
+                @display("r=,,#707070;p=28.48,34.354");
+        }
+        bm3[numBM]: RplRouter if numAircrafts>=3{
+            parameters:
+                @6tisch;
+                @display("p=28.48,20.114;r=,,#707070");
+        }
+        was3[numWAS]: RplRouter if numAircrafts>=3{
+            parameters:
+                @6tisch;
+                @display("p=28.48,20.114;r=,,#707070");
+        }
+        server3: StandardHost if (numAircrafts>=3 && numUsers>0) {
+            @display("p=20.02,12.04;i=device/mainframe");
+        }
+        user3[numUsers]: WirelessHost if (numAircrafts>=3 && numUsers>0) {
+            @display("p=13.86,36.12;is=n;i=misc/person3");
+        }
+        ap3[3]: AccessPoint if (numAircrafts>=3 && numUsers>0) {
+            @display("p=14.56,20.02;i=device/accesspoint,cyan;is=s");
+        }
+        
+        gw4[numGW]: RplRouter if numAircrafts>=4{
+            parameters:
+                @6tisch;
+                @display("p=28.48,20.114;r=,,#707070");
+        }
+		am4[numAM]: RplRouter if numAircrafts>=4{
+            parameters:
+                @6tisch;
+                @display("r=,,#707070;p=28.48,34.354");
+        }
+        hs4[numHS]: RplRouter if numAircrafts>=4{
+            parameters:
+                @6tisch;
+                @display("r=,,#707070;p=28.48,34.354");
+        }
+        sos4[numSoS]: RplRouter if numAircrafts>=4{
+            parameters:
+                @6tisch;
+                @display("r=,,#707070;p=28.48,34.354");
+        }
+        bm4[numBM]: RplRouter if numAircrafts>=4{
+            parameters:
+                @6tisch;
+                @display("p=28.48,20.114;r=,,#707070");
+        }
+        was4[numWAS]: RplRouter if numAircrafts>=4{
+            parameters:
+                @6tisch;
+                @display("p=28.48,20.114;r=,,#707070");
+        }
+        server4: StandardHost if (numAircrafts>=4 && numUsers>0) {
+            @display("p=20.02,12.04;i=device/mainframe");
+        }
+        user4[numUsers]: WirelessHost if (numAircrafts>=4 && numUsers>0) {
+            @display("p=13.86,36.12;is=n;i=misc/person3");
+        }
+        ap4[4]: AccessPoint if (numAircrafts>=4 && numUsers>0) {
+            @display("p=14.56,20.02;i=device/accesspoint,cyan;is=s");
+        }        
+    connections:
+        ap1[0].ethg++ <--> {  datarate = 100Mbps; } <--> server1.ethg++ if numUsers>0;
+        ap1[1].ethg++ <--> {  datarate = 100Mbps; } <--> server1.ethg++ if numUsers>0;
+        ap1[2].ethg++ <--> {  datarate = 100Mbps; } <--> server1.ethg++ if numUsers>0;
+        ap2[0].ethg++ <--> {  datarate = 100Mbps; } <--> server2.ethg++ if (numAircrafts>=2 && numUsers>0);
+        ap2[1].ethg++ <--> {  datarate = 100Mbps; } <--> server2.ethg++ if (numAircrafts>=2 && numUsers>0);
+        ap2[2].ethg++ <--> {  datarate = 100Mbps; } <--> server2.ethg++ if (numAircrafts>=2 && numUsers>0);
+        ap3[0].ethg++ <--> {  datarate = 100Mbps; } <--> server3.ethg++ if (numAircrafts>=3 && numUsers>0);
+        ap3[1].ethg++ <--> {  datarate = 100Mbps; } <--> server3.ethg++ if (numAircrafts>=3 && numUsers>0);
+        ap3[2].ethg++ <--> {  datarate = 100Mbps; } <--> server3.ethg++ if (numAircrafts>=3 && numUsers>0);
+        ap4[0].ethg++ <--> {  datarate = 100Mbps; } <--> server4.ethg++ if (numAircrafts>=4 && numUsers>0);
+        ap4[1].ethg++ <--> {  datarate = 100Mbps; } <--> server4.ethg++ if (numAircrafts>=4 && numUsers>0);
+        ap4[2].ethg++ <--> {  datarate = 100Mbps; } <--> server4.ethg++ if (numAircrafts>=4 && numUsers>0);
+        
 }
