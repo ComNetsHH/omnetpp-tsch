@@ -145,10 +145,6 @@ void TschMSF::initialize(int stage) {
 
 //        WATCH_MAP(reservedTimeOffsets);
 
-//        WATCH(util);
-//        WATCH(numFailedTracked6p);
-//        WATCH_PTR(delayed6pReq);
-
         rpl = hostNode->getSubmodule("rpl");
 
         isSink = rpl ? rpl->par("isRoot") : false;
@@ -178,20 +174,12 @@ void TschMSF::scheduleAutoRxCell(InterfaceToken euiAddr) {
     std::vector<cellLocation_t> cellList;
 //    cellList.push_back({autoRxCellslotOffset, autoRxCellchanOffset});
 
-
-//    auto hashChOffset = myhash(pNodeId) % pNumChannels;
-//    EV_DETAIL << "Auto RX cell channel offset using the new hash function: " << hashChOffset << endl;
-
-    // old: simple modulo
-//    autoRxCell = {euiAddr.low() % pSlotframeLength, euiAddr.low() % pNumChannels};
-    // new: hash avoids consecutive channel offsets
     autoRxCell = {
             euiAddr.low() % pSlotframeLength,
             static_cast<offset_t>((par("useHashChOffsets").boolValue() ? myhash(euiAddr.low()) : euiAddr.low()) % pNumChannels)
     };
 
     recordScalar("autoRxChOffset", (int) autoRxCell.channelOffset);
-
 
     EV_DETAIL << "euiAddr: " << euiAddr.low() << ", MAC id: " << pNodeId
             << ", pNumChannels: " << pNumChannels << endl;
@@ -223,9 +211,6 @@ void TschMSF::scheduleAutoCell(uint64_t neighborId) {
 
     EV_DETAIL << "Trying to schedule an auto cell to " << MacAddress(neighborId) << endl;
 
-//    auto hashChOffset = myhash(neighborId) % pNumChannels;
-//    EV_DETAIL << "Auto TX cell channel offset using the new hash function: " << hashChOffset << endl;
-
     // Although this is always supposed to be a single cell,
     // implementation-wise it's easier to keep it as vector
     auto sharedCells = pTschLinkInfo->getSharedCellsWith(neighborId);
@@ -237,7 +222,8 @@ void TschMSF::scheduleAutoCell(uint64_t neighborId) {
             EV_DETAIL << "Already scheduled, aborting" << endl;
             return;
         }
-        EV_WARN << "Shared auto cell found in TschLinkInfo but missing in schedule!" << endl;
+
+        throw cRuntimeError("Shared auto cell found in TschLinkInfo but missing in the schedule!");
     }
 
     auto ctrlMsg = new tsch6topCtrlMsg();
@@ -499,7 +485,9 @@ void TschMSF::handleScheduleUplink() {
 
     EV_DETAIL << "Handling uplink, dedicated cells found: " << numDedicated << endl;
 
-    if ( numDedicated < par("minimumUplinkBandwidth").intValue() || (pCellBundlingEnabled && numDedicated < bundleSize) ) {
+    if ( numDedicated < 1
+            || (pCellBundlingEnabled && numDedicated < bundleSize) )
+    {
         bool res = addCells(rplParentId, pCellBundlingEnabled ? bundleSize : 1, MAC_LINKOPTIONS_TX);
 
         if (!res) {
@@ -508,7 +496,6 @@ void TschMSF::handleScheduleUplink() {
         }
 //        EV_DETAIL << "No dedicated TX cell found to preferred parent and "
 //                << "we are currently not in transaction with it, attempting to add one TX cell" << endl;
-
     }
 }
 
@@ -1322,7 +1309,7 @@ void TschMSF::handleTransactionTimeout(uint64_t nodeId)
         scheduleAutoCell(nodeId);
     }
 
-    // FIXME: obsolete if 6P transaction timeout is set properly
+    // FIXME: obsolete if 6P transaction timeout is set up properly
     mac->flush6pQueue(MacAddress(nodeId));
     mac->terminateTschCsmaWith(MacAddress(nodeId));
 
@@ -1634,6 +1621,8 @@ void TschMSF::receiveSignal(cComponent *src, simsignal_t id, long value, cObject
 //        if (std::count(downlinkRequested.begin(), downlinkRequested.end(), value))
 //            return;
 
+        pLimNumCellsUsedLow = -1; // to avoid deletion of specially-provisioned cells
+
         if (downlinkRequested.find(value) == downlinkRequested.end())
             downlinkRequested[value] = 0;
 
@@ -1661,7 +1650,7 @@ void TschMSF::receiveSignal(cComponent *src, simsignal_t id, long value, cObject
             return;
 
         pCellBundlingEnabled = true;
-        pLimNumCellsUsedLow = -1; // avoid deletion of bundled cells
+        pLimNumCellsUsedLow = -1; // to avoid deletion of bundled cells
         handleCellBundleReq();
         return;
     }
