@@ -577,7 +577,9 @@ Packet* Tsch6topSublayer::handleRequestMsg(Packet* pkt,
     }
 
     pTschLinkInfo->setLastKnownType(sender, MSG_REQUEST);
-    pTschLinkInfo->setInTransaction(sender, timeout);
+
+    if (!pTschLinkInfo->inTransaction(sender))
+        pTschLinkInfo->setInTransaction(sender, timeout);
 
     // TODO: Refactor this further/split into separate handler functions
     switch (cmd) {
@@ -1200,7 +1202,7 @@ Packet* Tsch6topSublayer::createClearRequest(uint64_t destId, uint8_t seqNum) {
 
     pkt->addTagIfAbsent<PacketProtocolTag>()->setProtocol(&Protocol::wiseRoute);
     auto virtualTag = pkt->addTagIfAbsent<VirtualLinkTagReq>();
-        virtualTag->setVirtualLinkID(-2);
+    virtualTag->setVirtualLinkID(-2);
     return pkt;
 }
 
