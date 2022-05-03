@@ -1,13 +1,9 @@
 //
 // Simulation model for IEEE 802.15.4 Time Slotted Channel Hopping (TSCH)
 //
-// Copyright (C) 2019  Institute of Communication Networks (ComNets),
+// Copyright (C) 2022  Institute of Communication Networks (ComNets),
 //                     Hamburg University of Technology (TUHH)
-//			 (C) 2022  Gökay Apusoglu
-//			 (C) 2022  Yevhenii Shudrenko
-//           (C) 2019  Daniel Ploeger
-//           (C) 2019  Leo Krueger
-//           (C) 2006  Andras Varga
+//           (C) 2022  G�kay Apusoglu
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -22,6 +18,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 //
+
 package tsch.simulations.wireless.waic;
 
 import inet.examples.wireless.throughput.WirelessAPWithSink;
@@ -30,8 +27,7 @@ import inet.networklayer.configurator.ipv6.Ipv6FlatNetworkConfigurator;
 import inet.node.inet.SensorNode;
 import inet.physicallayer.contract.packetlevel.IRadioMedium;
 import inet.physicallayer.common.packetlevel.RadioMedium;
-// import inet.visualizer.contract.IIntegratedVisualizer;
-import inet.node.inet.WirelessHost;
+import inet.visualizer.contract.IIntegratedVisualizer;
 import inet.node.inet.AdhocHost;
 import rpl.RplRouter;
 import tsch.mobility.ReSaMobility;
@@ -47,13 +43,15 @@ import inet.common.misc.ThruputMeteringChannel;
 import inet.physicallayer.ieee80211.packetlevel.Ieee80211ScalarRadioMedium;
 import inet.physicallayer.common.packetlevel.RadioMedium;
 
-import inet.node.inet.WirelessHost;
 import inet.node.wireless.AccessPoint;
+
+import inet.node.ipv6.StandardHost6;
 import inet.node.inet.Router;
+import inet.node.ipv6.Router6;
 import inet.node.inet.StandardHost;
 import inet.node.wireless.Probe;
 import inet.environment.common.PhysicalEnvironment;
-// import inet.visualizer.integrated.IntegratedVisualizer;
+import inet.visualizer.environment.PhysicalEnvironmentCanvasVisualizer;
 network ReSA
 {
     parameters:
@@ -87,10 +85,10 @@ network ReSA
             parameters:
                 @display("p=7.6,3.1166666;is=s");
         }
-//        integratedVisualizer: IntegratedVisualizer if enableObstacles==true {
-//            parameters:
-//                @display("p=8.6,3.1166666;is=s");
-//        }
+        PhysicalEnvironmentCanvasVisualizer: PhysicalEnvironmentCanvasVisualizer if enableObstacles==true {
+            parameters:
+                @display("p=8.6,3.1166666;is=s");
+        }
         gw1[numGW]: RplRouter {
             parameters:
                 @6tisch;
@@ -127,16 +125,20 @@ network ReSA
                 @6tisch;
                 @display("p=28.48,20.114");
         }
-        server1: StandardHost if numUsers>0 {
+        server1: StandardHost6 if numUsers>0 {
             @display("p=20.02,12.04;i=device/mainframe");
         }
-        user1[numUsers]: WirelessHost if numUsers>0 {
+        user1[numUsers]: StandardHost6 if numUsers>0 {
             @display("p=13.86,36.12;is=n;i=misc/person3");
+            numWlanInterfaces = 1;
         }
         ap1[3]: AccessPoint if numUsers>0 {
             @display("p=14.56,20.02;i=device/accesspoint,cyan;is=s");
         }
-
+		r1 : Router6 if numUsers>0 {
+            parameters:
+                @display("p=14.56,20.02;is=s");
+        }
     
         gw2[numGW]: RplRouter if numAircrafts>=2{
             parameters:
@@ -171,11 +173,15 @@ network ReSA
         server2: StandardHost if (numAircrafts>=2 && numUsers>0) {
             @display("p=20.02,12.04;i=device/mainframe");
         }
-        user2[numUsers]: WirelessHost if (numAircrafts>=2 && numUsers>0) {
+        user2[numUsers]: RplRouter if (numAircrafts>=2 && numUsers>0) {
             @display("p=13.86,36.12;is=n;i=misc/person3");
         }
         ap2[3]: AccessPoint if (numAircrafts>=2 && numUsers>0) {
             @display("p=14.56,20.02;i=device/accesspoint,cyan;is=s");
+        }
+		r2 : Router6 if (numAircrafts>=2 && numUsers>0) {
+            parameters:
+                @display("p=14.56,20.02;is=s");
         }
 
         gw3[numGW]: RplRouter if numAircrafts>=3{
@@ -211,11 +217,15 @@ network ReSA
         server3: StandardHost if (numAircrafts>=3 && numUsers>0) {
             @display("p=20.02,12.04;i=device/mainframe");
         }
-        user3[numUsers]: WirelessHost if (numAircrafts>=3 && numUsers>0) {
+        user3[numUsers]: RplRouter if (numAircrafts>=3 && numUsers>0) {
             @display("p=13.86,36.12;is=n;i=misc/person3");
         }
         ap3[3]: AccessPoint if (numAircrafts>=3 && numUsers>0) {
             @display("p=14.56,20.02;i=device/accesspoint,cyan;is=s");
+        }
+		r3 : Router6 if (numAircrafts>=3 && numUsers>0) {
+            parameters:
+                @display("p=14.56,20.02;is=s");
         }
         
         gw4[numGW]: RplRouter if numAircrafts>=4{
@@ -251,24 +261,32 @@ network ReSA
         server4: StandardHost if (numAircrafts>=4 && numUsers>0) {
             @display("p=20.02,12.04;i=device/mainframe");
         }
-        user4[numUsers]: WirelessHost if (numAircrafts>=4 && numUsers>0) {
+        user4[numUsers]: RplRouter if (numAircrafts>=4 && numUsers>0) {
             @display("p=13.86,36.12;is=n;i=misc/person3");
         }
         ap4[4]: AccessPoint if (numAircrafts>=4 && numUsers>0) {
             @display("p=14.56,20.02;i=device/accesspoint,cyan;is=s");
+        }
+		r4 : Router6 if (numAircrafts>=2 && numUsers>0) {
+            parameters:
+                @display("p=14.56,20.02;is=s");
         }        
     connections:
-        ap1[0].ethg++ <--> {  datarate = 100Mbps; } <--> server1.ethg++ if numUsers>0;
-        ap1[1].ethg++ <--> {  datarate = 100Mbps; } <--> server1.ethg++ if numUsers>0;
-        ap1[2].ethg++ <--> {  datarate = 100Mbps; } <--> server1.ethg++ if numUsers>0;
-        ap2[0].ethg++ <--> {  datarate = 100Mbps; } <--> server2.ethg++ if (numAircrafts>=2 && numUsers>0);
-        ap2[1].ethg++ <--> {  datarate = 100Mbps; } <--> server2.ethg++ if (numAircrafts>=2 && numUsers>0);
-        ap2[2].ethg++ <--> {  datarate = 100Mbps; } <--> server2.ethg++ if (numAircrafts>=2 && numUsers>0);
-        ap3[0].ethg++ <--> {  datarate = 100Mbps; } <--> server3.ethg++ if (numAircrafts>=3 && numUsers>0);
-        ap3[1].ethg++ <--> {  datarate = 100Mbps; } <--> server3.ethg++ if (numAircrafts>=3 && numUsers>0);
-        ap3[2].ethg++ <--> {  datarate = 100Mbps; } <--> server3.ethg++ if (numAircrafts>=3 && numUsers>0);
-        ap4[0].ethg++ <--> {  datarate = 100Mbps; } <--> server4.ethg++ if (numAircrafts>=4 && numUsers>0);
-        ap4[1].ethg++ <--> {  datarate = 100Mbps; } <--> server4.ethg++ if (numAircrafts>=4 && numUsers>0);
-        ap4[2].ethg++ <--> {  datarate = 100Mbps; } <--> server4.ethg++ if (numAircrafts>=4 && numUsers>0);
+        ap1[0].ethg++ <--> {  datarate = 100Mbps; } <--> r1.ethg++ if numUsers>0;
+        ap1[1].ethg++ <--> {  datarate = 100Mbps; } <--> r1.ethg++ if numUsers>0;
+        ap1[2].ethg++ <--> {  datarate = 100Mbps; } <--> r1.ethg++ if numUsers>0;
+        ap2[0].ethg++ <--> {  datarate = 100Mbps; } <--> r2.ethg++ if (numAircrafts>=2 && numUsers>0);
+        ap2[1].ethg++ <--> {  datarate = 100Mbps; } <--> r2.ethg++ if (numAircrafts>=2 && numUsers>0);
+        ap2[2].ethg++ <--> {  datarate = 100Mbps; } <--> r2.ethg++ if (numAircrafts>=2 && numUsers>0);
+        ap3[0].ethg++ <--> {  datarate = 100Mbps; } <--> r3.ethg++ if (numAircrafts>=3 && numUsers>0);
+        ap3[1].ethg++ <--> {  datarate = 100Mbps; } <--> r3.ethg++ if (numAircrafts>=3 && numUsers>0);
+        ap3[2].ethg++ <--> {  datarate = 100Mbps; } <--> r3.ethg++ if (numAircrafts>=3 && numUsers>0);
+        ap4[0].ethg++ <--> {  datarate = 100Mbps; } <--> r4.ethg++ if (numAircrafts>=4 && numUsers>0);
+        ap4[1].ethg++ <--> {  datarate = 100Mbps; } <--> r4.ethg++ if (numAircrafts>=4 && numUsers>0);
+        ap4[2].ethg++ <--> {  datarate = 100Mbps; } <--> r4.ethg++ if (numAircrafts>=4 && numUsers>0);
+        r1.ethg++ <--> {  datarate = 100Mbps; } <--> server1.ethg++ if numUsers>0;
+        r2.ethg++ <--> {  datarate = 100Mbps; } <--> server2.ethg++ if (numAircrafts>=2 && numUsers>0);
+        r3.ethg++ <--> {  datarate = 100Mbps; } <--> server3.ethg++ if (numAircrafts>=3 && numUsers>0);
+        r4.ethg++ <--> {  datarate = 100Mbps; } <--> server4.ethg++ if (numAircrafts>=4 && numUsers>0);
         
 }
