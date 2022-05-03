@@ -36,6 +36,11 @@ def validate_daisy_chaining(df):
     d_normal = df[df["Experiment"] == "ReSA"]["End-to-end delay"].mean()
     d_low_lat = df[df["Experiment"] == "ReSA_Low_Latency"]["End-to-end delay"].mean()
     print(f"validating daisy-chaining, mean 6TiSCH delay: {d_normal}, daisy-chained: {d_low_lat}")
+    is_valid = d_normal > d_low_lat
+
+    print("detected " + f"{(d_normal - d_low_lat) / d_normal  *  100}% decrease" if is_valid else f"{ (d_low_lat - d_normal) / d_normal  *  100}% increase" \
+          + " in mean end-to-end delay")
+    
     return d_normal > d_low_lat
     
 
