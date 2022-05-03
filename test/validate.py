@@ -32,19 +32,20 @@ def plot_delay(df):
     plt.legend()
     plt.show()
 
-def validate_daisy_chaining(df):
+def validate(df):
     d_normal = df[df["Experiment"] == "ReSA"]["End-to-end delay"].mean()
-    d_low_lat = df[df["Experiment"] == "ReSA_Low_Latency"]["End-to-end delay"].mean()
-    print(f"validating daisy-chaining, mean 6TiSCH delay: {d_normal}, daisy-chained: {d_low_lat}")
-    is_valid = d_normal > d_low_lat
+    d_optimized = df[df["Experiment"] != "ReSA"]["End-to-end delay"].mean()
+    # TODO: properly integrate 6TiSCH optimization name under test from a command line argument
+    print(f"validating improvement X, mean 6TiSCH delay: {d_normal}, optimized: {d_optimized}")
+    is_valid = d_normal > d_optimized
 
-    print("detected " + f"{(d_normal - d_low_lat) / d_normal  *  100}% decrease" if is_valid else f"{ (d_low_lat - d_normal) / d_normal  *  100}% increase" \
+    print("detected " + f"{(d_normal - d_optimized) / d_normal  *  100}% decrease" if is_valid else f"{ (d_optimized - d_normal) / d_normal  *  100}% increase" \
           + " in mean end-to-end delay")
     
-    return d_normal > d_low_lat
+    return d_normal > d_optimized
     
 
-parser = argparse.ArgumentParser(description='Plot PDR / E2E delay plot for HPQ evaluation.')
+parser = argparse.ArgumentParser(description='Validation script for testing 6TiSCH improvements.')
 parser.add_argument('result_file', metavar='f', type=str, help='path to the json file with exported simulation results')
 parser.add_argument('-v', '--visual',  help='plot results', action="store_true")
 
@@ -58,7 +59,7 @@ df = prep_dataframe(data)
 if args.visual:
     plot_delay(df)
 
-exit(validate_daisy_chaining(df))
+exit(validate(df))
 
 
 
