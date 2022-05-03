@@ -31,15 +31,16 @@ void FlexibleGridMobility::initialize(int stage) {
     auto rotatedCoords = new Coord();
 
     // apply coordinates transformation only after initial positions are set
-    if (stage == INITSTAGE_SINGLE_MOBILITY + 1 && par("rotateHorizontally").boolValue()) {
+    if (stage == INITSTAGE_SINGLE_MOBILITY + 1) {
 
         auto network = getContainingNode(this)->getParentModule();
 
         if (getContainingNode(this)->getIndex() == 0) {
-            auto hostModTopLeft = network->getSubmodule("host", 0);
+            const char * moduleName = this->getParentModule()->getName();
+            auto hostModTopLeft = network->getSubmodule(moduleName, 0);
             auto hostMobilityTopLeft = check_and_cast<MobilityBase*> (hostModTopLeft->getSubmodule("mobility"));
 
-            auto hostModBotRight = network->getSubmodule("host", 98);
+            auto hostModBotRight = network->getSubmodule(moduleName, 98);
             auto hostMobilityBotRight = check_and_cast<MobilityBase*> (hostModBotRight->getSubmodule("mobility"));
 
             auto originCoords = getOriginCoordinates(hostMobilityTopLeft->getLastPosition(), hostMobilityBotRight->getLastPosition());
