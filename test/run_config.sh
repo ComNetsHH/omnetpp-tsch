@@ -20,6 +20,6 @@ case $1 in
     ;;
 esac
 
-opp_runall -j7 ../src/tsch -u Cmdenv -c "$TEST_CONFIG" -r '$repetition < 2' -n ../simulations:../src:${HOME}/omnetpp-5.6.2-new/samples/omnetpp-rpl/src:${HOME}/omnetpp-5.6.2-new/samples/inet4/src -f ../simulations/wireless/waic/omnetpp.ini
-opp_runall -j7 ../src/tsch -u Cmdenv -c ReSA -r '$repetition < 2' -n ../simulations:../src:${HOME}/omnetpp-5.6.2-new/samples/omnetpp-rpl/src:${HOME}/omnetpp-5.6.2-new/samples/inet4/src -f ../simulations/wireless/waic/omnetpp.ini
+opp_runall -j7 ../src/tsch -u Cmdenv -c "$TEST_CONFIG" -r '$repetition < 2' -n ../simulations:../src:${HOME}/omnetpp-5.6.2/samples/omnetpp-rpl/src:${HOME}/omnetpp-5.6.2/samples/inet4/src -f ../simulations/wireless/waic/omnetpp.ini
+opp_runall -j7 ../src/tsch -u Cmdenv -c ReSA -r '$repetition < 2' -n ../simulations:../src:${HOME}/omnetpp-5.6.2/samples/omnetpp-rpl/src:${HOME}/omnetpp-5.6.2/samples/inet4/src -f ../simulations/wireless/waic/omnetpp.ini
 
