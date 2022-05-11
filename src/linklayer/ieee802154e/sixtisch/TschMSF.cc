@@ -21,6 +21,7 @@
  */
 #include "TschMSF.h"
 #include "RplDefs.h"
+#include "inet/common/ModuleAccess.h"
 #include "Tsch6tischComponents.h"
 #include "../Ieee802154eMac.h"
 #include "../TschVirtualLink.h"
@@ -105,6 +106,7 @@ void TschMSF::initialize(int stage) {
             mac->subscribe(linkBrokenSignal, this);
 
         schedule = check_and_cast<TschSlotframe*>(getModuleByPath("^.^.schedule"));
+        hopping = check_and_cast<TschHopping*>(getContainingNode(this)->getParentModule()->getSubmodule("channelHopping"));
 
         if (isDisabled)
             return;
@@ -179,6 +181,14 @@ void TschMSF::scheduleAutoRxCell(InterfaceToken euiAddr) {
             static_cast<offset_t>((par("useHashChOffsets").boolValue() ? myhash(euiAddr.low()) : euiAddr.low()) % pNumChannels)
     };
 
+    if ( hopping->isBlacklisted(autoRxCell.channelOffset) )
+    {
+        auto newChOf = hopping->shiftBlacklisted(autoRxCell.channelOffset, autoRxCell.timeOffset);
+        EV_DETAIL << "Auto RX channel offset " << autoRxCell.channelOffset
+                << " is blacklisted, shifting to " << newChOf << endl;
+        autoRxCell.channelOffset = newChOf;
+    }
+
     recordScalar("autoRxChOffset", (int) autoRxCell.channelOffset);
 
     EV_DETAIL << "euiAddr: " << euiAddr.low() << ", MAC id: " << pNodeId
@@ -239,6 +249,15 @@ void TschMSF::scheduleAutoCell(uint64_t neighborId) {
 
     auto slotOffset = nbruid % pSlotframeLength;
     auto chOffset = (par("useHashChOffsets").boolValue() ? myhash(nbruid) : nbruid) % pNumChannels;
+
+    if ( hopping->isBlacklisted(chOffset) )
+    {
+        auto newChOf = hopping->shiftBlacklisted(chOffset, slotOffset);
+        EV_DETAIL << "Auto TX channel offset " << autoRxCell.channelOffset
+                << " is blacklisted, shifting to " << newChOf << endl;
+        chOffset = newChOf;
+    }
+
     cellList.push_back({slotOffset, static_cast<offset_t>(chOffset)});
     ctrlMsg->setNewCells(cellList);
 
@@ -658,36 +677,49 @@ double TschMSF::getExpectedWaitingTime(int m, double pc, int rtx) {
     return getExpectedWaitingTime(m) * (1 + lossMultiplier);
 }
 
-int TschMSF::getRequiredServiceRate(double l, double pc, int rtx, bool noQueuing) {
+int TschMSF::getRequiredServiceRate(double l, double pc, int rtx, int rank, int numHosts)
+{
 
-    // service rate to ensure queuing of to-be-retransmitted packets is not possible
-    if (noQueuing) {
-        auto retransmissionsRate = ceil(l * (double) (pc/(1 - pc) > rtx ? rtx : pc/(1 - pc) ));
-        EV_DETAIL << "Calculating required service rate:\n"
-                << "expected avg retransmissions from collisions: " << pc/(1 - pc)
-                << "\nrequired service rate: " << l * (double) (pc/(1 - pc) > rtx ? rtx : pc/(1 - pc))
-                << ", ceiled: " << retransmissionsRate << endl;
+    return ceil(l * (numHosts + 2 - rank) / (1 - pc) + 0.00001);
 
-        return retransmissionsRate;
-    }
+    EV_DETAIL << "Calculating required service rate:\n" << "num hosts: " << numHosts << "\nrank: " << rank << "\nRTX: " << rtx
+            << "\nETX: " << 1 / (1 - pc)
+            << "\nrequired service rate: " << ceil(l * (numHosts + 2 - rank) * (double) (1 / (1 - pc) > rtx ? rtx : 1 / (1 - pc) ))
+            << endl;
 
-    auto service_rate = getExpectedServiceRate(l);
-    EV_DETAIL << "Expected service rate (base): " << service_rate << endl;
-    auto wt = getExpectedWaitingTime(service_rate, pc, rtx);
-    EV_DETAIL << "Expected waiting time (base): " << getExpectedWaitingTime(service_rate) << endl;
-    EV_DETAIL << "Expected waiting time (base rtx): " << wt << endl;
+    if (pc <= 0 || rtx <= 0)
+        return getRequiredServiceRate(l * (numHosts + 2 - rank));
 
-    while ( (wt > (double) 1/l) ) {
-        service_rate += 1;
-        wt = getExpectedWaitingTime(service_rate, pc, rtx);
-        EV_DETAIL <<  "Service rate: " << service_rate << ", expected waiting time: "
-                << wt <<  " > interarrival period (" << 1/l  << ")? " << (wt > (double) 1/l) << endl;
-    }
-
-    return service_rate;
+    return ceil(l * (numHosts + 2 - rank) * (double) (1 / (1 - pc) > rtx ? rtx : 1 / (1 - pc) ));
+//    // service rate to ensure queuing of to-be-retransmitted packets is not possible
+//    if (noQueuing) {
+//        auto retransmissionsRate = ceil(l * (double) (pc/(1 - pc) > rtx ? rtx : pc/(1 - pc) ));
+//        EV_DETAIL << "Calculating required service rate:\n"
+//                << "ETX: " << 1 / (1 - p_c)
+////                << "\nrequired service rate: " << l * (double) (pc/(1 - pc) > rtx ? rtx : pc/(1 - pc))
+//                << "\nrequired service rate: " << ceil(l / (1 - p_c) + 0.00001)
+//                << ", ceiled: " << retransmissionsRate << endl;
+//
+//        return retransmissionsRate;
+//    }
+//
+//    auto service_rate = getRequiredServiceRate(l);
+//    EV_DETAIL << "Expected service rate (base): " << service_rate << endl;
+//    auto wt = getExpectedWaitingTime(service_rate, pc, rtx);
+//    EV_DETAIL << "Expected waiting time (base): " << getExpectedWaitingTime(service_rate) << endl;
+//    EV_DETAIL << "Expected waiting time (base rtx): " << wt << endl;
+//
+//    while ( (wt > (double) 1/l) ) {
+//        service_rate += 1;
+//        wt = getExpectedWaitingTime(service_rate, pc, rtx);
+//        EV_DETAIL <<  "Service rate: " << service_rate << ", expected waiting time: "
+//                << wt <<  " > interarrival period (" << 1/l  << ")? " << (wt > (double) 1/l) << endl;
+//    }
+//
+//    return service_rate;
 }
 
-void TschMSF::handleRplRankUpdate(long rank, int numHosts, double lambda) {
+void TschMSF::handleRplRankUpdate(long rank, int numHosts, double trafficRate) {
     EV_DETAIL << "Trying to schedule TX cells according to our rank - "
             << rank << " and total number of hosts - " << numHosts << endl;
 
@@ -718,10 +750,8 @@ void TschMSF::handleRplRankUpdate(long rank, int numHosts, double lambda) {
 //        lossyFactor += (double) i * pow(pc, i);
 //    lossyFactor = (1 - pc) * lossyFactor + 1;
 
-    // TODO: consolidate both under a single function
     if (numCellsRequired <= 0)
-        numCellsRequired = getRequiredServiceRate(lambda, pc, rtx, par("noRtxQueuing").boolValue()); // for single-hop
-//        numCellsRequired = ceil(0.001 + lambda * (numHosts + 2 - rank)); // for multi-hop
+        numCellsRequired = getRequiredServiceRate(trafficRate, pc, rtx, rank, numHosts);
 
     auto numCellsLeft = numCellsRequired - (int) currentTxCells.size();
 
@@ -790,8 +820,10 @@ void TschMSF::scheduleMinimalCells(int numMinimalCells, int slotframeLength) {
     int minCellPeriod = floor(slotframeLength / numMinimalCells);
     EV_DETAIL << "Minimal cell period - " << minCellPeriod << endl;
 
-    for (auto i = 0; i < numMinimalCells; i++)
-        cellList.push_back({(offset_t) (i * minCellPeriod), (offset_t) par("minCellChannelOffset").intValue()});
+    for (auto i = 0; i < numMinimalCells; i++) {
+        auto chof = (offset_t) par("minCellChannelOffset").intValue();
+        cellList.push_back({(offset_t) (i * minCellPeriod), chof > hopping->getMaxChannel() ? hopping->getNumChannels() : chof});
+    }
 
     ctrlMsg->setNewCells(cellList);
     pTschLinkInfo->addLink(macBroadcast, false, 0, 0);

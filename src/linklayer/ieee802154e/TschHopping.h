@@ -51,15 +51,30 @@ class TschHopping: public omnetpp::cSimpleModule, public IChannelPlan
             this->pattern = pattern;
         }
 
+        const PatternVector& getBlacklistedChannels() const {
+            return blacklistedChannels;
+        }
+
+        void setBlacklistedChannels(const PatternVector& blChannels) {
+            this->blacklistedChannels = blChannels;
+        }
+
         /** Get the lowest/highest channel number for the given frequency band (WAIC or ISM) */
         virtual int getMinChannel();
         virtual int getMaxChannel();
+
+        int getNumChannels() {
+            return this->numChannels;
+        }
 
         virtual units::values::Hz getMinCenterFrequency();
         virtual units::values::Hz getMaxCenterFrequency();
         virtual units::values::Hz getChannelSpacing() { return units::values::Hz(5.0e6); }
         virtual units::values::Hz channelToCenterFrequency(int channel);
         virtual double channelToCenterFrequencyPlain(int channel);
+        virtual bool isBlacklisted(int channelOffset);
+        virtual int shiftBlacklisted(int channelOffset, int increment);
+        PatternVector getHoppingSequence();
 
         std::string printPattern(PatternVector pv) {
             std::ostringstream out;
@@ -79,8 +94,11 @@ class TschHopping: public omnetpp::cSimpleModule, public IChannelPlan
 
     private:
         PatternVector pattern;
+        PatternVector blacklistedChannels;
         units::values::Hz centerFrequency;
         int numChannels;
+
+        virtual void removeBlacklistedChannels();
 };
 
 } // namespace tsch

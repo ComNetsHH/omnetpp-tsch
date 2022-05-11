@@ -25,6 +25,7 @@
 #include <omnetpp.h>
 
 #include "Tsch6topSublayer.h"
+#include "../TschHopping.h"
 #include "inet/networklayer/common/InterfaceTable.h"
 
 
@@ -245,8 +246,8 @@ class TschMSF: public TschSF, public cListener {
     void handleRplRankUpdate(long rank, int numHosts, double lambda);
     double getExpectedWaitingTime(int m) { return 1/((double) m + 1); }
     double getExpectedWaitingTime(int m, double pc, int rtx);
-    int getExpectedServiceRate(double l) { return ceil(l + 0.001); }
-    int getRequiredServiceRate(double l, double pc, int rtx, bool noRtxQueuing = false);
+    int getRequiredServiceRate(double l) { return ceil(l + 0.001); }
+    int getRequiredServiceRate(double l, double pc, int rtx, int rank, int numHosts);
 
     /**
      * @brief Handle @p data that was piggybacked by @p sender.
@@ -363,8 +364,10 @@ class TschMSF: public TschSF, public cListener {
 
     Ieee802154eMac *mac;
     TschSlotframe *schedule;
-    cModule *rpl;
-    cModule *hostNode; // reference to this host node's module
+    cModule *rpl; // TODO: use actual RPL pointer
+    cModule *hostNode;
+    TschHopping* hopping;
+
 
     /**
      * TimeOffsets that have been suggested to a neighbor in an unfinished ADD

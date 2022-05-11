@@ -65,6 +65,7 @@ void TschHopping::initialize(int stage)
         // TODO: how to couple these tighter with radio medium parameters?
         centerFrequency = units::values::Hz(par("centerFrequency"));
         numChannels = par("nbRadioChannels").intValue();
+        blacklistedChannels = omnetpp::cStringTokenizer(par("blacklistedChannels").stringValue()).asIntVector();
 
         if (par("useRandomPattern").boolValue()) {
             std::list<int> l(numChannels);
@@ -76,12 +77,45 @@ void TschHopping::initialize(int stage)
             std::shuffle(pattern.begin(), pattern.end(), e);
 
             EV_DETAIL << "Shuffled hopping pattern: " << pattern << endl;
+
+            if (blacklistedChannels.size()) {
+                EV_DETAIL << "Found blacklisted channels: " << blacklistedChannels << endl;
+                removeBlacklistedChannels();
+                EV_DETAIL << "Updated hopping sequence: " << pattern << endl;
+            }
+
         } else
             pattern = omnetpp::cStringTokenizer(patternstr).asIntVector();
 
         // at least one channel in hopping sequence
         assert(pattern.size() >= 1);
     }
+}
+
+void TschHopping::removeBlacklistedChannels() {
+    auto ib = std::begin(blacklistedChannels);
+    auto ie = std::end(blacklistedChannels);
+    std::remove_if(
+       std::begin(pattern), std::end(pattern),
+       [&ib, &ie](int x) -> bool {
+                       while  (ib != ie && *ib < x) ++ib;
+                       return (ib != ie && *ib == x);
+                     });
+}
+
+
+
+TschHopping::PatternVector TschHopping::getHoppingSequence() {
+    return this->pattern;
+}
+
+bool TschHopping::isBlacklisted(int channelOffset) {
+    return std::find(blacklistedChannels.begin(), blacklistedChannels.end(), channelOffset)
+        != blacklistedChannels.end();
+}
+
+int TschHopping::shiftBlacklisted(int channelOffset, int increment) {
+    return pattern[increment % (int) pattern.size()];
 }
 
 int TschHopping::channel(int64_t asn, int channelOffset)
@@ -130,6 +164,8 @@ double TschHopping::channelToCenterFrequencyPlain(int channel)
    ASSERT(channel <= getMaxChannel());
    return getMinCenterFrequency().get() + ((channel - getMinChannel()) * getChannelSpacing().get());
 }
+
+
 
 } // namespace inet
 
