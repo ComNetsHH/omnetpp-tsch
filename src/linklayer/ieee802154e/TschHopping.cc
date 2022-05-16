@@ -22,6 +22,7 @@
  */
 
 #include "TschHopping.h"
+#include "../../common/TschUtils.h"
 #include "inet/common/InitStages.h"
 #include <omnetpp/cstringtokenizer.h>
 #include "inet/common/Units.h"
@@ -80,7 +81,9 @@ void TschHopping::initialize(int stage)
 
             if (blacklistedChannels.size()) {
                 EV_DETAIL << "Found blacklisted channels: " << blacklistedChannels << endl;
-                removeBlacklistedChannels();
+
+                remove_intersection(pattern, blacklistedChannels);
+
                 EV_DETAIL << "Updated hopping sequence: " << pattern << endl;
             }
 
@@ -91,19 +94,6 @@ void TschHopping::initialize(int stage)
         assert(pattern.size() >= 1);
     }
 }
-
-void TschHopping::removeBlacklistedChannels() {
-    auto ib = std::begin(blacklistedChannels);
-    auto ie = std::end(blacklistedChannels);
-    std::remove_if(
-       std::begin(pattern), std::end(pattern),
-       [&ib, &ie](int x) -> bool {
-                       while  (ib != ie && *ib < x) ++ib;
-                       return (ib != ie && *ib == x);
-                     });
-}
-
-
 
 TschHopping::PatternVector TschHopping::getHoppingSequence() {
     return this->pattern;

@@ -97,8 +97,6 @@ class TschHopping: public omnetpp::cSimpleModule, public IChannelPlan
         PatternVector blacklistedChannels;
         units::values::Hz centerFrequency;
         int numChannels;
-
-        virtual void removeBlacklistedChannels();
 };
 
 } // namespace tsch
