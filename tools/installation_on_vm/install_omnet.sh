@@ -4,3 +4,4 @@ cd omnetpp-5.6.2
 source setenv
 ./configure WITH_OSG=no WITH_OSGEARTH=no WITH_QTENV=no WITH_TKENV=no
 make MODE=release
+cd ../
