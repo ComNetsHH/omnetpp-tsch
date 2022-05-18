@@ -425,6 +425,7 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
     // emitted when a packet is added to the queue AND also
     // when a link collision occurs and the retransmission threshold is not exceeded
     simsignal_t pktRetransmittedSignal;
+    simsignal_t pktRetransmittedDownlinkSignal; // tracks packets whose transmission is failed on the downlink (via shared cells)
     simsignal_t pktInterarrivalTimeSignal; // much like the pktEnqueuedSignal before, but records the time elapsed between subsequent arrivals
     double lastAppPktArrivalTimestamp; // helper variable for the "pktInterarrivalTime" stat
     simsignal_t currentFreqSignal; // ping current frequency to RPL

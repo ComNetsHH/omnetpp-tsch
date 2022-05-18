@@ -112,6 +112,7 @@ simple Ieee802154eMac extends MacProtocolBase like IMacProtocol
         @signal[pktEnqueued](type=double);
         @signal[interarrivalTime](type=double);
         @signal[pktRetransmitted](type=double);
+        @signal[pktRetransmittedDownlink](type=double);
         
         @statistic[linkBroken](title="link break"; source=linkBroken; record=count; interpolationmode=none);
         @statistic[packetDropNotAddressToUs](title="packet drop: not addressed to us"; source=packetDropReasonIsNotAddressedToUs(packetDropped); record=count,sum(packetBytes),vector(packetBytes); interpolationmode=none);
@@ -122,7 +123,7 @@ simple Ieee802154eMac extends MacProtocolBase like IMacProtocol
         @statistic[pktEnqueued](title="packet added to the queue"; source=pktEnqueued; record=count,vector; interpolationmode=none);
         @statistic[pktRetransmitted](title="application packet retransmitted"; source=pktRetransmitted; record=count,vector; interpolationmode=none);
         @statistic[interarrivalTime](title="time elapsed since last application packet arrival"; source=interarrivalTime; record=count,vector; interpolationmode=none);
-        
+        @statistic[pktRetransmittedDownlink](title="(smoke alarm) packets retransmitted in the downlink"; source=pktRetransmittedDownlink; record=count,vector; interpolationmode=none);
         
         @signal[nbTxFrames-*](type=long);
         @signal[nbMissedAcks-*](type=long);

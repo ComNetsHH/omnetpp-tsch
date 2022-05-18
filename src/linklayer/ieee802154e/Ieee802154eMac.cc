@@ -176,6 +176,7 @@ void Ieee802154eMac::initialize(int stage) {
         EV_DETAIL << "Finished tsch init stage 1." << endl;
 
         pktRetransmittedSignal = registerSignal("pktRetransmitted");
+        pktRetransmittedDownlinkSignal = registerSignal("pktRetransmittedDownlink");
         pktInterarrivalTimeSignal = registerSignal("interarrivalTime");
         pktRecFromUpperSignal = registerSignal("pktReceviedFromUpperLayer");
         currentFreqSignal = registerSignal("currentFrequency");
@@ -952,6 +953,10 @@ void Ieee802154eMac::manageFailedTX(bool recordStats) {
         if (isSmokeAlarmPacket(pkt) && recordStats)
         {
             emit(pktRetransmittedSignal, 1);
+
+            // If the cell is shared, it's likely the downlink one.
+            if (!neighbor->isDedicated())
+                emit(pktRetransmittedDownlinkSignal, 1);
 
             if (lastAppPktArrivalTimestamp > 0)
                 emit(pktInterarrivalTimeSignal, simTime().dbl() - lastAppPktArrivalTimestamp);
