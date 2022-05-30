@@ -12,17 +12,17 @@ import os
 def prep_dataframe(data):
     df_list = []    
     for sim_run in data:
-            for vec in data[sim_run]["vectors"]:
-                    mean_delay = np.mean(vec["value"])
+        for vec in data[sim_run]["vectors"]:
+            mean_delay = np.mean(vec["value"])
 
-                    df_list.append(
-                            {
-                                    "End-to-end delay": mean_delay, 
-                                    "Repetition": data[sim_run]["attributes"]["repetition"],
-                                    "Experiment": data[sim_run]["attributes"]["experiment"],
-                                    "Module": vec["module"].split(".")[1]
-                            }
-                    )	
+            df_list.append(
+                {
+                        "End-to-end delay": mean_delay, 
+                        "Repetition": data[sim_run]["attributes"]["repetition"],
+                        "Experiment": data[sim_run]["attributes"]["experiment"],
+                        "Module": vec["module"].split(".")[1]
+                }
+            )	
 
     return pd.DataFrame(df_list)
 
