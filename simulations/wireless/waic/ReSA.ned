@@ -47,8 +47,10 @@ import inet.node.wireless.AccessPoint;
 
 import inet.node.ipv6.StandardHost6;
 import inet.node.inet.Router;
+import inet.node.inet.WirelessHost;
 import inet.node.ipv6.Router6;
 import inet.node.inet.StandardHost;
+import inet.node.inet.INetworkNode;
 import inet.node.wireless.Probe;
 import inet.environment.common.PhysicalEnvironment;
 import inet.visualizer.environment.PhysicalEnvironmentCanvasVisualizer;
@@ -66,6 +68,7 @@ network ReSA
         int numUsers = default(0);
         int numAircrafts = default(1);
         bool enableObstacles = default(false);
+        bool wifiCoex = default(false);
         double gridCenterX = default(0);
         double gridCenterY = default(0);
 
@@ -89,38 +92,38 @@ network ReSA
             parameters:
                 @display("p=8.6,3.1166666;is=s");
         }
-        gw1[numGW]: RplRouter {
+        gw1[numGW]: <default("RplRouter")> like INetworkNode {
             parameters:
                 @6tisch;
                 @display("p=28.48,20.114;r=,,#707070");
         }
 
-        hs1[numHS]: RplRouter {
+        hs1[numHS]: <default("RplRouter")> like INetworkNode {
             parameters:
                 @6tisch;
                 @display("r=,,#707070;p=28.48,34.354");
         }
-        sos1[numSoS]: RplRouter {
+        sos1[numSoS]: <default("RplRouter")> like INetworkNode {
             parameters:
                 @6tisch;
                 @display("r=,,#707070;p=28.48,34.354");
         }
-        bm1[numBM]: RplRouter {
+        bm1[numBM]: <default("RplRouter")> like INetworkNode {
             parameters:
                 @6tisch;
                 @display("p=28.48,20.114;r=,,#707070");
         }
-        was1[numWAS]: RplRouter {
+        was1[numWAS]: <default("RplRouter")> like INetworkNode {
             parameters:
                 @6tisch;
                 @display("p=28.48,20.114;r=,,#707070");
         }
-        am1[numAM]: RplRouter {
+        am1[numAM]: <default("RplRouter")> like INetworkNode {
             parameters:
                 @6tisch;
                 @display("r=,,#707070;p=28.48,34.354");
         }
-        host[numHosts]: RplRouter {
+        host[numHosts]: <default("RplRouter")> like INetworkNode {
             parameters:
                 @6tisch;
                 @display("p=28.48,20.114");
@@ -128,7 +131,7 @@ network ReSA
         server1: StandardHost6 if numUsers>0 {
             @display("p=20.02,12.04;i=device/mainframe");
         }
-        user1[numUsers]: StandardHost6 if numUsers>0 {
+        user1[numUsers]: WirelessHost if numUsers>0 {
             @display("p=13.86,36.12;is=n;i=misc/person3");
             numWlanInterfaces = 1;
         }
@@ -173,7 +176,7 @@ network ReSA
         server2: StandardHost if (numAircrafts>=2 && numUsers>0) {
             @display("p=20.02,12.04;i=device/mainframe");
         }
-        user2[numUsers]: RplRouter if (numAircrafts>=2 && numUsers>0) {
+        user2[numUsers]: WirelessHost if (numAircrafts>=2 && numUsers>0) {
             @display("p=13.86,36.12;is=n;i=misc/person3");
         }
         ap2[3]: AccessPoint if (numAircrafts>=2 && numUsers>0) {
@@ -217,7 +220,7 @@ network ReSA
         server3: StandardHost if (numAircrafts>=3 && numUsers>0) {
             @display("p=20.02,12.04;i=device/mainframe");
         }
-        user3[numUsers]: RplRouter if (numAircrafts>=3 && numUsers>0) {
+        user3[numUsers]: WirelessHost if (numAircrafts>=3 && numUsers>0) {
             @display("p=13.86,36.12;is=n;i=misc/person3");
         }
         ap3[3]: AccessPoint if (numAircrafts>=3 && numUsers>0) {
@@ -261,7 +264,7 @@ network ReSA
         server4: StandardHost if (numAircrafts>=4 && numUsers>0) {
             @display("p=20.02,12.04;i=device/mainframe");
         }
-        user4[numUsers]: RplRouter if (numAircrafts>=4 && numUsers>0) {
+        user4[numUsers]: WirelessHost if (numAircrafts>=4 && numUsers>0) {
             @display("p=13.86,36.12;is=n;i=misc/person3");
         }
         ap4[4]: AccessPoint if (numAircrafts>=4 && numUsers>0) {
