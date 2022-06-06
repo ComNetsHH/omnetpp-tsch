@@ -42,15 +42,10 @@ ResaSmokeUdpSink::~ResaSmokeUdpSink() {
 
 void ResaSmokeUdpSink::processPacket(Packet *pk)
 {
-    EV_INFO << "Received packet: " << UdpSocket::getReceivedPacketInfo(pk)
-            << "\ntotal: " << numReceived << ", num to receive: " << par("numPktsToReceive").intValue() << endl;
-
     auto sender = UdpSocket::getPacketSrcAddress(pk);
 
-    // this method of redundant retransmissions only works if a single packet is expected,
-    // since otherwise it's (almost) impossible to differentiate between copies of the same packet and
-    // a new one. Copies of the same packet have different sequence numbers and look like completely
-    // different packets for the application.
+    // register only the first packet received from respective smoke alarm,
+    // since each of those is triggered only once, all other packets are redundant quasi-retransmissions
     if (numReceivedPktsPerNeighbor.find(sender) == numReceivedPktsPerNeighbor.end())
         numReceivedPktsPerNeighbor[sender] = 0;
     else if (numReceivedPktsPerNeighbor[sender] == 1)
