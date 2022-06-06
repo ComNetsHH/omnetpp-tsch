@@ -644,8 +644,8 @@ void Ieee802154eMac::updateStatusIdle(t_mac_event event, cMessage *msg) {
         // Only for 6TiSCH:
         // If the minimal cell channel offset is set to the maximum value, i.e. highest frequency,
         // to ensure reliable connectivity, this cell should NOT channel-hop
-        if ((sf && sf->par("minCellChannelOffset").intValue() == 39) // WAIC
-                || (sf && sf->par("minCellChannelOffset").intValue() == 15)) // ISM
+        // TODO: check radio center frequency and throw an error if channel number 39 is used in ISM!!!
+        if (sf && sf->par("minCellChannelOffset").intValue() == 39) // max WAIC channel
         {
             if (currentLink->getAddr() == MacAddress::BROADCAST_ADDRESS) // checking if current link is a minimal cell
                 currentChannel = sf->par("minCellChannelOffset").intValue();
@@ -654,6 +654,10 @@ void Ieee802154eMac::updateStatusIdle(t_mac_event event, cMessage *msg) {
         }
         else
             currentChannel = hopping->channel(currentAsn, currentLink->getChannelOffset());
+
+        if (currentLink->getAddr() == MacAddress::BROADCAST_ADDRESS)
+            EV_DETAIL << "Link channel offset - " << currentLink->getChannelOffset()
+                << "actual channel: " << currentChannel << endl;
 
         emit(currentFreqSignal, hopping->channelToCenterFrequencyPlain(currentChannel));
 

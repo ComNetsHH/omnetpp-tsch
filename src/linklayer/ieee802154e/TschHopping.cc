@@ -69,26 +69,24 @@ void TschHopping::initialize(int stage)
         blacklistedChannels = omnetpp::cStringTokenizer(par("blacklistedChannels").stringValue()).asIntVector();
 
         if (par("useRandomPattern").boolValue()) {
+            EV_DETAIL << "Generating hopping pattern randomly" << endl;
             std::list<int> l(numChannels);
             std::iota(l.begin(), l.end(), getMinChannel());
             std::copy(l.begin(), l.end(), std::back_inserter(pattern));
 
             std::mt19937 e((unsigned int) intrand(100));
-
             std::shuffle(pattern.begin(), pattern.end(), e);
-
-            EV_DETAIL << "Shuffled hopping pattern: " << pattern << endl;
-
-            if (blacklistedChannels.size()) {
-                EV_DETAIL << "Found blacklisted channels: " << blacklistedChannels << endl;
-
-                remove_intersection(pattern, blacklistedChannels);
-
-                EV_DETAIL << "Updated hopping sequence: " << pattern << endl;
-            }
-
-        } else
+        } else {
+            EV_DETAIL << "Reading hopping pattern from string" << endl;
             pattern = omnetpp::cStringTokenizer(patternstr).asIntVector();
+        }
+
+        if (blacklistedChannels.size()) {
+            remove_intersection(pattern, blacklistedChannels);
+            EV_DETAIL << "Found (and removed) blacklisted channels: " << blacklistedChannels << endl;
+        }
+
+        EV_DETAIL << "Hopping pattern: " << pattern << endl;
 
         // at least one channel in hopping sequence
         assert(pattern.size() >= 1);
@@ -118,7 +116,7 @@ int TschHopping::channel(int64_t asn, int channelOffset)
         return channelOffset;
     }
 
-    return pattern[((asn + channelOffset) % pattern.size())];
+    return pattern[(asn + channelOffset) % pattern.size()];
 }
 
 int TschHopping::getMinChannel() {
