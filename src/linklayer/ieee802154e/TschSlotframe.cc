@@ -442,6 +442,64 @@ std::vector<TschLink*> TschSlotframe::allTxLinks(inet::MacAddress macAddress) {
     return nbrLinks;
 }
 
+std::vector<TschLink*> TschSlotframe::getAllDedicatedRxLinks() {
+    std::vector<TschLink*> rxLinks;
+
+    for (auto const& link: links)
+        if (link->isRx() && !link->isAuto() && !link->isShared())
+            rxLinks.insert(rxLinks.end(), link);
+
+    return rxLinks;
+}
+
+std::vector<TschLink*> TschSlotframe::getAllDedicatedTxLinks() {
+    std::vector<TschLink*> txLinks;
+
+    for (auto const& link: links)
+        if (link->isTx() && !link->isAuto() && !link->isShared())
+            txLinks.insert(txLinks.end(), link);
+
+    return txLinks;
+}
+
+std::vector<std::tuple<offset_t, offset_t>> TschSlotframe::getUnmatchedRxRanges() {
+    auto txLinks = getAllDedicatedTxLinks();
+    auto rxLinks = getAllDedicatedRxLinks();
+
+    std::vector<std::tuple<offset_t, offset_t>> unmatchedRxRanges = {};
+
+    EV << "Checking unmatched ranges, tx links: \n" << txLinks << endl;
+    EV << "Checking unmatched ranges, rx links: \n" << rxLinks << endl;
+
+
+    int numRx = (int) rxLinks.size();
+
+    for (auto i = 0; i < numRx - 1; i++)
+    {
+        bool found = false;
+        auto startSlof = rxLinks[i]->getSlotOffset();
+        auto endSlof = rxLinks[i+1]->getSlotOffset();
+
+        EV_DETAIL << "start: " << startSlof << ", end: " << endSlof << endl;
+
+        // check there's at least one TX cell in-between
+        for (auto txLink : txLinks)
+            if (txLink->getSlotOffset() > startSlof && txLink->getSlotOffset() < endSlof)
+            {
+                found = true;
+                break;
+            }
+
+        if (!found) {
+            std::tuple<offset_t, offset_t> t { startSlof, endSlof };
+            unmatchedRxRanges.push_back(t);
+        }
+    }
+
+    return unmatchedRxRanges;
+}
+
+
 std::vector<TschLink*> TschSlotframe::getDedicatedLinksForNeighbor(inet::MacAddress neigbhorMac) {
     std::vector<TschLink*> nbrLinks;
 
