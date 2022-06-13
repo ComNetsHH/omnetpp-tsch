@@ -1,3 +1,13 @@
+# First ensure there'll only be results from this test for analysis
+RESULT_DIR=~/omnetpp-5.6.2-new/samples/tsch/simulations/wireless/waic/ReSA
+
+if [ -d "$RESULT_DIR" ]; then
+    rm -r "$RESULT_DIR"
+    echo "cleared result folder"
+else
+    echo "no result folder found"
+fi
+
 TEST_CONFIG=""
 
 case $1 in
@@ -11,11 +21,27 @@ case $1 in
     ;;
 
   --hpq)
-    echo -n "ReSA_HPQ"
+  	TEST_CONFIG="ReSA_HPQ"
+    ;;
+    
+  --ultimate)
+    TEST_CONFIG="ReSA_Ultimate_Altimeter"
+    ;;
+    
+  --ultimate-no-alt)
+    TEST_CONFIG="ReSA_Ultimate_Dynamic_Cell_Bundling"
+    ;;
+    
+  --ultimate-no-alt-2)
+    TEST_CONFIG="ReSA_Ultimate_Dynamic_Cell_Bundling_2"
+    ;;
+    
+  --ultimate-2)
+    TEST_CONFIG="ReSA_Ultimate_Altimeter_2"
     ;;
 
   *)
-    echo -n "unknown test config requested"
+    echo -n "unknown config requested"
     exit 1
     ;;
 esac
