@@ -86,6 +86,7 @@ simple TschMSF like TschSF
 		int lowLatencyStartingOffset = default(-1);
 		int minimumUplinkBandwidth = default(1); // for nodes with "scheduleUplinkManually" enabled
 		bool scheduleUplinkOnJoin = default(true);
+		bool cellMatchingEnabled = default(false); // MSF attempts to schedule cells in a checkerboard manner - TX cell directly follows a RX one
 		
 		bool allowAutoCellDeletion = default(false);
 		// apply hash function to the node MAC before taking the modulo by number of channels, 

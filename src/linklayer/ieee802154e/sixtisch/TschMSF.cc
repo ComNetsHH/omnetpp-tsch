@@ -298,6 +298,7 @@ void TschMSF::start() {
     msg->setKind(DO_START);
 
     scheduleAt(simTime() + SimTime(par("startTime").doubleValue()), msg);
+//    scheduleAt(simTime() + 500, new cMessage("Test cell matching", CHANGE_SLOF));
 }
 
 std::string TschMSF::printCellUsage(std::string neighborMac, double usage) {
@@ -655,6 +656,22 @@ void TschMSF::handleSelfMessage(cMessage* msg) {
 
             break;
         }
+
+        // Testing handler for cell-matching algorithm
+        case CHANGE_SLOF: {
+
+            break;
+
+            if (!rplParentId)
+                break;
+
+            EV << "Checking unmatched rx ranges" << endl;
+            auto unmatchedRanges = schedule->getUnmatchedRxRanges();
+            EV << "Detected spans between RX cells not covered by a TX cell: " << endl;
+            for (auto r : unmatchedRanges)
+                EV << "(" << std::get<0>(r) << ", " << std::get<1>(r) << ")" << endl;
+            break;
+        }
         default: {
             EV_ERROR << "Unknown message received: " << msg << endl;
         }
@@ -906,6 +923,7 @@ std::vector<offset_t> TschMSF::getAvailableSlotsInRange(int slOffsetEnd) {
     return getAvailableSlotsInRange(0, slOffsetEnd);
 }
 
+
 int TschMSF::createCellList(uint64_t destId, std::vector<cellLocation_t> &cellList, int numCells)
 {
     Enter_Method_Silent();
@@ -973,6 +991,15 @@ int TschMSF::createCellList(uint64_t destId, std::vector<cellLocation_t> &cellLi
     if (!availableSlots.size()) {
         EV_DETAIL << "No available cells found" << endl;
         return -ENOSPC;
+    }
+
+    if (par("cellMatchingEnabled").boolValue())
+    {
+        // here's a weak assumption that the CELL_LIST is always being created for adding TX cells
+        auto unmatchedRanges = schedule->getUnmatchedRxRanges();
+        EV << "Detected spans between RX cells not covered by a TX cell: " << endl;
+        for (auto r : unmatchedRanges)
+            EV << "(" << std::get<0>(r) << ", " << std::get<1>(r) << ")" << endl;
     }
 
     if ((int) availableSlots.size() <= numCells) {

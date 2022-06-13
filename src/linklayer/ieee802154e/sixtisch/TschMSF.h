@@ -441,6 +441,7 @@ class TschMSF: public TschSF, public cListener {
         SCHEDULE_UPLINK,
         SCHEDULE_DOWNLINK,
         CELL_BUNDLE_REQ,
+        CHANGE_SLOF,
         UNDEFINED
     };
 
