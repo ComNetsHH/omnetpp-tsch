@@ -71,6 +71,7 @@ network ReSA
         bool wifiCoex = default(false);
         double gridCenterX = default(0);
         double gridCenterY = default(0);
+        string hostType = default("RplRouter");
 
     submodules:
         configurator: Ipv6FlatNetworkConfigurator {
@@ -92,38 +93,38 @@ network ReSA
             parameters:
                 @display("p=8.6,3.1166666;is=s");
         }
-        gw1[numGW]: <default("RplRouter")> like INetworkNode {
+        gw1[numGW]: <hostType> like INetworkNode {
             parameters:
                 @6tisch;
                 @display("p=28.48,20.114;r=,,#707070");
         }
 
-        hs1[numHS]: <default("RplRouter")> like INetworkNode {
+        hs1[numHS]: <hostType> like INetworkNode {
             parameters:
                 @6tisch;
                 @display("r=,,#707070;p=28.48,34.354");
         }
-        sos1[numSoS]: <default("RplRouter")> like INetworkNode {
+        sos1[numSoS]: <hostType> like INetworkNode {
             parameters:
                 @6tisch;
                 @display("r=,,#707070;p=28.48,34.354");
         }
-        bm1[numBM]: <default("RplRouter")> like INetworkNode {
+        bm1[numBM]: <hostType> like INetworkNode {
             parameters:
                 @6tisch;
                 @display("p=28.48,20.114;r=,,#707070");
         }
-        was1[numWAS]: <default("RplRouter")> like INetworkNode {
+        was1[numWAS]: <hostType> like INetworkNode {
             parameters:
                 @6tisch;
                 @display("p=28.48,20.114;r=,,#707070");
         }
-        am1[numAM]: <default("RplRouter")> like INetworkNode {
+        am1[numAM]: <hostType> like INetworkNode {
             parameters:
                 @6tisch;
                 @display("r=,,#707070;p=28.48,34.354");
         }
-        host[numHosts]: <default("RplRouter")> like INetworkNode {
+        host[numHosts]: <hostType> like INetworkNode {
             parameters:
                 @6tisch;
                 @display("p=28.48,20.114");
