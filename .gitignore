@@ -8,6 +8,8 @@ Makefile*
 *_sm.cc
 .oppfeaturestate
 .nedexclusions
+!*/installation_on_vm/.oppfeaturestate
+!*/installation_on_vm/.nedexclusions
 .cproject
 .project
 src/inet/features.h
