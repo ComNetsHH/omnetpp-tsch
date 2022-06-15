@@ -464,7 +464,7 @@ class TschMSF: public TschSF, public cListener {
     // TODO: revise whether it makes sense to have both of these
     void handleScheduleUplink();
     void handleScheduleDownlink(uint64_t nodeId);
-    void retryTransaction(uint64_t nodeId, std::string reasonStr);
+    void retryLastTransaction(uint64_t nodeId, std::string reasonStr);
 
     /**
      * Sends out 6P request according to the details of SfControlInfo object.

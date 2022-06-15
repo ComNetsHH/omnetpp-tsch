@@ -533,6 +533,12 @@ void TschMSF::handleScheduleDownlink(uint64_t nodeId) {
 
     auto res = addCells(nodeId, numCellsToAdd, MAC_LINKOPTIONS_TX);
 
+    if (!res) {
+        EV_ERROR << "Coudn't initiate 6P ADD, aborting" << endl;
+        hostNode->bubble("Coudn't initiate 6P ADD, aborting");
+        return;
+    }
+
     // Something went wrong, try again
 //    if (!res) {
 //        EV_DETAIL << "Couldn't send 6P ADD request for some reason (check above), retrying in 20s" << endl;
@@ -549,7 +555,7 @@ void TschMSF::handleScheduleDownlink(uint64_t nodeId) {
                 << ", but the retransmission info is not empty!" << endl;
 
         retryInfo.erase(nodeId);
-//        throw cRuntimeError(out.str().c_str());
+        throw cRuntimeError(out.str().c_str());
     }
 
     auto ci = new SfControlInfo(nodeId);
@@ -624,6 +630,8 @@ void TschMSF::handleSelfMessage(cMessage* msg) {
             catch (...) {
                 break;
             }
+
+            EV << "Preparing to schedule downlink cells to " << MacAddress(nodeId) << endl;
 
             handleScheduleDownlink(nodeId);
             break;
@@ -934,6 +942,8 @@ int TschMSF::createCellList(uint64_t destId, std::vector<cellLocation_t> &cellLi
     }
 
     if (!reservedTimeOffsets[destId].empty()) {
+
+        hostNode->bubble("There are already reserved slot offsets with this node!");
         EV_ERROR << "reservedTimeOffsets should be empty when creating new cellList,"
                 << " is another transaction still in progress?\ncurrently occupied time slots: "
                 << reservedTimeOffsets[destId] << endl;
@@ -1023,11 +1033,18 @@ int TschMSF::createCellList(uint64_t destId, std::vector<cellLocation_t> &cellLi
 
     // Select only required number of cells from cell list
     if (pCellBundlingEnabled) {
-        for (auto i = intrand(pSlotframeLength); i < cellList.size(); i++) {
-            if ((int) temp.size() >= numCells)
-                break;
+
+
+        // WTF is it for
+//        for (auto i = intrand(pSlotframeLength); i < cellList.size(); i++) {
+//            if ((int) temp.size() >= numCells)
+//                break;
+//            temp.push_back(cellList[i]);
+//        }
+
+        for (auto i = 0; i < cellList.size() && i < numCells; i++)
             temp.push_back(cellList[i]);
-        }
+
         cellList = temp;
     }
     else
@@ -1212,13 +1229,17 @@ void TschMSF::handleSuccessAdd(uint64_t sender, int numCells, vector<cellLocatio
     // Check if retry is necessary
     if (retryInfo.find(sender) != retryInfo.end() && retryInfo[sender])
     {
-        if (!cellList.size())
-            retryTransaction(sender, "empty response");
+        EV << "Found retry info stored for this neighbor" << endl;
+
+        if (!cellList.size()) {
+            EV << "No cells have been added, retrying" << endl;
+            retryLastTransaction(sender, "empty response");
+        }
         else
             retryInfo.erase(sender);
     }
 
-    // if we successfully scheduled dedicated TX we don't need an shared auto TX cell anymore
+    // if we successfully scheduled dedicated TX we don't need the shared auto cell anymore
     if (cellList.size())
         removeAutoTxCell(sender);
 
@@ -1373,10 +1394,10 @@ void TschMSF::handleTransactionTimeout(uint64_t nodeId)
     mac->terminateTschCsmaWith(MacAddress(nodeId));
 
     if (retryInfo.find(nodeId) != retryInfo.end() && retryInfo[nodeId])
-        retryTransaction(nodeId, "transaction timeout");
+        retryLastTransaction(nodeId, "transaction timeout");
 }
 
-void TschMSF::retryTransaction(uint64_t nodeId, std::string reasonStr) {
+void TschMSF::retryLastTransaction(uint64_t nodeId, std::string reasonStr) {
     Enter_Method_Silent();
 
     if (retryInfo.find(nodeId) == retryInfo.end() || !retryInfo[nodeId]) {
@@ -1384,11 +1405,11 @@ void TschMSF::retryTransaction(uint64_t nodeId, std::string reasonStr) {
         return;
     }
 
-    auto retryStatus = retryInfo[nodeId];
+    auto controlInfo = retryInfo[nodeId];
 
-    EV_DETAIL << retryStatus->get6pCmd() << " to " << MacAddress(nodeId)
-            << " for " << retryStatus->getNumCells() << " cells has failed due to "
-            << reasonStr << ", total attempts: " << retryStatus->getRtxCtn() << endl;
+    EV_DETAIL << controlInfo->get6pCmd() << " to " << MacAddress(nodeId)
+            << " for " << controlInfo->getNumCells() << " cells has failed due to "
+            << reasonStr << ", total attempts: " << controlInfo->getRtxCtn() << endl;
 
     if (retryInfo[nodeId]->getRtxCtn() < par("maxRetries").intValue())
     {
