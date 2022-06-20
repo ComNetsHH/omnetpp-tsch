@@ -19,6 +19,7 @@
 #include "inet/common/ModuleAccess.h"
 #include "inet/common/packet/Packet.h"
 #include "inet/networklayer/common/L3AddressResolver.h"
+#include "inet/networklayer/common/L3AddressTag_m.h"
 #include "inet/transportlayer/contract/udp/UdpControlInfo_m.h"
 
 using namespace inet;
@@ -67,12 +68,22 @@ void WaicUdpSink::finish()
     }
 }
 
+simtime_t WaicUdpSink::getPacketDelay(Packet *pk) {
+    auto creationTimeTag = pk->peekData()->findTag<CreationTimeTag>();
+    return simTime() - creationTimeTag->getCreationTime();
+}
+
+L3Address WaicUdpSink::getPacketSrcAddress(Packet *pk) {
+    auto l3Addresses = pk->getTag<L3AddressInd>();
+    return l3Addresses->getSrcAddress();
+}
+
 void WaicUdpSink::processPacket(Packet *pk)
 {
     EV_INFO << "Received packet: " << UdpSocket::getReceivedPacketInfo(pk) << endl;
 
-    auto srcAddr = UdpSocket::getPacketSrcAddress(pk);
-    auto pkDelay = UdpSocket::getPacketDelay(pk);
+    auto srcAddr = getPacketSrcAddress(pk);
+    auto pkDelay = getPacketDelay(pk);
 
     auto jitterEntry = jitterMap.find(srcAddr);
 

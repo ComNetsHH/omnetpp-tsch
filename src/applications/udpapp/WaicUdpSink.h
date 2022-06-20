@@ -40,6 +40,8 @@ class WaicUdpSink : public UdpSink
     virtual ~WaicUdpSink();
 
     static simtime_t computeJitter(std::vector<simtime_t> delays);
+    L3Address getPacketSrcAddress(Packet *pk);
+    simtime_t getPacketDelay(Packet *pk);
 
   protected:
     virtual void processPacket(Packet *msg) override;
