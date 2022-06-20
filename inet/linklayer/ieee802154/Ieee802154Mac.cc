@@ -36,6 +36,7 @@
 #include "inet/linklayer/common/MacAddressTag_m.h"
 #include "inet/linklayer/ieee802154/Ieee802154Mac.h"
 #include "inet/linklayer/ieee802154/Ieee802154MacHeader_m.h"
+#include "inet/physicallayer/common/packetlevel/Radio.h"
 #include "inet/networklayer/common/InterfaceEntry.h"
 
 namespace inet {
@@ -346,6 +347,17 @@ void Ieee802154Mac::updateStatusCCA(t_mac_event event, cMessage *msg)
         case EV_TIMER_CCA: {
             EV_DETAIL << "(25) FSM State CCA_3, EV_TIMER_CCA" << endl;
             bool isIdle = radio->getReceptionState() == IRadio::RECEPTION_STATE_IDLE;
+
+            EV << "radio reception state: " << radio->getReceptionState()
+                    << ", listening possible? " << (check_and_cast<Radio*> (radio))->isListeningPossible() << endl;
+
+            auto actualRadio = (check_and_cast<Radio*> (radio));
+            bool listeningPossible = actualRadio->isListeningPossible();
+
+            // buggy situation where nobody can send
+            if (!isIdle && !listeningPossible)
+                actualRadio->setReceptionState(IRadio::RECEPTION_STATE_IDLE);
+
             if (isIdle) {
                 EV_DETAIL << "(3) FSM State CCA_3, EV_TIMER_CCA, [Channel Idle]: -> TRANSMITFRAME_4." << endl;
                 updateMacState(TRANSMITFRAME_4);
@@ -381,20 +393,6 @@ void Ieee802154Mac::updateStatusCCA(t_mac_event event, cMessage *msg)
                     }
                     else {
                         EV_ERROR << "too many Backoffs, but currentTxFrame is empty\n";    //TODO is it good, or model error?
-
-
-                        // modified by Yevhenii
-                        EV_DETAIL << "Checking the queue..." << endl;
-                        popTxQueue();
-                        if (currentTxFrame) {
-                            EV_DETAIL << "Found the packet, dropping" << endl;
-                            nbDroppedFrames++;
-                            PacketDropDetails details;
-                            details.setReason(CONGESTION);
-                            details.setLimit(macMaxCSMABackoffs);
-                            dropCurrentTxFrame(details);
-                        }
-                        // end modified
                     }
                     manageQueue();
                 }
@@ -674,7 +672,7 @@ void Ieee802154Mac::manageQueue()
             transmissionAttemptInterruptedByRx = false;
         }
         else {
-            // initialize counters if we start a new transmission
+            // fe counters if we start a new transmission
             // cycle from zero
             NB = 0;
             //BE = macMinBE;
