@@ -37,13 +37,13 @@ void FlexibleGridMobility::initialize(int stage) {
 
         if (getContainingNode(this)->getIndex() == 0) {
             const char * moduleName = this->getParentModule()->getName();
-            auto hostModTopLeft = network->getSubmodule(moduleName, 0);
-            auto hostMobilityTopLeft = check_and_cast<MobilityBase*> (hostModTopLeft->getSubmodule("mobility"));
+            auto topLeftHost = network->getSubmodule(moduleName, 0);
+            auto topLeftMobility = check_and_cast<MobilityBase*> (topLeftHost->getSubmodule("mobility"));
 
             auto hostModBotRight = network->getSubmodule(moduleName, 98);
             auto hostMobilityBotRight = check_and_cast<MobilityBase*> (hostModBotRight->getSubmodule("mobility"));
 
-            auto originCoords = getOriginCoordinates(hostMobilityTopLeft->getLastPosition(), hostMobilityBotRight->getLastPosition());
+            auto originCoords = getOriginCoordinates(topLeftMobility->getCurrentPosition(), hostMobilityBotRight->getCurrentPosition());
 
             network->par("gridCenterX") = originCoords->x;
             network->par("gridCenterY") = originCoords->y;
@@ -54,7 +54,7 @@ void FlexibleGridMobility::initialize(int stage) {
         // take the location of a gateway as the centering point for seatbelt grid
         auto gwModule = network->getSubmodule("gw1", 0);
         EV_DETAIL << "Flexigrid mobility found gateway module - " << gwModule << endl;
-        auto gwLocation = (check_and_cast<MobilityBase*> (gwModule->getSubmodule("mobility")))->getLastPosition();
+        auto gwLocation = (check_and_cast<MobilityBase*> (gwModule->getSubmodule("mobility")))->getCurrentPosition();
 
         auto shiftX = gwLocation.x - gridCenter->x + par("gridOffsetX").doubleValue(); // gateway location is a bit offset to the right
         auto shiftY = gwLocation.y - gridCenter->y + par("gridOffsetY").doubleValue(); // and to the bottom
