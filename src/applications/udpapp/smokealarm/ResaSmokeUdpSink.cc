@@ -16,10 +16,7 @@
 //
 
 #include "ResaSmokeUdpSink.h"
-#include "inet/common/ModuleAccess.h"
-#include "inet/common/packet/Packet.h"
-#include "inet/networklayer/common/L3AddressResolver.h"
-#include "inet/networklayer/common/L3AddressTag_m.h"
+#include "../ResaUdpUtils.h"
 #include "inet/transportlayer/contract/udp/UdpControlInfo_m.h"
 #include <regex>
 
@@ -41,6 +38,7 @@ ResaSmokeUdpSink::~ResaSmokeUdpSink() {
 void ResaSmokeUdpSink::processPacket(Packet *pk)
 {
     auto sender = (pk->getTag<L3AddressInd>())->getSrcAddress();
+    std::string packetName(pk->getFullName());
 
     // register only the first packet received from respective smoke alarm,
     // since each of those is triggered only once, all other packets are redundant quasi-retransmissions
