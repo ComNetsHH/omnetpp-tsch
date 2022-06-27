@@ -428,6 +428,9 @@ class TschMSF: public TschSF, public cListener {
     offset_t uplinkSlotOffset; // slot offset of the preferred parent to schedule close to
     simsignal_t uplinkScheduledSignal; // used to notify RPL about the slot offset of the scheduled uplink cell
 
+    // cell matching statistics
+    simsignal_t uncoverableGapSignal;
+
     enum msfSelfMsg_t {
         CHECK_STATISTICS,
         REACHED_MAXNUMCELLS,
@@ -565,6 +568,7 @@ class TschMSF: public TschSF, public cListener {
      * @return vector of picked slot offsets
      */
     std::vector<cellLocation_t> pickRandomly(std::vector<cellLocation_t> inputVec, int numRequested);
+    std::vector<cellLocation_t> pickConsecutively(std::vector<cellLocation_t> inputVec, int numRequested);
 
     /**
      * Check for free slot offsets (neither scheduled, nor reserved) in the range @param start -> @param end
@@ -582,6 +586,7 @@ class TschMSF: public TschSF, public cListener {
      * @param nodeId MAC identifier of the neighbor node
      */
     void checkScheduleConsistency(uint64_t nodeId);
+    double getCoverageRate();
 };
 
 #endif /*__WAIC_TSCHMSF_H_*/

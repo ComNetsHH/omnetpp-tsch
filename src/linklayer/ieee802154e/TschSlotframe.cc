@@ -40,6 +40,7 @@
 #include "inet/networklayer/ipv4/RoutingTableParser.h"
 #include "../../common/TschSimsignals.h"
 #include "inet/common/Simsignals.h"
+#include "sixtisch/Tsch6tischComponents.h"
 
 namespace tsch {
 
@@ -59,6 +60,12 @@ std::ostream& operator<<(std::ostream& os, std::vector<TschLink*> links)
         os << (*l).str() << endl;
     return os;
 };
+
+inline std::ostream& operator<<(std::ostream& os, tuple<offset_t, offset_t>& a)
+{
+    os << "(" << get<0>(a) << ", " << get<1>(a) << ")";
+    return os;
+}
 
 TschSlotframe::~TschSlotframe()
 {
@@ -468,9 +475,8 @@ std::vector<std::tuple<offset_t, offset_t>> TschSlotframe::getUnmatchedRxRanges(
 
     std::vector<std::tuple<offset_t, offset_t>> unmatchedRxRanges = {};
 
-    EV << "Checking unmatched ranges, tx links: \n" << txLinks << endl;
-    EV << "Checking unmatched ranges, rx links: \n" << rxLinks << endl;
-
+    if (!rxLinks.size())
+        return unmatchedRxRanges;
 
     int numRx = (int) rxLinks.size();
 
@@ -494,6 +500,20 @@ std::vector<std::tuple<offset_t, offset_t>> TschSlotframe::getUnmatchedRxRanges(
             std::tuple<offset_t, offset_t> t { startSlof, endSlof };
             unmatchedRxRanges.push_back(t);
         }
+    }
+
+    // check for the last RX till the slotframe bound
+    bool lastRxCellCovered = false;
+    for (auto txLink : txLinks)
+        if ( txLink->getSlotOffset() > rxLinks[rxLinks.size() - 1]->getSlotOffset() )
+        {
+            lastRxCellCovered = true;
+            break;
+        }
+
+    if (!lastRxCellCovered) {
+        std::tuple<offset_t, offset_t> last_range { rxLinks[rxLinks.size() - 1]->getSlotOffset(), macSlotframeSize };
+        unmatchedRxRanges.push_back(last_range);
     }
 
     return unmatchedRxRanges;

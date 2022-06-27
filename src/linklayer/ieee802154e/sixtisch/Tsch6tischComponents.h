@@ -28,6 +28,8 @@
 #include "inet/linklayer/common/MacAddress.h"
 #include <bitset>
 
+using namespace std;
+
 /** To print enum 'key' as string */
 #define PRINT_ENUM(p, s) case(p): s = #p; break;
 
@@ -145,6 +147,18 @@ inline std::ostream& operator<<(std::ostream& os, std::map<cellLocation_t, doubl
     return os;
 }
 
+inline std::ostream& operator<<(std::ostream& os, vector<offset_t>& offsets)
+{
+    for (auto o: offsets)
+        os << o << ", ";
+    return os;
+}
+
+inline std::ostream& operator<<(std::ostream& os, tuple<offset_t, offset_t>& a)
+{
+    os << "(" << get<0>(a) << ", " << get<1>(a) << ")";
+    return os;
+}
 
 inline std::string printLinkOptions(uint8_t op) {
     std::string outstr = "";
@@ -242,5 +256,6 @@ inline uint64_t myhash(uint64_t x) {
     x = x ^ (x >> 31);
     return x;
 }
+
 
 #endif /*__WAIC_TSCH6TISCHCOMPONENTS_H_*/

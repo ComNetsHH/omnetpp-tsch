@@ -17,7 +17,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 #include "TschMSF.h"
 #include "RplDefs.h"
@@ -35,13 +35,6 @@ using namespace tsch;
 using namespace std;
 
 Define_Module(TschMSF);
-
-inline std::ostream& operator<<(std::ostream& os, vector<offset_t>& offsets)
-{
-    for (auto o: offsets)
-        os << o << ", ";
-    return os;
-}
 
 TschMSF::TschMSF() :
     rplParentId(0),
@@ -63,7 +56,8 @@ TschMSF::TschMSF() :
     pCheckScheduleConsistency(false),
     isLeafNode(true),
     numCellsRequired(-1),
-    numTranAbandonedMaxRetries(0)
+    numTranAbandonedMaxRetries(0),
+    neighbors({})
 {
 }
 TschMSF::~TschMSF() {
@@ -93,6 +87,7 @@ void TschMSF::initialize(int stage) {
         queueUtilization = registerSignal("queueUtilization");
         failed6pAdd = registerSignal("failed6pAdd");
         uplinkScheduledSignal = registerSignal("uplinkScheduled");
+        uncoverableGapSignal = registerSignal("uncoverableGap");
     } else if (stage == 5) {
         interfaceModule = dynamic_cast<InterfaceTable *>(getParentModule()->getParentModule()->getParentModule()->getParentModule()->getSubmodule("interfaceTable", 0));
         pNodeId = interfaceModule->getInterface(1)->getMacAddress().getInt();
@@ -101,6 +96,7 @@ void TschMSF::initialize(int stage) {
         mac = check_and_cast<Ieee802154eMac*>(getModuleByPath("^.^.mac"));
         mac->subscribe(POST_MODEL_CHANGE, this);
         mac->subscribe(mac->pktRecFromUpperSignal, this);
+        mac->subscribe(mac->pktRecFromLowerSignal, this);
 
         if (par("lowLatencyMode").boolValue())
             mac->subscribe(linkBrokenSignal, this);
@@ -144,6 +140,7 @@ void TschMSF::initialize(int stage) {
         WATCH(numTranAbortedUnknownReason);
         WATCH_MAP(downlinkRequested);
         WATCH_MAP(retryInfo);
+        WATCH_LIST(neighbors);
 
 //        WATCH_MAP(reservedTimeOffsets);
 
@@ -286,6 +283,9 @@ void TschMSF::finish() {
 
     if (par("trackFailed6pAddByNum").intValue() > 0)
         recordScalar("tracked6pFailed", numFailedTracked6p);
+
+    if (rplParentId)
+        recordScalar("rxCellCoverageRatio", getCoverageRate());
 }
 
 void TschMSF::start() {
@@ -397,11 +397,6 @@ void TschMSF::handleDoStart(cMessage* msg) {
 
     if (!pHousekeepingDisabled)
         scheduleAt(simTime() + par("housekeepingStart"), new tsch6topCtrlMsg("", HOUSEKEEPING));
-
-    /** Get all nodes that are within communication range of @p nodeId.
-    *   Note that this only works if all nodes have been initialized (i.e.
-    *   maybe not in init() step 1!) **/
-    neighbors = mac->getNeighborsInRange();
 }
 
 void TschMSF::handleHousekeeping(cMessage* msg) {
@@ -555,7 +550,7 @@ void TschMSF::handleScheduleDownlink(uint64_t nodeId) {
                 << ", but the retransmission info is not empty!" << endl;
 
         retryInfo.erase(nodeId);
-        throw cRuntimeError(out.str().c_str());
+//        throw cRuntimeError(out.str().c_str());
     }
 
     auto ci = new SfControlInfo(nodeId);
@@ -667,9 +662,6 @@ void TschMSF::handleSelfMessage(cMessage* msg) {
 
         // Testing handler for cell-matching algorithm
         case CHANGE_SLOF: {
-
-            break;
-
             if (!rplParentId)
                 break;
 
@@ -893,6 +885,8 @@ std::vector<cellLocation_t> TschMSF::pickRandomly(std::vector<cellLocation_t> in
     if ((int) inputVec.size() < numRequested)
         return {};
 
+    EV << "Picking randomly " << numRequested << " from vector: " << inputVec << endl;
+
     std::mt19937 e(intrand(1000));
     std::shuffle(inputVec.begin(), inputVec.end(), e);
 
@@ -901,6 +895,16 @@ std::vector<cellLocation_t> TschMSF::pickRandomly(std::vector<cellLocation_t> in
         picked.push_back(inputVec[i]);
 
 //    std::copy(slotOffsets.begin(), slotOffsets.begin() + numSlots, picked.begin());
+    return picked;
+}
+
+std::vector<cellLocation_t> TschMSF::pickConsecutively(std::vector<cellLocation_t> inputVec, int numRequested)
+{
+    std::vector<cellLocation_t> picked = {};
+    EV << "picking consecutively from " << inputVec << endl;
+    for (auto i = 0; i < numRequested && i < inputVec.size(); i++)
+        picked.push_back(inputVec[i]);
+
     return picked;
 }
 
@@ -931,6 +935,41 @@ std::vector<offset_t> TschMSF::getAvailableSlotsInRange(int slOffsetEnd) {
     return getAvailableSlotsInRange(0, slOffsetEnd);
 }
 
+double TschMSF::getCoverageRate() {
+    auto gaps = schedule->getUnmatchedRxRanges();
+
+    std::cout << "Checking coverage rate";
+    if (!gaps.size())
+    {
+        cout << "full cowling!" << endl;
+        return 1;
+    }
+
+    vector<offset_t> slotOfs = {};
+
+    cout << "uncovered gaps: " << endl;
+    // sort out unique slot offsets
+    for (auto gap : gaps)
+    {
+        std::cout << gap << endl;
+        auto start = get<0>(gap);
+        auto finish = get<1>(gap);
+
+        if (find(slotOfs.begin(), slotOfs.end(), start) == slotOfs.end())
+            slotOfs.push_back(start);
+
+        if (find(slotOfs.begin(), slotOfs.end(), finish) == slotOfs.end())
+            slotOfs.push_back(finish);
+    }
+
+    auto allRxLinks = schedule->getAllDedicatedRxLinks();
+
+    double ratio = (allRxLinks.size() - slotOfs.size()) / (double) allRxLinks.size();
+
+    cout << "Coverage ratio: " << ratio << endl;
+
+    return ratio;
+}
 
 int TschMSF::createCellList(uint64_t destId, std::vector<cellLocation_t> &cellList, int numCells)
 {
@@ -1003,13 +1042,44 @@ int TschMSF::createCellList(uint64_t destId, std::vector<cellLocation_t> &cellLi
         return -ENOSPC;
     }
 
-    if (par("cellMatchingEnabled").boolValue())
+    // Try to schedule a TX cell after an RX one to create a checkerboard-like pattern
+    // here's a weak assumption that the CELL_LIST is always being created for adding TX cells
+    bool cellMatchingEnabled = par("cellMatchingEnabled").boolValue();
+    if (cellMatchingEnabled)
     {
-        // here's a weak assumption that the CELL_LIST is always being created for adding TX cells
+        EV << "Cell matching is enabled, checking gaps between RX cells" << endl;
         auto unmatchedRanges = schedule->getUnmatchedRxRanges();
-        EV << "Detected spans between RX cells not covered by a TX cell: " << endl;
-        for (auto r : unmatchedRanges)
-            EV << "(" << std::get<0>(r) << ", " << std::get<1>(r) << ")" << endl;
+        EV << "Detected " << unmatchedRanges.size() << " gaps between RX cells not covered by a TX cell: " << endl;
+        vector<offset_t> gapSlots = {};
+
+        for (auto gap : unmatchedRanges)
+        {
+            gapSlots = getAvailableSlotsInRange(get<0>(gap), get<1>(gap));
+
+            if (gapSlots.size()) {
+                EV << "Found " << gapSlots.size() << " available slots in " << gap << endl;
+                break;
+            }
+            else {
+                EV << "No free slots found in " << gap << ", going to the next one" << endl;
+
+                // no free slots detected in the last gap, try to wrap into the next slotframe
+                if (get<1>(gap) == pSlotframeLength)
+                    gapSlots = getAvailableSlotsInRange(get<0>(unmatchedRanges[0]), get<1>(unmatchedRanges[0]));
+            }
+        }
+
+        if (unmatchedRanges.size())
+        {
+            if (!gapSlots.size())
+            {
+                EV << "No free slot offsets found in any of the gaps?!";
+                emit(uncoverableGapSignal, 1);
+            }
+            else
+                availableSlots = gapSlots;
+                EV << "Selected gap slots: " << gapSlots << endl;
+        }
     }
 
     if ((int) availableSlots.size() <= numCells) {
@@ -1027,11 +1097,9 @@ int TschMSF::createCellList(uint64_t destId, std::vector<cellLocation_t> &cellLi
     for (auto sl : availableSlots)
         cellList.push_back({sl, (offset_t) intrand(pNumChannels)});
 
-    EV_DETAIL << "Initialized cell list: " << cellList << endl;
-
     std::vector<cellLocation_t> temp;
 
-    // Select only required number of cells from cell list
+    // Select only required number of consecutive! cells from the cell list
     if (pCellBundlingEnabled) {
 
 
@@ -1048,7 +1116,10 @@ int TschMSF::createCellList(uint64_t destId, std::vector<cellLocation_t> &cellLi
         cellList = temp;
     }
     else
-        cellList = pickRandomly(cellList, numCells);
+        // else just shuffle the list
+        cellList = cellMatchingEnabled ? pickConsecutively(cellList, numCells) : pickRandomly(cellList, numCells);
+
+    EV_DETAIL << "Initialized cell list: " << cellList << endl;
 
     // Block selected slot offsets until 6P transaction finishes
     for (auto c : cellList)
@@ -1738,6 +1809,16 @@ void TschMSF::receiveSignal(cComponent *src, simsignal_t id, long value, cObject
     if (id == mac->pktRecFromUpperSignal) {
         auto macCtrlInfo = (Ieee802154eMac::MacGenericInfo*) details;
         handlePacketEnqueued(macCtrlInfo->getNodeId());
+        return;
+    }
+
+    if (id == mac->pktRecFromLowerSignal) {
+        if (find(neighbors.begin(), neighbors.end(), value) == neighbors.end())
+        {
+            neighbors.push_back(value);
+            EV << "Added new neighbor: " << MacAddress(value) << endl;
+        }
+
         return;
     }
 

@@ -179,14 +179,9 @@ void Ieee802154eMac::initialize(int stage) {
         pktRetransmittedDownlinkSignal = registerSignal("pktRetransmittedDownlink");
         pktInterarrivalTimeSignal = registerSignal("interarrivalTime");
         pktRecFromUpperSignal = registerSignal("pktReceviedFromUpperLayer");
+        pktRecFromLowerSignal = registerSignal("pktReceviedFromLowerLayer");
         currentFreqSignal = registerSignal("currentFrequency");
     } else if (stage == INITSTAGE_LAST) {
-        auto nbrs = this->getNeighborsInRange();
-        for (auto nbrId : nbrs)
-            neighbors.push_back(MacAddress(nbrId));
-
-
-        WATCH_LIST(neighbors);
         WATCH_MAP(packetsIncorrectlyReceived);
 
         auto timeoutVal = par("lossyLinkTimeout").doubleValue();
@@ -655,10 +650,6 @@ void Ieee802154eMac::updateStatusIdle(t_mac_event event, cMessage *msg) {
         else
             currentChannel = hopping->channel(currentAsn, currentLink->getChannelOffset());
 
-        if (currentLink->getAddr() == MacAddress::BROADCAST_ADDRESS)
-            EV_DETAIL << "Link channel offset - " << currentLink->getChannelOffset()
-                << "actual channel: " << currentChannel << endl;
-
         emit(currentFreqSignal, hopping->channelToCenterFrequencyPlain(currentChannel));
 
         auto freq = hopping->channelToCenterFrequency(currentChannel);
@@ -886,10 +877,8 @@ list<uint64_t> Ieee802154eMac::getNeighborsInRange() {
     auto radio = this->getRadio();
     auto medium = dynamic_cast<const physicallayer::RadioMedium*>(radio->getMedium());
     auto limitcache = dynamic_cast<const physicallayer::MediumLimitCache*>(medium->getMediumLimitCache());
-    auto range = limitcache->getMaxCommunicationRange(radio).get();
+    auto range = limitcache->getMaxCommunicationRange(radio).get(); // meaningless with realistic radio models
     auto myCoords = radio->getAntenna()->getMobility()->getCurrentPosition();
-
-
     // we extract the topology here and filter for nodes that have the property @6tisch set.
     // The property has to be set within the top-level ned-file (contains your network) e.g. like this:
     //
@@ -919,13 +908,15 @@ list<uint64_t> Ieee802154eMac::getNeighborsInRange() {
             }
 
         // we found no mac address to use or we found ourself
-        if (addr.isUnspecified() || addr.getInt() == nodeId)
+        if (addr.isUnspecified() || addr.getInt() == nodeId) {
+            EV << "No MAC address found?" << endl;
             continue;
+        }
 
         // verify distance to ourself
         if (myCoords.distance(coords) <= range) {
             resultingList.push_back(addr.getInt());
-            EV_DEBUG << "node " << addr.str() << " (" << coords.str() << ") is a neighbor of "
+            EV << "node " << addr.str() << " (" << coords.str() << ") is a neighbor of "
                     << MacAddress(nodeId).str() << " (" << myCoords.str() << ")" << endl;
         }
     }
@@ -1308,6 +1299,8 @@ void Ieee802154eMac::handleLowerPacket(Packet *packet) {
                      << ", myState=" << macState << " src=" << src << " dst="
                      << dest << " myAddr=" << address << endl;
     if (dest == address) {
+        emit(pktRecFromLowerSignal, (long) (src.getInt())); // notify SF about to keep track of the neighbor
+
         if (!useMACAcks) {
             EV_DETAIL << "Received a data packet addressed to me." << endl;
             nbRxFrames++;

@@ -171,12 +171,12 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
     virtual void handleCrashOperation(inet::LifecycleOperation *operation) override {}    //TODO implementation
 
     simsignal_t pktRecFromUpperSignal; // emitted when packet is received from upper layers
+    simsignal_t pktRecFromLowerSignal; // emitted when packet is received from lower layer, includes MAC address of the sender
     simsignal_t highPrioQueueOverflowSignal;
 
-
-
     // Utility
-    list<uint64_t> getNeighborsInRange(); // get list of neighbors based on maximum communication range
+    [[deprecated]]
+    list<uint64_t> getNeighborsInRange(); // get list of neighbors based on maximum communication range (if available)
 
     vector<tuple<int, int>> getQueueSizes(MacAddress neighbor, vector<int> virtualLinkIds = {-1, 0});
     virtual void flushQueue(MacAddress neighborAddr, int vlinkId);
@@ -540,10 +540,7 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
     //sequence numbers for receiving
     std::map<inet::MacAddress, std::map<int, unsigned long>> SeqNrChild;    //child -> sequence number
 
-    // Util
-    list<MacAddress> neighbors; // list of neighbors MAC addresses
     bool artificiallyDropAppPacket(Packet *packet);
-
     bool drop6pPacket(Packet *packet, std::string cmdType, std::string pktType);
 
 

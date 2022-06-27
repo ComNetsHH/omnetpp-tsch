@@ -234,9 +234,10 @@ class TschSlotframe : public cSimpleModule, protected cListener, public ILifecyc
     LinkVector getAllDedicatedRxLinks();
     LinkVector getAllDedicatedTxLinks();
 
-    std::vector<std::tuple<offset_t, offset_t>> getUnmatchedRxRanges();
+    std::vector<std::tuple<offset_t, offset_t>> getUnmatchedRxRanges(); // the ranges provided are excluding! border values, i.e. (a, b)
 
     std::vector<TschLink*> getDedicatedLinksForNeighbor(inet::MacAddress neigbhorMac);
+
     bool removeAutoLinkToNeighbor(inet::MacAddress neigbhorMac);
 
     void xmlSchedule();
