@@ -21,7 +21,6 @@
 
 package tsch.simulations.wireless.waic;
 
-import inet.examples.wireless.throughput.WirelessAPWithSink;
 import inet.networklayer.configurator.ipv4.Ipv4NetworkConfigurator;
 import inet.networklayer.configurator.ipv6.Ipv6FlatNetworkConfigurator;
 import inet.node.inet.SensorNode;
@@ -53,7 +52,7 @@ import inet.node.inet.StandardHost;
 import inet.node.inet.INetworkNode;
 import inet.node.wireless.Probe;
 import inet.environment.common.PhysicalEnvironment;
-import inet.visualizer.environment.PhysicalEnvironmentCanvasVisualizer;
+
 network ReSA
 {
     parameters:
@@ -88,10 +87,6 @@ network ReSA
         physicalEnvironment: PhysicalEnvironment if enableObstacles==true {
             parameters:
                 @display("p=7.6,3.1166666;is=s");
-        }
-        PhysicalEnvironmentCanvasVisualizer: PhysicalEnvironmentCanvasVisualizer if enableObstacles==true {
-            parameters:
-                @display("p=8.6,3.1166666;is=s");
         }
         gw1[numGW]: <hostType> like INetworkNode {
             parameters:
