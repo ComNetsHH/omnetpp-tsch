@@ -32,7 +32,6 @@ import inet.visualizer.contract.IIntegratedVisualizer;
 import inet.node.inet.WirelessHost;
 import tsch.linklayer.ieee802154e.TschHopping;
 import rpl.RplRouter;
-import rpl.configurator.RplNetConfigurator;
 
 network Generic
 {
