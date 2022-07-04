@@ -1099,25 +1099,18 @@ int TschMSF::createCellList(uint64_t destId, std::vector<cellLocation_t> &cellLi
 
     std::vector<cellLocation_t> temp;
 
+    // if cell matching is enabled and it's not the first dedicated cell we're trying to add
+    bool pickConsec = cellMatchingEnabled && pTschLinkInfo->getDedicatedCells(destId).size();
+
     // Select only required number of consecutive! cells from the cell list
     if (pCellBundlingEnabled) {
-
-
-        // WTF is it for
-//        for (auto i = intrand(pSlotframeLength); i < cellList.size(); i++) {
-//            if ((int) temp.size() >= numCells)
-//                break;
-//            temp.push_back(cellList[i]);
-//        }
-
         for (auto i = 0; i < cellList.size() && i < numCells; i++)
             temp.push_back(cellList[i]);
 
         cellList = temp;
     }
     else
-        // else just shuffle the list
-        cellList = cellMatchingEnabled ? pickConsecutively(cellList, numCells) : pickRandomly(cellList, numCells);
+        cellList = pickConsec ? pickConsecutively(cellList, numCells) : pickRandomly(cellList, numCells);
 
     EV_DETAIL << "Initialized cell list: " << cellList << endl;
 
@@ -1152,7 +1145,9 @@ int TschMSF::pickCells(uint64_t destId, std::vector<cellLocation_t> &cellList,
     }
     cellList.clear();
 
-    if (!pCellBundlingEnabled) {
+    // if either cell matching or cell bundling is on,
+    // do not shuffle the available slot offsets, since we need to pick only consecutive ones
+    if (!pCellBundlingEnabled && !par("cellMatchingEnabled")) {
         std::mt19937 e(intrand(1000));
         std::shuffle(pickedCells.begin(), pickedCells.end(), e);
     }
