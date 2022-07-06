@@ -997,7 +997,8 @@ int TschMSF::createCellList(uint64_t destId, std::vector<cellLocation_t> &cellLi
     std::vector<offset_t> blacklisted = {}; // slot offsets previously rejected by the receiver node
 
     /** Low-latency part: schedule daisy-chained cells in uplink */
-    if (par("lowLatencyMode").boolValue() && destId == rplParentId)
+    if (par("lowLatencyMode").boolValue() && destId == rplParentId
+            && rplRank > 2) // doesn't make sense to
     {
         if (uplinkSlotOffset > 0) {
 
@@ -1006,17 +1007,30 @@ int TschMSF::createCellList(uint64_t destId, std::vector<cellLocation_t> &cellLi
 
             // slowly increase range offered in CELL_LIST
             auto startOffset = (int) uplinkSlotOffset - numCells;
-            freeSlots = getAvailableSlotsInRange(startOffset > 0 ? startOffset : 0, uplinkSlotOffset);
+            auto endOffset = uplinkSlotOffset;
+
+            // crossing slotframe bound
+            if (startOffset < 0)
+            {
+                startOffset = pSlotframeLength - numCells;
+                endOffset = pSlotframeLength;
+            }
+
+            freeSlots = getAvailableSlotsInRange(startOffset, endOffset);
         }
         else
         {
             auto llStartOffset = par("lowLatencyStartingOffset").intValue();
 
+            freeSlots = getAvailableSlotsInRange(llStartOffset > 0 ? llStartOffset : 0, pSlotframeLength);
+
+            // Doesn't make sense to only focus on daisy-chains inside a slotframe??
+
             // 1-hop sink neighbors select slot offsets later in the slotframe to facilitate "longer" daisy-chains
-            if (llStartOffset > 0)
-                freeSlots = getAvailableSlotsInRange(llStartOffset, pSlotframeLength);
-            else
-                freeSlots = getAvailableSlotsInRange((int) pSlotframeLength / 2, pSlotframeLength);
+//            if (llStartOffset > 0)
+//                freeSlots = getAvailableSlotsInRange(llStartOffset, pSlotframeLength);
+//            else
+//                freeSlots = getAvailableSlotsInRange((int) pSlotframeLength / 2, pSlotframeLength);
         }
     }
     else
@@ -1262,7 +1276,9 @@ void TschMSF::handleSuccessAdd(uint64_t sender, int numCells, vector<cellLocatio
 
 
         // Retry scheduling low-latency cell if our rank > 2 and there are no dedicated cells at all
-        if (par("lowLatencyMode").boolValue() && uplinkSlotOffset > 0 && sender == rplParentId) {
+        if ( (par("lowLatencyMode").boolValue() && uplinkSlotOffset > 0 && sender == rplParentId)
+                || (pCellBundlingEnabled && rplRank == 2)) // also try again if we're a direct sink neighbor with cell-bundling enabled
+        {
 
             EV_DETAIL << "Low-latency mode enabled and an empty response received from the parent" << endl;
 
@@ -1323,6 +1339,9 @@ void TschMSF::handleSuccessAdd(uint64_t sender, int numCells, vector<cellLocatio
     // ALL of the proposed cells were actually accepted
     if (sender == rplParentId && par("handleRankUpdates").boolValue())
         scheduleAt(simTime() + uniform(1, 3), new cMessage("", DELAY_TEST));
+
+    // check whether required number of cells was added
+    EV << cellList.size() << " out of " << numCells << " requested cells have been added" << endl;
 }
 
 void TschMSF::handleSuccessResponse(uint64_t sender, tsch6pCmd_t cmd, int numCells, vector<cellLocation_t> cellList, vector<offset_t> reservedSlots)
@@ -1401,7 +1420,9 @@ void TschMSF::clearScheduleWithNode(uint64_t neighborId)
 }
 
 void TschMSF::freeReservedCellsWith(uint64_t nodeId) {
+    EV << "Freeing slot offsets reserved with " << MacAddress(nodeId) << " - " << reservedTimeOffsets[nodeId] << endl;
     reservedTimeOffsets[nodeId].clear();
+    EV << "After clear(): " << reservedTimeOffsets[nodeId] << endl;
     retryInfo.erase(nodeId);
 }
 
@@ -1629,7 +1650,11 @@ void TschMSF::handleParentChangedSignal(uint64_t newParentId) {
 
     /** and schedule the same amount of cells (or at least 1) with the new parent */
     if (par("scheduleUplinkOnJoin").boolValue())
-        addCells(newParentId, (int) txCells.size() > 0 ? (int) txCells.size() : par("initialNumCells").intValue(), MAC_LINKOPTIONS_TX);
+    {
+        auto numReqCells = pCellBundlingEnabled ? pCellBundleSize : (int) txCells.size(); // currently scheduled with former parent
+        addCells(newParentId, numReqCells > 0 ? numReqCells : par("initialNumCells").intValue(), MAC_LINKOPTIONS_TX);
+    }
+
 }
 
 void TschMSF::handlePacketEnqueued(uint64_t dest) {
@@ -1812,12 +1837,14 @@ void TschMSF::receiveSignal(cComponent *src, simsignal_t id, long value, cObject
         {
             neighbors.push_back(value);
             EV << "Added new neighbor: " << MacAddress(value) << endl;
+            WATCH_VECTOR(reservedTimeOffsets[value]);
         }
 
         return;
     }
 
     if (std::strcmp(signalName.c_str(), "rankUpdated") == 0) {
+        EV << "Updated rank to " << value << endl;
         rplRank = (int) value;
 
         // Custom delay testing handler procedure
