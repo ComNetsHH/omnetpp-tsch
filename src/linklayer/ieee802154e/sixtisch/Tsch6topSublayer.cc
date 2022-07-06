@@ -949,15 +949,16 @@ void Tsch6topSublayer::receiveSignal(cComponent *source, simsignal_t signalID, c
 
     auto machdr = pkt->popAtFront<Ieee802154eMacHeader>();
     uint64_t destId = machdr->getDestAddr().getInt();
+    uint64_t srcId = machdr->getSrcAddr().getInt();
 
     if (machdr->getNetworkProtocol() == -1
             || ProtocolGroup::ethertype.getProtocol(machdr->getNetworkProtocol()) != &Protocol::wiseRoute)
         return;
 
     if (txSuccess)
-        EV_DEBUG << "Received signal about LL ACK for " << pkt->getFullName() << " to " << MacAddress(destId) << endl;
+        EV << "Received signal about LL ACK for " << pkt->getFullName() << " from " << MacAddress(srcId) << " to " << MacAddress(destId) << endl;
     else
-        EV_DEBUG << "Received signal about dropping " << pkt->getFullName() << " intended for " << MacAddress(destId) << endl;
+        EV << "Received signal about dropping " << pkt->getFullName() << " from " << MacAddress(srcId) << " intended for " << MacAddress(destId) << endl;
 
     auto sixphdr = pkt->popAtFront<tsch::sixtisch::SixpHeader>();
 
@@ -967,8 +968,10 @@ void Tsch6topSublayer::receiveSignal(cComponent *source, simsignal_t signalID, c
             handleRequestAck(destId, (tsch6pCmd_t) sixphdr->getCode());
         else {
             // Else abort last intended transaction
-            pTschLinkInfo->revertLink(destId, pTschLinkInfo->getLastKnownType(destId)); // TODO: this basically does nothing
-            pTschSF->freeReservedCellsWith(destId);
+            // TODO: investigate the case when it triggers for a 6P request addressed to us
+            // check carefully if request was actually not FROM us, but TO us
+            pTschLinkInfo->revertLink(destId, pTschLinkInfo->getLastKnownType(destId == pNodeId ? srcId : destId)); // TODO: this basically does nothing
+            pTschSF->freeReservedCellsWith(destId == pNodeId ? srcId : destId);
         }
 
         return;
