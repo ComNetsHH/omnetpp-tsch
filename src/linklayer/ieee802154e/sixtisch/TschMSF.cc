@@ -898,12 +898,17 @@ std::vector<cellLocation_t> TschMSF::pickRandomly(std::vector<cellLocation_t> in
     return picked;
 }
 
-std::vector<cellLocation_t> TschMSF::pickConsecutively(std::vector<cellLocation_t> inputVec, int numRequested)
+std::vector<cellLocation_t> TschMSF::pickConsecutively(std::vector<cellLocation_t> inputVec, int numRequested, bool randomizeStart)
 {
     std::vector<cellLocation_t> picked = {};
-    EV << "picking consecutively from " << inputVec << endl;
-    for (auto i = 0; i < numRequested && i < inputVec.size(); i++)
-        picked.push_back(inputVec[i]);
+    int start = randomizeStart ? intrand((int) inputVec.size()) : 0;
+    EV << "picking consecutively " << numRequested << " offsets from range: " << inputVec << "\nstarting from index " << start << endl;
+
+    for (auto i = 0; i < numRequested; i++)
+    {
+        picked.push_back(inputVec[start % (int) inputVec.size()]);
+        start++;
+    }
 
     return picked;
 }
@@ -992,20 +997,22 @@ int TschMSF::createCellList(uint64_t destId, std::vector<cellLocation_t> &cellLi
     }
 
     std::vector<offset_t> freeSlots = {}; // generally unoccupied slot offsets
-    // slot offsets from which we can construct cell list, subject to extra filtering compared to freeSlots
-    std::vector<offset_t> availableSlots = {};
     std::vector<offset_t> blacklisted = {}; // slot offsets previously rejected by the receiver node
+    std::vector<offset_t> availableSlots = {}; // from which the CELL_LIST will be filled, subject to extra filtering (blacklisting) from freeSlots
 
     /** Low-latency part: schedule daisy-chained cells in uplink */
     if (par("lowLatencyMode").boolValue() && destId == rplParentId
-            && rplRank > 2) // doesn't make sense to
+            && rplRank > 2) // doesn't make sense to cherry-pick cells for sink neighbors
     {
+        // only attempt daisy-chaining if the slot offset from the preferred parent is known
         if (uplinkSlotOffset > 0) {
 
+            // since multiple nodes may share preferred parent,
+            // need to slowly broaden (down) the range of acceptable slot offsets
+            // starting at the slot offset of the preferred parent
             if (num6pAddSent > 0)
                 numCells *= num6pAddFailed + 1; // OG: numCells *= num6pAddFailed + 1;
 
-            // slowly increase range offered in CELL_LIST
             auto startOffset = (int) uplinkSlotOffset - numCells;
             auto endOffset = uplinkSlotOffset;
 
@@ -1036,7 +1043,7 @@ int TschMSF::createCellList(uint64_t destId, std::vector<cellLocation_t> &cellLi
     else
         freeSlots = getAvailableSlotsInRange(pSlotframeLength);
 
-    /** Adaptive blacklisting part */
+    /** If slot blacklisting is enabled, avoid including previously rejected slot offsets in a new request */
     if (blacklistedSlots.find(destId) != blacklistedSlots.end())
         blacklisted = blacklistedSlots[destId];
 
@@ -1107,25 +1114,15 @@ int TschMSF::createCellList(uint64_t destId, std::vector<cellLocation_t> &cellLi
         return -EFBIG;
     }
 
-    // Fill cell list with all available slot offsets and random channel offset
+    // Using available slot offsets, fill the cell list with randomly selected cells
     for (auto sl : availableSlots)
         cellList.push_back({sl, (offset_t) intrand(pNumChannels)});
 
-    std::vector<cellLocation_t> temp;
+    // if cell matching is enabled and it's not the first dedicated cell
+    // or cell bundling is on
+    bool pickConsec = (cellMatchingEnabled && pTschLinkInfo->getDedicatedCells(destId).size()) || pCellBundlingEnabled;
 
-    // if cell matching is enabled and it's not the first dedicated cell we're trying to add
-    bool pickConsec = cellMatchingEnabled && pTschLinkInfo->getDedicatedCells(destId).size();
-
-    // Select only required number of consecutive! cells from the cell list
-    if (pCellBundlingEnabled) {
-        for (auto i = 0; i < cellList.size() && i < numCells; i++)
-            temp.push_back(cellList[i]);
-
-        cellList = temp;
-    }
-    else
-        cellList = pickConsec ? pickConsecutively(cellList, numCells) : pickRandomly(cellList, numCells);
-
+    cellList = pickConsec ? pickConsecutively(cellList, numCells, pCellBundlingEnabled) : pickRandomly(cellList, numCells);
     EV_DETAIL << "Initialized cell list: " << cellList << endl;
 
     // Block selected slot offsets until 6P transaction finishes
@@ -1628,7 +1625,8 @@ void TschMSF::handleParentChangedSignal(uint64_t newParentId) {
         rplParentId = newParentId;
 
         // To control whether secondary nodes are allowed to occupy the cells (mainly an issue at the sink)
-        if (par("scheduleUplinkOnJoin").boolValue()) {
+        if (par("scheduleUplinkOnJoin").boolValue())
+        {
             int numCellsToSchedule = pCellBundlingEnabled ? par("cellBundleSize").intValue() : par("initialNumCells").intValue();
             addCells(rplParentId, numCellsToSchedule, MAC_LINKOPTIONS_TX);
         }
@@ -1640,6 +1638,7 @@ void TschMSF::handleParentChangedSignal(uint64_t newParentId) {
         return;
     }
 
+    // TODO: handle already scheduled downlink cells as well?
     auto txCells = pTschLinkInfo->getDedicatedCells(rplParentId);
     EV_DETAIL << "Dedicated TX cells currently scheduled with PP: " << txCells << endl;
 
@@ -1673,8 +1672,8 @@ void TschMSF::handlePacketEnqueued(uint64_t dest) {
     if (rplParentId == dest || par("downlinkDedicated").boolValue())
     {
         // EXPERIMENTAL: forbid leaf nodes (seatbelts) at the sink to schedule uplink
-        if (!par("scheduleUplinkOnJoin").boolValue() && isLeafNode && rplRank == 2)
-            return;
+//        if (!par("scheduleUplinkOnJoin").boolValue() && isLeafNode && rplRank == 2)
+//            return;
 
         auto dedicatedCells = pTschLinkInfo->getDedicatedCells(dest);
 
@@ -1855,6 +1854,9 @@ void TschMSF::receiveSignal(cComponent *src, simsignal_t id, long value, cObject
             // Try to add a few extra cells as required by the expected traffic rate
             scheduleAt(simTime() + SimTime(20, SIMTIME_S), selfMsg);
         }
+
+
+        // TODO: shouldn't this clause be outside/independent of "handleRankUpdates"?
 
         // Custom ReSA demo use case handling procedure
         // For seatbelts which are not direct neighbors of the sink, schedule dedicated cell with the parent

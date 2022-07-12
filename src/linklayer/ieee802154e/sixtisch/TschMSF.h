@@ -568,7 +568,7 @@ class TschMSF: public TschSF, public cListener {
      * @return vector of picked slot offsets
      */
     std::vector<cellLocation_t> pickRandomly(std::vector<cellLocation_t> inputVec, int numRequested);
-    std::vector<cellLocation_t> pickConsecutively(std::vector<cellLocation_t> inputVec, int numRequested);
+    std::vector<cellLocation_t> pickConsecutively(std::vector<cellLocation_t> inputVec, int numRequested, bool randomizeStart);
 
     /**
      * Check for free slot offsets (neither scheduled, nor reserved) in the range @param start -> @param end
