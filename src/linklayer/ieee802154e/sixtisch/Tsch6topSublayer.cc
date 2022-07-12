@@ -977,6 +977,17 @@ void Tsch6topSublayer::receiveSignal(cComponent *source, simsignal_t signalID, c
         return;
     }
 
+    if ( sixphdr && ((tsch6pMsg_t) sixphdr->getType()) == MSG_RESPONSE && !txSuccess ) {
+
+        EV << "Seems we've lost our 6P response addressed to " << MacAddress(destId) << endl;
+
+        pTschLinkInfo->revertLink(destId, pTschLinkInfo->getLastKnownType(destId)); // TODO: this basically does nothing
+        pTschSF->freeReservedCellsWith(destId);
+
+        return;
+    }
+
+
     tsch6topCtrlMsg* result = NULL;
 
     handlePiggybackData(destId, txSuccess);
