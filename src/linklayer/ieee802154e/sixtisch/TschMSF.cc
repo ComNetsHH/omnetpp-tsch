@@ -942,21 +942,16 @@ std::vector<offset_t> TschMSF::getAvailableSlotsInRange(int slOffsetEnd) {
 
 double TschMSF::getCoverageRate() {
     auto gaps = schedule->getUnmatchedRxRanges();
-
-    std::cout << "Checking coverage rate";
     if (!gaps.size())
     {
-        cout << "full cowling!" << endl;
         return 1;
     }
 
     vector<offset_t> slotOfs = {};
 
-    cout << "uncovered gaps: " << endl;
     // sort out unique slot offsets
     for (auto gap : gaps)
     {
-        std::cout << gap << endl;
         auto start = get<0>(gap);
         auto finish = get<1>(gap);
 
@@ -968,12 +963,7 @@ double TschMSF::getCoverageRate() {
     }
 
     auto allRxLinks = schedule->getAllDedicatedRxLinks();
-
-    double ratio = (allRxLinks.size() - slotOfs.size()) / (double) allRxLinks.size();
-
-    cout << "Coverage ratio: " << ratio << endl;
-
-    return ratio;
+    return (allRxLinks.size() - slotOfs.size()) / (double) allRxLinks.size();
 }
 
 int TschMSF::createCellList(uint64_t destId, std::vector<cellLocation_t> &cellList, int numCells)
