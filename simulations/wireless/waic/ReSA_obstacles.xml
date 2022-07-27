@@ -1,0 +1,35 @@
+<environment>
+    <!-- Rotated cuboids -->
+    <object position="min 0.23 10.9625 1.958" orientation="-21 0 0" shape="cuboid 5.3 0.002 4.575" material="concrete" line-color="0 0 0" fill-color="0 0 0" opacity="0.5" texture="brick.jpg"/>
+	<object position="min 0.23 12.8875 1.958" orientation="21 0 0" shape="cuboid 5.3 0.002 4.575" material="concrete" line-color="0 0 0" fill-color="0 0 0" opacity="0.5" texture="brick.jpg"/>
+    <object position="min 5.23 10 1.958" orientation="0 0 0" shape="cuboid 29.52 0.002 4.575" material="concrete" line-color="0 0 0" fill-color="0 0 0" opacity="0.5" texture="brick.jpg"/>
+    <object position="min 5.23 13.85 1.958" orientation="0 0 0" shape="cuboid 29.52 0.002 4.575" material="concrete" line-color="0 0 0" fill-color="0 0 0" opacity="0.5" texture="brick.jpg"/>
+    <object position="min 34.52 10.9625 1.958" orientation="-339 0 0" shape="cuboid 5.3 0.002 4.575" material="concrete" line-color="0 0 0" fill-color="0 0 0" opacity="0.5" texture="brick.jpg"/>
+	<object position="min 34.52 12.8875 1.958" orientation="339 0 0" shape="cuboid 5.3 0.002 4.575" material="concrete" line-color="0 0 0" fill-color="0 0 0" opacity="0.5" texture="brick.jpg"/>
+
+    <!-- Rotated cuboids -->
+    <object position="min 0.23 51.3625 1.958" orientation="-21 0 0" shape="cuboid 5.3 0.002 4.575" material="concrete" line-color="0 0 0" fill-color="0 0 0" opacity="0.5" texture="brick.jpg"/>
+	<object position="min 0.23 53.2875 1.958" orientation="21 0 0" shape="cuboid 5.3 0.002 4.575" material="concrete" line-color="0 0 0" fill-color="0 0 0" opacity="0.5" texture="brick.jpg"/>
+    <object position="min 5.23 50.4 1.958" orientation="0 0 0" shape="cuboid 29.52 0.002 4.575" material="concrete" line-color="0 0 0" fill-color="0 0 0" opacity="0.5" texture="brick.jpg"/>
+    <object position="min 5.23 54.2 1.958" orientation="0 0 0" shape="cuboid 29.52 0.002 4.575" material="concrete" line-color="0 0 0" fill-color="0 0 0" opacity="0.5" texture="brick.jpg"/>
+    <object position="min 34.52 51.3625 1.958" orientation="-339 0 0" shape="cuboid 5.3 0.002 4.575" material="concrete" line-color="0 0 0" fill-color="0 0 0" opacity="0.5" texture="brick.jpg"/>
+	<object position="min 34.52 53.2875 1.958" orientation="339 0 0" shape="cuboid 5.3 0.002 4.575" material="concrete" line-color="0 0 0" fill-color="0 0 0" opacity="0.5" texture="brick.jpg"/>
+
+    <!-- Rotated cuboids -->
+    <object position="min 0.23 91.7625 1.958" orientation="-21 0 0" shape="cuboid 5.3 0.002 4.575" material="concrete" line-color="0 0 0" fill-color="0 0 0" opacity="0.5" texture="brick.jpg"/>
+	<object position="min 0.23 93.6875 1.958" orientation="21 0 0" shape="cuboid 5.3 0.002 4.575" material="concrete" line-color="0 0 0" fill-color="0 0 0" opacity="0.5" texture="brick.jpg"/>
+    <object position="min 5.23 90.8 1.958" orientation="0 0 0" shape="cuboid 29.52 0.002 4.575" material="concrete" line-color="0 0 0" fill-color="0 0 0" opacity="0.5" texture="brick.jpg"/>
+    <object position="min 5.23 94.6 1.958" orientation="0 0 0" shape="cuboid 29.52 0.002 4.575" material="concrete" line-color="0 0 0" fill-color="0 0 0" opacity="0.5" texture="brick.jpg"/>
+    <object position="min 34.52 91.7625 1.958" orientation="-339 0 0" shape="cuboid 5.3 0.002 4.575" material="concrete" line-color="0 0 0" fill-color="0 0 0" opacity="0.5" texture="brick.jpg"/>
+	<object position="min 34.52 93.6875 1.958" orientation="339 0 0" shape="cuboid 5.3 0.002 4.575" material="concrete" line-color="0 0 0" fill-color="0 0 0" opacity="0.5" texture="brick.jpg"/>
+
+    <!-- Rotated cuboids -->
+    <object position="min 61.55 30.5463 1.958" orientation="-69 0 0" shape="cuboid 5.3 0.002 4.575" material="concrete" line-color="0 0 0" fill-color="0 0 0" opacity="0.5" texture="brick.jpg"/>
+	<object position="min 63.475 30.5463 1.958" orientation="69 0 0" shape="cuboid 5.3 0.002 4.575" material="concrete" line-color="0 0 0" fill-color="0 0 0" opacity="0.5" texture="brick.jpg"/>
+    <object position="min 63.22 33 1.958" orientation="0 0 0" shape="cuboid 0.002 29.52 4.575" material="concrete" line-color="0 0 0" fill-color="0 0 0" opacity="0.5" texture="brick.jpg"/>
+    <object position="min 67.05 33 1.958" orientation="0 0 0" shape="cuboid 0.002 29.52 4.575" material="concrete" line-color="0 0 0" fill-color="0 0 0" opacity="0.5" texture="brick.jpg"/>
+    <object position="min 61.55 65 1.958" orientation="-291 0 0" shape="cuboid 5.3 0.002 4.575" material="concrete" line-color="0 0 0" fill-color="0 0 0" opacity="0.5" texture="brick.jpg"/>
+	<object position="min 63.475 65 1.958" orientation="291 0 0" shape="cuboid 5.3 0.002 4.575" material="concrete" line-color="0 0 0" fill-color="0 0 0" opacity="0.5" texture="brick.jpg"/>
+ 
+
+</environment>
