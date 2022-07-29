@@ -1,6 +1,6 @@
 # TSCH
 
-OMNeT++ simulation model for IEEE 802.15.4e Time Slotted Channel Hopping (TSCH) with 6P protocol and scheduling functions
+OMNeT++ simulation model for IEEE 802.15.4e Time Slotted Channel Hopping (TSCH) with 6P protocol and scheduling functions as part of the 6TiSCH stack (combined with [RPL](https://github.com/ComNetsHH/omnetpp-rpl))
 
 ## Compatibility
 
