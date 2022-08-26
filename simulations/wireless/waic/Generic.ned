@@ -36,7 +36,7 @@ import rpl.RplRouter;
 network Generic
 {
     parameters:
-        @display("bgb=40,85");
+        @display("bgb=130.474,86.33");
         int numSinks = default(1);
         int numHosts = default(30);
         double lambda = default(1); // optional parameter for multi-hop delay testing 
