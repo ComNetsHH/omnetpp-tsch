@@ -30,6 +30,7 @@
 #include <algorithm>
 #include <queue>
 #include <chrono>
+#include "../../common/TschUtils.h"
 
 using namespace tsch;
 using namespace std;
@@ -349,7 +350,7 @@ void TschMSF::handleMaxCellsReached(cMessage* msg) {
         addCells(nbrId, pCellIncrement, MAC_LINKOPTIONS_TX);
     }
     // refrain from deleting downlink cells provisioned on purpose
-    else if (usage <= pLimNumCellsUsedLow && downlinkRequested.find(nbrId) != downlinkRequested.end())
+    else if (usage <= pLimNumCellsUsedLow && downlinkRequested.find(nbrId) == downlinkRequested.end())
         deleteCells(nbrId, 1);
 
     // reset values
@@ -1910,7 +1911,7 @@ void TschMSF::receiveSignal(cComponent *src, simsignal_t id, long value, cObject
         throw cRuntimeError(out.str().c_str());
     }
 
-    if (options != 0xFF && getCellOptions_isTX(options) && neighbor != MacAddress::BROADCAST_ADDRESS.getInt())
+    if (options != 0xFF && getCellOptions_isTX(options) && !getCellOptions_isSHARED(options) && neighbor != MacAddress::BROADCAST_ADDRESS.getInt())
     {
         updateNeighborStats(neighbor, statisticStr);
         updateCellTxStats(cell, statisticStr);
@@ -1943,7 +1944,7 @@ void TschMSF::incrementNeighborCellElapsed(uint64_t neighborId) {
 
 void TschMSF::decrementNeighborCellElapsed(uint64_t neighborId) {
     if (nbrStatistic.find(neighborId) == nbrStatistic.end()) {
-        nbrStatistic.insert({neighborId, new NbrStatistic(neighborId)});
+//        nbrStatistic.insert({neighborId, new NbrStatistic(neighborId)});
         return;
     }
 
