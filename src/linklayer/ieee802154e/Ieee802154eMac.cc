@@ -460,8 +460,8 @@ TschLink* Ieee802154eMac::selectActiveLink(std::vector<TschLink*> links) {
             unicastTxLinks.push_back(link);
         }
 
-        if (link->isTx())
-            // Update the elapsed counter also for inactive links!
+        if (link->isTx() && !link->isShared())
+            // Update the elapsed counter also for inactive links! (but not shared)
             // TODO: turns the following code really ugly with multiple decrements, find a leaner solution
             sf->incrementNeighborCellElapsed(link->getAddr().getInt());
     }
