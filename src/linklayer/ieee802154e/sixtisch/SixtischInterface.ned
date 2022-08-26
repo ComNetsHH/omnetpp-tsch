@@ -24,7 +24,6 @@ package tsch.linklayer.ieee802154e.sixtisch;
 
 import tsch.linklayer.ieee802154e.sixtisch.TschSF;
 import tsch.linklayer.ieee802154e.sixtisch.TschMSF;
-import tsch.linklayer.ieee802154e.sixtisch.TschSFSB;
 import tsch.linklayer.ieee802154e.sixtisch.Tsch6TopSublayer;
 
 module SixtischInterface
