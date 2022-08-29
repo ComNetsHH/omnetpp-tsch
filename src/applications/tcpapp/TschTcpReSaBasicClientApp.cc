@@ -3,7 +3,7 @@
 //
 //  Copyright (C) 2022  Institute of Communication Networks (ComNets),
 //                      Hamburg University of Technology (TUHH)
-//            (C) 2022  Gökay Apusoglu
+//            (C) 2022  Gï¿½kay Apusoglu
 //
 //  This program is free software: you can redistribute it and/or modify
 //  it under the terms of the GNU General Public License as published by
@@ -61,15 +61,20 @@ void TschTcpReSaBasicClientApp::initialize(int stage){
 
 void TschTcpReSaBasicClientApp::handleMessage(cMessage *msg)
 {
-    if (msg == activationCheck){
+    if (msg == activationCheck) {
         delete msg;
         int numUsers = this->getSystemModule()->getAncestorPar("numUsers");
-        if (activeUserRatio != 1 && activeUserRatio != 0){
+        if (activeUserRatio != 1 && activeUserRatio != 0) {
             double numInactive = numUsers - ceil(numUsers*activeUserRatio);
-            if (numInactive != 0){
+
+            EV << "total users: " << numUsers << ", AUR: " << activeUserRatio
+                    << " => inactive = " << numInactive
+                    << ", floored: " << numUsers - floor(numUsers*activeUserRatio) << endl;
+
+            if (numInactive) {
                 std::vector<double> inactiveUsers(numInactive);
                 double n = 0;
-                double step = (numUsers/numInactive);
+                double step = numUsers / numInactive;
                 std::generate(inactiveUsers.begin(), inactiveUsers.end(), [&n,&step]{ return n+=step; });
 
                 for(auto & el : inactiveUsers){el=round(el);};
@@ -78,20 +83,19 @@ void TschTcpReSaBasicClientApp::handleMessage(cMessage *msg)
 
                 // If found in the list, disable
                 auto parentModule = this->getParentModule();
-                if (found){
-                        parentModule->deleteModule();
-                }
+                if (found || this->getParentModule()->getIndex() == 0)
+                    parentModule->deleteModule();
+
             }
 
         }
-        else if(activeUserRatio == 0){
+        else if (!activeUserRatio) {
             auto parentModule = this->getParentModule();
             parentModule->deleteModule();
         }
     }
-    else{
+    else
         OperationalBase::handleMessage(msg);
-        }
 }
 
 }
