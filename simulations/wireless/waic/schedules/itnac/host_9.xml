@@ -1,0 +1,23 @@
+<?xml version="1.0" ?>
+<TSCHSchedule>
+   <Slotframe macSlotframeSize="101">
+      <Link slotOffset="0" channelOffset="0">
+         <Option tx="true" rx="true" shared="true" auto="false"/>
+         <Virtual id="0"/>
+         <Type normal="true" advertising="false" advertisingOnly="false"/>
+         <Neighbor address="FF:FF:FF:FF:FF:FF"/>
+      </Link>
+      <Link slotOffset="10" channelOffset="8">
+         <Option tx="true" rx="false" shared="false" auto="false"/>
+         <Virtual id="0"/>
+         <Type normal="true" advertising="false" advertisingOnly="false"/>
+         <Neighbor address="0A:AA:00:00:00:01"/>
+      </Link>
+      <Link slotOffset="46" channelOffset="2">
+         <Option tx="false" rx="true" shared="true" auto="true"/>
+         <Virtual id="0"/>
+         <Type normal="true" advertising="false" advertisingOnly="false"/>
+         <Neighbor address="0A:AA:00:00:00:0B"/>
+      </Link>
+   </Slotframe>
+</TSCHSchedule>
