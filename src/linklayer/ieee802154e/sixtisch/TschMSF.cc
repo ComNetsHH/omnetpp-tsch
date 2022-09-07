@@ -30,7 +30,6 @@
 #include <algorithm>
 #include <queue>
 #include <chrono>
-#include "../../common/TschUtils.h"
 
 using namespace tsch;
 using namespace std;
