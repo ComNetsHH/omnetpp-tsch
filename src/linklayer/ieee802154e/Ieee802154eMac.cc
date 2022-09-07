@@ -165,7 +165,7 @@ void Ieee802154eMac::initialize(int stage) {
         sf = check_and_cast<TschSF*> (getModuleByPath("^.sixtischInterface.sf"));
         if (sf->par("disable").boolValue()) {
             schedule->xmlSchedule();
-            schedule->printSlotframe();
+//            schedule->printSlotframe();
         }
 
         asn.setMacTsTimeslotLength(macTsTimeslotLength);
