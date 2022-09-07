@@ -32,7 +32,7 @@
 namespace inet{
 
 // Constants
-const int MAX_FILESIZE = 100000;    // TBD lift hardcoded limit
+const int MAX_FILESIZE = 1000000;    // TBD lift hardcoded limit
 
 // Methods / Functions
 int TschParser::get_Tsch_num_Slotframes(){

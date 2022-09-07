@@ -86,9 +86,9 @@ class TschParser
       int handle;
       int macSlotframeSize;
       int numLinks;
-      Tsch_Link links[100];
+      Tsch_Link links[200];
     };
-    Tsch_Slotframe Slotframe[100];
+    Tsch_Slotframe Slotframe[200];
 
   private:
 
