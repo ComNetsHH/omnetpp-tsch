@@ -86,9 +86,9 @@ class TschParser
       int handle;
       int macSlotframeSize;
       int numLinks;
-      Tsch_Link links[200];
+      Tsch_Link links[300];
     };
-    Tsch_Slotframe Slotframe[200];
+    Tsch_Slotframe Slotframe[300]; // TODO: dynamically allocate?
 
   private:
 
