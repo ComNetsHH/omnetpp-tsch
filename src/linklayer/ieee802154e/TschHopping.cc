@@ -130,7 +130,7 @@ int TschHopping::getMaxChannel() {
             ? 40 // WAIC
             : 26; // ISM
 }
-
+TODO: ensure existing simulations are not broken by commenting this out
 units::values::Hz TschHopping::getMinCenterFrequency(){
     return this->centerFrequency;
 }

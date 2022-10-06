@@ -84,6 +84,9 @@ void TschMSF::initialize(int stage) {
         pCheckScheduleConsistency = par("checkScheduleConsistency").boolValue();
         pCellBundlingEnabled = par("cellBundlingEnabled").boolValue();
         pCellBundleSize = par("cellBundleSize").intValue();
+        pBlacklistingEnabled = par("blacklistingEnabled").boolValue();
+        pChOfStart = par("chOfStart").intValue();
+        pChOfEnd = par("chOfEnd").intValue();
         queueUtilization = registerSignal("queueUtilization");
         failed6pAdd = registerSignal("failed6pAdd");
         uplinkScheduledSignal = registerSignal("uplinkScheduled");
@@ -481,7 +484,7 @@ void TschMSF::relocateCells(uint64_t neighborId, std::vector<cellLocation_t> rel
 
     std::vector<cellLocation_t> candidateCells = {};
     for (auto slof: availableSlots)
-        candidateCells.push_back({slof, (offset_t) intrand(pNumChannels) });
+        candidateCells.push_back({slof, getChOf() });
 
     if (availableSlots.size() > relocCells.size() + pCellListRedundancy)
         candidateCells = pickRandomly(candidateCells, relocCells.size() + pCellListRedundancy);
@@ -1097,7 +1100,7 @@ int TschMSF::createCellList(uint64_t destId, std::vector<cellLocation_t> &cellLi
         EV_DETAIL << "More or equal cells requested than available, returning "
                 << availableSlots << endl;
         for (auto s : availableSlots) {
-            cellList.push_back({s, (offset_t) intrand(pNumChannels)});
+            cellList.push_back({ s, getChOf() });
             reservedTimeOffsets[destId].push_back(s);
         }
 
@@ -1106,7 +1109,7 @@ int TschMSF::createCellList(uint64_t destId, std::vector<cellLocation_t> &cellLi
 
     // Using available slot offsets, fill the cell list with randomly selected cells
     for (auto sl : availableSlots)
-        cellList.push_back({sl, (offset_t) intrand(pNumChannels)});
+        cellList.push_back({ sl, getChOf() });
 
     // if cell matching is enabled and it's not the first dedicated cell
     // or cell bundling is on
@@ -1121,6 +1124,18 @@ int TschMSF::createCellList(uint64_t destId, std::vector<cellLocation_t> &cellLi
 
     return 0;
 }
+
+offset_t TschMSF::getChOf() {
+    if (pBlacklistingEnabled)
+    {
+        if (pChOfEnd == pChOfStart)
+            return (offset_t) pChOfStart;
+
+        return (offset_t) (intrand(pChOfEnd - pChOfStart) + pChOfStart);
+    }
+
+    return (offset_t) intrand(pNumChannels);
+};
 
 int TschMSF::pickCells(uint64_t destId, std::vector<cellLocation_t> &cellList,
                         int numCells, bool isRX, bool isTX, bool isSHARED)

@@ -60,7 +60,12 @@ simple TschMSF like TschSF
 		int initialNumCells = default(1); // number of cells to schedule with RPL preferred parent initially
 		
 		int trackFailed6pAddByNum = default(0); // sequence number of specific 6P ADD request to track
-		int minCellChannelOffset = default(0); // channel offset for the minimal cells, esp. important in lossy environment 
+		int minCellChannelOffset = default(0); // channel offset for the minimal cells, esp. important in lossy environment
+		
+		// parameters for blacklisting, the range of white-listed channel offsets
+		bool blacklistingEnabled = default(false);
+		int chOfStart = default(0); // 802.15.4 ch. 11
+		int chOfEnd = default(15); // 802.15.4 ch. 26
 		
 		// UI params
         bool showDedicatedTxCells = default(true); // show scheduled TX cells coordinates above node pictorgram

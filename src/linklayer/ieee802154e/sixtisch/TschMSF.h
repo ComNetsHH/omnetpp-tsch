@@ -282,6 +282,8 @@ class TschMSF: public TschSF, public cListener {
      */
     int getTimeout() override;
 
+    offset_t getChOf(); // draw channel offset randomly uniformly sampled from the available range;
+
     virtual void incrementNeighborCellElapsed(uint64_t neighborId) override;
     virtual void decrementNeighborCellElapsed(uint64_t neighborId) override;
 
@@ -341,6 +343,9 @@ class TschMSF: public TschSF, public cListener {
     int pCellIncrement; // see .ned parameter "cellBandwidthIncrement"
     bool pSend6pDelayed; // see .ned parameter
     offset_t pNumMinimalCells; // number of minimal cells being scheduled for ICMPv6, RPL broadcast messages
+    bool pBlacklistingEnabled;
+    int pChOfStart;
+    int pChOfEnd;
 
     bool isSink;
 
