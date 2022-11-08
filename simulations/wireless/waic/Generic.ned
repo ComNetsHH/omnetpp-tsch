@@ -36,29 +36,31 @@ import rpl.RplRouter;
 network Generic
 {
     parameters:
-        @display("bgb=130.474,86.33");
+        @display("bgb=154.54666,130.87334");
         int numSinks = default(1);
         int numHosts = default(30);
         double lambda = default(1); // optional parameter for multi-hop delay testing 
     submodules:
         configurator: Ipv6FlatNetworkConfigurator {
             parameters:
-                @display("p=27.91269,1.9802921;is=s");
+                @display("p=131.76666,54.94;is=s");
         }
-        channelHopping: TschHopping;
+        channelHopping: TschHopping {
+            @display("p=131.76666,12.506666;is=s");
+        }
         radioMedium: <> like IRadioMedium {
             parameters:
-                @display("p=28.006989,6.9781723;is=s");
+                @display("p=131.31999,33.053333;is=s");
         }
 
         sink[numSinks]: RplRouter {
             parameters:
                 @6tisch;
-                @display("r=,,#707070;p=17.63403,16.219536");
+                @display("r=,,#707070;p=32.16,41.093334");
         }
         host[numHosts]: RplRouter {
             parameters:
                 @6tisch;
-                @display("r=,,#707070;p=17.63403,16.219536");
+                @display("r=,,#707070;p=32.16,20.1");
         }
 }
