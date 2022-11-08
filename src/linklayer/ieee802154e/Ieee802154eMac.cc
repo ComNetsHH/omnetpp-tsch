@@ -636,19 +636,34 @@ void Ieee802154eMac::updateStatusIdle(t_mac_event event, cMessage *msg) {
         if (!currentLink)
             return;
 
-        // Only for 6TiSCH:
-        // If the minimal cell channel offset is set to the maximum value, i.e. highest frequency,
-        // to ensure reliable connectivity, this cell should NOT channel-hop
-        // TODO: check radio center frequency and throw an error if channel number 39 is used in ISM!!!
-        if (sf && sf->par("minCellChannelOffset").intValue() == 39) // max WAIC channel
+
+        currentChannel = hopping->channel(currentAsn, currentLink->getChannelOffset());
+
+        /**
+         * Disable channel hopping for minimal cells
+         * if corresponding flag is set, or, only for WAIC band, the channel offset is set to the highest value (39)
+         *
+         */
+        if (sf && currentLink->getAddr() == MacAddress::BROADCAST_ADDRESS
+                && (sf->par("minCellChannelOffset").intValue() == 39 || hopping->par("disableMinCellHopping").boolValue()))
         {
-            if (currentLink->getAddr() == MacAddress::BROADCAST_ADDRESS) // checking if current link is a minimal cell
-                currentChannel = sf->par("minCellChannelOffset").intValue();
-            else
-                currentChannel = hopping->channel(currentAsn, currentLink->getChannelOffset());
+            currentChannel = hopping->getMinChannel() + sf->par("minCellChannelOffset").intValue();
         }
-        else
-            currentChannel = hopping->channel(currentAsn, currentLink->getChannelOffset());
+
+
+//        // Only for 6TiSCH:
+//        // If the minimal cell channel offset is set to the maximum value, i.e. highest frequency,
+//        // to ensure reliable connectivity, this cell should NOT channel-hop
+//        // TODO: check radio center frequency and throw an error if channel number 39 is used in ISM!!!
+//        if (sf && sf->par("minCellChannelOffset").intValue() == 39) // max WAIC channel
+//        {
+//            if (currentLink->getAddr() == MacAddress::BROADCAST_ADDRESS) // checking if current link is a minimal cell
+//                currentChannel = sf->par("minCellChannelOffset").intValue();
+//            else
+//                currentChannel = hopping->channel(currentAsn, currentLink->getChannelOffset());
+//        }
+//        else
+//            currentChannel = hopping->channel(currentAsn, currentLink->getChannelOffset());
 
         emit(currentFreqSignal, hopping->channelToCenterFrequencyPlain(currentChannel));
 

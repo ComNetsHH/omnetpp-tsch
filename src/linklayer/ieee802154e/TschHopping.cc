@@ -114,7 +114,8 @@ int TschHopping::channel(int64_t asn, int channelOffset)
 //    TODO: ensure existing simulations are not broken by commenting this out
     if ((int) pattern.size() == 1) {
         EV_DETAIL << "Seems channel hopping is disabled" << endl;
-        return channelOffset;
+
+        return getMinChannel() + channelOffset;
     }
 
     return pattern[(asn + channelOffset) % pattern.size()];
