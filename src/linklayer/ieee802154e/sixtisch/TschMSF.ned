@@ -30,7 +30,7 @@ simple TschMSF like TschSF
         int maxNumCells = default(intuniform(4, 10)); // sliding window size to esmitate cell utilization
         int maxNumTx = default(254); // maximum number of elapsed cells to consider for PDR calculation
         // determines how much the MAX_NUM_CELLS window size increases with respect to the number of cells scheduled
-        double maxNumCellsScalingFactor = default(10);  
+        double maxNumCellsScalingFactor = default(10);
 //        int slotframeLen = default(101);
 
 		// this value + number of cells required = CELL_LIST size in 6P transactions, 
@@ -98,5 +98,7 @@ simple TschMSF like TschSF
 		bool allowAutoCellDeletion = default(false);
 		// apply hash function to the node MAC before taking the modulo by number of channels, 
 		// diversifies auto RX channel offsets of nodes from the same module array 
-		bool useHashChOffsets = default(false); 
+		bool useHashChOffsets = default(false);
+		string initCellOverride = default(""); // location of the first dedicated cell to be scheduled with pref. parent
+		bool showNumPktSent = default(false); // show number of UDP packets sent above the node icon 
 }

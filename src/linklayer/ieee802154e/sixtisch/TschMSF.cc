@@ -25,6 +25,7 @@
 #include "Tsch6tischComponents.h"
 #include "../Ieee802154eMac.h"
 #include "../TschVirtualLink.h"
+#include "inet/physicallayer/contract/packetlevel/SignalTag_m.h"
 #include <omnetpp.h>
 #include <random>
 #include <algorithm>
@@ -57,7 +58,9 @@ TschMSF::TschMSF() :
     isLeafNode(true),
     numCellsRequired(-1),
     numTranAbandonedMaxRetries(0),
-    neighbors({})
+    initCellOverride({0, 0}),
+    neighbors({}),
+    udpPacketsSent(0)
 {
 }
 TschMSF::~TschMSF() {
@@ -91,6 +94,15 @@ void TschMSF::initialize(int stage) {
         failed6pAdd = registerSignal("failed6pAdd");
         uplinkScheduledSignal = registerSignal("uplinkScheduled");
         uncoverableGapSignal = registerSignal("uncoverableGap");
+
+        auto initCellLocation = omnetpp::cStringTokenizer(par("initCellOverride").stringValue()).asIntVector();
+        if (initCellLocation.size())
+        {
+            initCellOverride = {(uint8_t) initCellLocation[0], (uint8_t) initCellLocation[1]};
+            EV << "Reading initial cell loc override: " << initCellOverride << endl;
+        }
+
+
     } else if (stage == 5) {
         interfaceModule = dynamic_cast<InterfaceTable *>(getParentModule()->getParentModule()->getParentModule()->getParentModule()->getSubmodule("interfaceTable", 0));
         pNodeId = interfaceModule->getInterface(1)->getMacAddress().getInt();
@@ -111,6 +123,10 @@ void TschMSF::initialize(int stage) {
             return;
 
         hostNode = getModuleByPath("^.^.^.^.");
+        auto app = hostNode->getSubmodule("app", 0);
+        if (app)
+            app->subscribe(packetSentSignal, this);
+
         showTxCells = par("showDedicatedTxCells").boolValue();
         showQueueUtilization = par("showQueueUtilization").boolValue();
         showTxCellCount = par("showTxCellCount").boolValue();
@@ -403,7 +419,7 @@ void TschMSF::handleDoStart(cMessage* msg) {
 }
 
 void TschMSF::handleHousekeeping(cMessage* msg) {
-    EV_DETAIL << "Performing housekeeping: " << endl;
+    EV_DETAIL << "Performing housekeeping, neighbors: " << neighbors << endl;
     scheduleAt(simTime()+ uniform(1, 1.25) * SimTime(pHousekeepingPeriod, SIMTIME_S), msg);
 
     // iterate over all neighbors
@@ -411,22 +427,47 @@ void TschMSF::handleHousekeeping(cMessage* msg) {
         std::map<cellLocation_t, double> pdrStat;
 
         // calc cell PDR per neighbor
-        for (auto cell : pTschLinkInfo->getDedicatedCells(neighbourId)) {
+        auto dedicatedCells = pTschLinkInfo->getDedicatedCells(neighbourId);
+        EV << "Dedicated cells: " << dedicatedCells << endl;
+        for (auto cell : dedicatedCells) {
             auto it = cellStatistic.find(cell);
             if (it == cellStatistic.end())
+            {
+                EV << "cell stat entry not found" << endl;
+                cellStatistic.insert({cell, {0, 0, 0}});
                 continue;
+            }
+
+            auto cellStat = std::get<1>(*it);
+
+            EV << "sent: " << (int) cellStat.NumTx << ", acked: " << (int) cellStat.NumTxAck << endl;
 
             double cellPdr = -1;
 
-            if ((int) std::get<1>(*it).NumTx > 0)
-                cellPdr = static_cast<double>(std::get<1>(*it).NumTxAck)
-                    / static_cast<double>(std::get<1>(*it).NumTx);
-
-            pdrStat.insert({cell, cellPdr});
+            if ((int) cellStat.NumTx > 0)
+            {
+                cellPdr = static_cast<double>(cellStat.NumTxAck) / static_cast<double>(cellStat.NumTx);
+                pdrStat.insert({cell, cellPdr});
+            }
         }
 
-        if ((int) pdrStat.size() <= 1)
+        if (!pdrStat.size())
             continue;
+
+        // Non-standard behavior - if there's just one cell, also relocate it if the PDR threshold is not reached,
+        // required to test slot-hopping
+        if ((int) pdrStat.size() == 1)
+        {
+            auto cellPdr = pdrStat.begin();
+
+            if (cellPdr->second < pRelocatePdrThres) {
+                EV_DETAIL << "Cell " << cellPdr->first << " has PDR of " << cellPdr->second * 100
+                        << "%, lower than the threshold of " << pRelocatePdrThres * 100
+                        << "%" << ", relocating it" << endl;
+                relocateCells(neighbourId, cellPdr->first);
+                return;
+            }
+        }
 
         auto maxPdr = std::max_element(pdrStat.begin(), pdrStat.end(),
                 [] (decltype(pdrStat)::value_type a, decltype(pdrStat)::value_type b)
@@ -1248,6 +1289,9 @@ void TschMSF::refreshDisplay() const {
     if (showLinkResets)
         out << ", R:" << numLinkResets;
 
+    if (par("showNumPktSent").boolValue())
+        out << ", sent: " << udpPacketsSent << endl;
+
     hostNode->getDisplayString().setTagArg("t", 0, out.str().c_str());
 
 }
@@ -1325,10 +1369,17 @@ void TschMSF::handleSuccessAdd(uint64_t sender, int numCells, vector<cellLocatio
 
     // if we successfully scheduled dedicated TX we don't need the shared auto cell anymore
     if (cellList.size())
+    {
         removeAutoTxCell(sender);
 
+        // A cell was added, clear the queue to avoid standing queue and excessive overprovisoning
+        if (par("flushQueueOnAdd").boolValue())
+            mac->flushQueue(MacAddress(sender), 0); // 0 is the default virtual link ID
+    }
+
     // adapt the estimation window based on the up-to-date number of scheduled cells
-    pMaxNumCells = ceil(par("maxNumCellsScalingFactor").doubleValue() * ((int) pTschLinkInfo->getDedicatedCells(sender).size())) + par("maxNumCells").intValue();
+    pMaxNumCells = ceil(par("maxNumCellsScalingFactor").doubleValue() * ((int) pTschLinkInfo->getDedicatedCells(sender).size()))
+            + par("maxNumCells").intValue();
 
     // RFC limit - 254 cells as maximum size estimation window
     if (pMaxNumCells > par("maxNumTx").intValue())
@@ -1470,6 +1521,7 @@ void TschMSF::handleResponse(uint64_t sender, tsch6pReturn_t code, int numCells,
 void TschMSF::handleTransactionTimeout(uint64_t nodeId)
 {
     hostNode->bubble("Transaction timed out");
+    EV << "Transaction timed out with " << MacAddress(nodeId) << endl;
 
     reservedTimeOffsets[nodeId].clear();
 
@@ -1555,7 +1607,14 @@ bool TschMSF::addCells(uint64_t nodeId, int numCells, uint8_t cellOptions) {
     }
 
     std::vector<cellLocation_t> cellList = {};
-    createCellList(nodeId, cellList, numCells + pCellListRedundancy);
+
+    if (initCellOverride.timeOffset)
+    {
+        cellList.push_back(initCellOverride);
+        reservedTimeOffsets[nodeId].push_back(initCellOverride.timeOffset);
+    }
+    else
+        createCellList(nodeId, cellList, numCells + pCellListRedundancy);
 
     if (!cellList.size())
         EV_DETAIL << "No cells could be added to the cell list, aborting ADD" << endl;
@@ -1712,6 +1771,9 @@ void TschMSF::checkScheduleConsistency(uint64_t nodeId) {
 void TschMSF::receiveSignal(cComponent *src, simsignal_t id, cObject *value, cObject *details)
 {
     Enter_Method_Silent();
+
+    if (id == packetSentSignal)
+        udpPacketsSent++;
 
     std::string signalName = getSignalName(id);
 

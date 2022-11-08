@@ -423,8 +423,10 @@ class TschMSF: public TschSF, public cListener {
     bool showLinkResets;
     bool pCellBundlingEnabled;
     int pCellBundleSize;
+    int udpPacketsSent;
 
     cellLocation_t autoRxCell;
+    cellLocation_t initCellOverride; // override random init cell scheduled with preferred RPL parent
 
     int rplRank;
 
