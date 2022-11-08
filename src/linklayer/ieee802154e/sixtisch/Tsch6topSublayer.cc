@@ -123,7 +123,7 @@ void Tsch6topSublayer::initialize(int stage) {
 
     } else if (stage == 4) {
         auto module = getParentModule()->getParentModule();
-        Ieee802154eMac* mac = dynamic_cast<Ieee802154eMac *>(module->getSubmodule("mac", 0));
+        mac = dynamic_cast<Ieee802154eMac *>(module->getSubmodule("mac", 0));
 
         mac->subscribe(inet::packetDroppedSignal, this);
         mac->subscribe(inet::packetSentSignal, this);
@@ -354,8 +354,12 @@ void Tsch6topSublayer::sendClearRequest(uint64_t destId, int timeout) {
     if (!pTschLinkInfo->linkInfoExists(destId))
         throw cRuntimeError("Attempt to send a CLEAR when no link info available");
 
+    // Abort any ongoing transaction timers and erase 6P queue
+    pTschLinkInfo->abortTransaction(destId);
+    mac->flush6pQueue(MacAddress(destId));
+
     uint8_t seqNum = pTschLinkInfo->getLastKnownSeqNum(destId);
-    simtime_t absoluteTimeout = getAbsoluteTimeout(timeout);
+    simtime_t absoluteTimeout = getAbsoluteTimeout(timeout); // TODO: unused?
 
     /* CLEAR requests end a transaction, so we can override the current status
        no matter what. However seqnum & cells are only reset after a RC_SUCCESS

@@ -180,6 +180,8 @@ public:
 
     /** TSCH schedule */
     TschSlotframe *schedule;
+    /** MAC */
+    Ieee802154eMac* mac;
 
     // RPL router
     cModule *host;
