@@ -173,6 +173,7 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
     simsignal_t pktRecFromUpperSignal; // emitted when packet is received from upper layers
     simsignal_t pktRecFromLowerSignal; // emitted when packet is received from lower layer, includes MAC address of the sender
     simsignal_t highPrioQueueOverflowSignal;
+    simsignal_t disableSfAdaptationSignal; // required for lossy link scenarios to disable schedule adaptation to traffic by the SF
 
     // Utility
     [[deprecated]]

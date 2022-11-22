@@ -181,6 +181,7 @@ void Ieee802154eMac::initialize(int stage) {
         pktRecFromUpperSignal = registerSignal("pktReceviedFromUpperLayer");
         pktRecFromLowerSignal = registerSignal("pktReceviedFromLowerLayer");
         currentFreqSignal = registerSignal("currentFrequency");
+        disableSfAdaptationSignal = registerSignal("disableTrafficAdaptation");
     } else if (stage == INITSTAGE_LAST) {
         WATCH_MAP(packetsIncorrectlyReceived);
 
@@ -1210,6 +1211,10 @@ void Ieee802154eMac::handleSelfMessage(cMessage *msg) {
     // TEST message kind for simulating lossy links
     if (msg->getKind() == MAC_ENABLE_DROPS) {
         pLinkCollision = par("pLinkCollision").doubleValue();
+
+        // notify SF to stop adapting the schedule to the varying traffic, emitted value doesn't matter
+        emit(disableSfAdaptationSignal, (long) 0);
+
         delete msg;
         return;
     }

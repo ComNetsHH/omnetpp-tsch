@@ -113,6 +113,9 @@ void TschMSF::initialize(int stage) {
         mac->subscribe(mac->pktRecFromUpperSignal, this);
         mac->subscribe(mac->pktRecFromLowerSignal, this);
 
+        // used to avoid triggering 6P transactions when the lossy link scenario is enabled
+        mac->subscribe("disableTrafficAdaptation", this);
+
         if (par("lowLatencyMode").boolValue())
             mac->subscribe(linkBrokenSignal, this);
 
@@ -1845,9 +1848,19 @@ void TschMSF::receiveSignal(cComponent *src, simsignal_t id, long value, cObject
 
     std::string signalName = getSignalName(id);
 
+    EV << "MSF received signal: " << signalName << endl;
+
     if (std::strcmp(signalName.c_str(), "parentChanged") == 0) {
         auto rplControlInfo = (RplGenericControlInfo*) details;
         handleParentChangedSignal(rplControlInfo->getNodeId());
+        return;
+    }
+
+    if (std::strcmp(signalName.c_str(), "disableTrafficAdaptation") == 0) {
+        pLimNumCellsUsedHigh = 1.1;
+        pLimNumCellsUsedLow = -1;
+        EV << "Received signal from the MAC layer to disable traffic adaptation, new cell util limits: "
+                << pLimNumCellsUsedLow << " to " << pLimNumCellsUsedHigh << endl;
         return;
     }
 
@@ -1980,7 +1993,10 @@ void TschMSF::receiveSignal(cComponent *src, simsignal_t id, long value, cObject
     auto neighbor = pTschLinkInfo->getNodeOfCell(cell);
     auto options = pTschLinkInfo->getCellOptions(neighbor, cell);
 
+    EV << "Found neighbor " << MacAddress(neighbor) << " of cell " << cell << endl;
+
     if (neighbor == 0) {
+        return; // TODO: find a different solution for overlapping dedicated and shared cell
         std::ostringstream out;
 
         out << "could not find neighbor for cell " << linkStr << endl;

@@ -355,7 +355,7 @@ uint64_t TschLinkInfo::getNodeOfCell(cellLocation_t candidate) {
 
         auto it = std::find_if(info.second.scheduledCells.begin(), info.second.scheduledCells.end(),
                [candidate](const std::tuple<cellLocation_t, uint8_t> & t) -> bool {
-                 return std::get<0>(t) == candidate;
+                 return std::get<0>(t) == candidate && !getCellOptions_isSHARED(std::get<1>(t));
             }
         );
 
@@ -365,6 +365,7 @@ uint64_t TschLinkInfo::getNodeOfCell(cellLocation_t candidate) {
 
     return 0;
 }
+
 
 void TschLinkInfo::clearCells(uint64_t nodeId) {
     Enter_Method_Silent();
