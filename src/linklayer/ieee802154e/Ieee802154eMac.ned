@@ -96,7 +96,7 @@ simple Ieee802154eMac extends MacProtocolBase like IMacProtocol
         // TEST parameters for simulating lossy links
         double pLinkCollision = default(-1);
         // when MAC starts to apply artifical packet drops
-        double lossyLinkTimeout @unit(s) = default(60s);
+        double lossyLinkTimeout @unit(s) = default(-1s);
         
         // Hybrid Priority Queuing Weight Round Robin scheduler parameters
         int wrrWeigthNp = default(4); // weight of normal priority (NP) traffic 

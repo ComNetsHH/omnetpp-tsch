@@ -186,7 +186,7 @@ void Ieee802154eMac::initialize(int stage) {
         WATCH_MAP(packetsIncorrectlyReceived);
 
         auto timeoutVal = par("lossyLinkTimeout").doubleValue();
-        if (timeoutVal)
+        if (timeoutVal > 0)
             scheduleAt(simTime() + SimTime(timeoutVal, SIMTIME_S), new cMessage("Start losing packets", MAC_ENABLE_DROPS));
     }
 }
