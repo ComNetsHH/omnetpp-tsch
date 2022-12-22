@@ -24,7 +24,6 @@
 
 package tsch.simulations.wireless.waic;
 
-import inet.examples.wireless.throughput.WirelessAPWithSink;
 import inet.networklayer.configurator.ipv4.Ipv4NetworkConfigurator;
 import inet.networklayer.configurator.ipv6.Ipv6FlatNetworkConfigurator;
 import inet.node.inet.SensorNode;
