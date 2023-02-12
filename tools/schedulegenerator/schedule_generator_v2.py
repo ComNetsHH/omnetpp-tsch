@@ -19,18 +19,19 @@ def mac_conversion_demo(sample_addr="0A:AA:00:00:00:01"):
 
     print(f'int: {mac_int}, hex: {mac_hex}, str: {mac_str}')
 
-def generate_schedule(node_id, gw_addr = "0A:AA:00:00:00:01", num_channels = 16, slotframe_size = 101, num_min_cells = 5, add_auto = True):
+def generate_schedule(node_id, gw_addr = "0A:AA:00:00:00:01", num_channels = 16, slotframe_size = 101, num_min_cells = 5, add_auto = True, ch_override = None):
     schedule = ET.Element("TSCHSchedule")
     sf = ET.SubElement(schedule, "Slotframe", macSlotframeSize="101")
     node_addr = mac_to_hex(mac_to_int(gw_addr) + node_id + 1)
+    chof = ch_override if ch_override else randint(0, num_channels-1)
 
     # a dedicated link to the gateway
     if node_id >= 0: # skip the gw itself
-        add_link(sf, gw_addr, node_id + 1, randint(0, num_channels-1), False)
+        add_link(sf, gw_addr, node_id + 1, chof, False)
 
     # an auto RX one (37 is a random offset to avoid overlapping dedicated TX with auto RX cell)
     if add_auto:
-        add_link(sf, mac_to_str(node_addr), (node_id + 37) % slotframe_size, randint(0, num_channels-1), True, False, True, True)
+        add_link(sf, mac_to_str(node_addr), (node_id + 37) % slotframe_size, chof, True, False, True, True)
 
     # and some minimal cells
     min_cell_slofs = [x for x in range(0, slotframe_size, int(slotframe_size / num_min_cells))]
@@ -55,19 +56,24 @@ def get_dedicated_tx_links(schedule):
 start_addr = "0A:AA:00:00:00:01" # gateway MAC address
 node_schedules = []
 num_min_cells = 1
-tsch_path = "/Users/yevhenii/omnetpp-5.6.2-new/samples/tsch/" # TODO: use environmental variables
-folder_to_save = tsch_path + "simulations/wireless/waic/schedules/itnac"
+# tsch_path = "/Users/yevhenii/omnetpp-5.6.2-new/samples/tsch/" # TODO: use environmental variables
+
+# folder_to_save = os.path.expanduser("$tsch/simulations/wireless/waic/schedules/itnac/blacklisted-2")
+folder_to_save = "./blacklisted-2"
 
 if os.path.exists(folder_to_save):
     print("the path to save schedules is there!")
 else:
     os.makedirs(folder_to_save)
-    print("The new directory is created!")
+    print("The new directory is created at " + folder_to_save)
+
+# fixed channel for blacklisted schedule
+ch_override = 15
 
 ################ nodes ################
 num_nodes = 100
 for i in range(num_nodes):
-    s = generate_schedule(i, num_min_cells=num_min_cells)
+    s = generate_schedule(i, num_min_cells=num_min_cells, ch_override=ch_override)
     sf = s.find("Slotframe")
     sf[:] = sorted(sf, key=lambda child: int(child.get('slotOffset')))
     node_schedules.append(s)
@@ -77,12 +83,10 @@ for i in range(num_nodes):
 
 
 ################ gateway ################
-gw_schedule = generate_schedule(-1, num_min_cells=num_min_cells)
+gw_schedule = generate_schedule(-1, num_min_cells=num_min_cells, ch_override=ch_override)
 gw_sf = gw_schedule.find("Slotframe")
 
-# add an auto TX and a dedicated RX cell for each child
 for i, s in enumerate(node_schedules):
-
     # read the auto-rx cell directly from child's schedule
     arx = get_auto_rx_link(s) 
 
@@ -90,7 +94,7 @@ for i, s in enumerate(node_schedules):
     node_addr_str = mac_to_str(mac_to_hex( mac_to_int(start_addr)+i+1) ) 
 
     # auto-TX
-    # add_link(gw_sf, node_addr_str, arx.get("slotOffset"), arx.get("channelOffset"), True, True, False, True )
+    add_link(gw_sf, node_addr_str, arx.get("slotOffset"), arx.get("channelOffset"), True, True, False, True )
 
     # dedicated RX
     dedicated_rx = get_dedicated_tx_links(s)
