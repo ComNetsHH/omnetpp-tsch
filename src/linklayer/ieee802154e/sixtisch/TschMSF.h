@@ -452,6 +452,7 @@ class TschMSF: public TschSF, public cListener {
         SCHEDULE_DOWNLINK,
         CELL_BUNDLE_REQ,
         CHANGE_SLOF,
+        DISABLE_ADAPTATION,
         UNDEFINED
     };
 
@@ -547,6 +548,7 @@ class TschMSF: public TschSF, public cListener {
     simsignal_t queueUtilization;
     simsignal_t failed6pAdd; // tracks number of failed 6P ADD requests
     simsignal_t neighborNotFoundError; // tracks unknown error where node's schedule is not cleared properly
+    simsignal_t uplinkSlotOffsetSignal; // emits the slot offset after a dedicated cell is scheduled with preferred parent
 
     enum transactionFailReason_t {
         TIMEOUT,

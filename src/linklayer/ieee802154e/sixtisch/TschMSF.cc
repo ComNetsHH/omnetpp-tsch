@@ -94,6 +94,7 @@ void TschMSF::initialize(int stage) {
         failed6pAdd = registerSignal("failed6pAdd");
         uplinkScheduledSignal = registerSignal("uplinkScheduled");
         uncoverableGapSignal = registerSignal("uncoverableGap");
+        uplinkSlotOffsetSignal = registerSignal("uplinkSlotOffset");
 
         auto initCellLocation = omnetpp::cStringTokenizer(par("initCellOverride").stringValue()).asIntVector();
         if (initCellLocation.size())
@@ -320,6 +321,11 @@ void TschMSF::start() {
     msg->setKind(DO_START);
 
     scheduleAt(simTime() + SimTime(par("startTime").doubleValue()), msg);
+
+    auto stopAdaptationAt = par("stopAdaptationToTrafficAt").doubleValue();
+    if (stopAdaptationAt > 0)
+        scheduleAt(simTime() + SimTime(par("stopAdaptationToTrafficAt").doubleValue()), new cMessage("", DISABLE_ADAPTATION));
+
 //    scheduleAt(simTime() + 500, new cMessage("Test cell matching", CHANGE_SLOF));
 }
 
@@ -644,6 +650,12 @@ void TschMSF::handleCellBundleReq() {
 
 void TschMSF::handleSelfMessage(cMessage* msg) {
     switch (msg->getKind()) {
+        case DISABLE_ADAPTATION:
+        {
+            pLimNumCellsUsedHigh = 1.1;
+            EV << "Traffic adaptation disabled" << endl;
+            break;
+        }
         case REACHED_MAXNUMCELLS: {
             handleMaxCellsReached(msg);
             return;
@@ -701,7 +713,7 @@ void TschMSF::handleSelfMessage(cMessage* msg) {
  //            handleRplRankUpdate(*rankPtr, numHosts);
 
             auto network = hostNode->getParentModule();
-            // lambda is assumed to be the same for all hosts
+            // traffic generation rate is assumed to be the same for all hosts
             handleRplRankUpdate(rplRank, network->par("numHosts"), network->par("lambda").doubleValue());
 
             break;
@@ -743,7 +755,6 @@ double TschMSF::getExpectedWaitingTime(int m, double pc, int rtx) {
 
 int TschMSF::getRequiredServiceRate(double l, double pc, int rtx, int rank, int numHosts)
 {
-
     return ceil(l * (numHosts + 2 - rank) / (1 - pc) + 0.00001);
 
     EV_DETAIL << "Calculating required service rate:\n" << "num hosts: " << numHosts << "\nrank: " << rank << "\nRTX: " << rtx
@@ -1378,6 +1389,14 @@ void TschMSF::handleSuccessAdd(uint64_t sender, int numCells, vector<cellLocatio
         // A cell was added, clear the queue to avoid standing queue and excessive overprovisoning
         if (par("flushQueueOnAdd").boolValue())
             mac->flushQueue(MacAddress(sender), 0); // 0 is the default virtual link ID
+
+        for (auto c : cellList)
+        {
+            emit(uplinkSlotOffsetSignal, (int) c.timeOffset);
+            EV << "Emitted signal for slot offset - " << (int) c.timeOffset << endl;
+        }
+
+
     }
 
     // adapt the estimation window based on the up-to-date number of scheduled cells

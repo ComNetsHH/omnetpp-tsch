@@ -10,11 +10,13 @@ simple TschMSF like TschSF
         @signal[queueUtilization](type=double);
         @signal[failed6pAdd];
         @signal[uncoverableGap];
+        @signal[uplinkSlotOffset](type=int);
         
         @statistic[rplParentChanged](title="Number of rpl parents changed"; source="rplParentChanged"; record=count; interpolationmode=none);
         @statistic[queueUtilization](title="Queue utilization"; source=queueUtilization; record=mean?, vector?; interpolationmode=none);
         @statistic[failed6pAdd](title="Failed 6P ADD requests"; source=failed6pAdd; record=count, vector?; interpolationmode=none);
         @statistic[uncoverableGaps](title="Number of unrecovered gaps"; source=uncoverableGap; record=count, vector?; interpolationmode=none);
+        @statistic[uplinkSlotOffsets](title="Slot offsets of dedicated cells"; source=uplinkSlotOffset; record=vector; interpolationmode=none);
         
         // the time after which an active, unfinished transaction expires
         // (needs to be defined by every SF as per the 6P standard)
@@ -96,6 +98,7 @@ simple TschMSF like TschSF
 		bool cellMatchingEnabled = default(false); // MSF attempts to schedule cells in a checkerboard manner - TX cell directly follows a RX one
 		
 		bool allowAutoCellDeletion = default(false);
+		double stopAdaptationToTrafficAt @unit("s") = default(-1s); // required for scenarios where number of TX cells has to be frozen from a certain point 
 		// apply hash function to the node MAC before taking the modulo by number of channels, 
 		// diversifies auto RX channel offsets of nodes from the same module array 
 		bool useHashChOffsets = default(false);
