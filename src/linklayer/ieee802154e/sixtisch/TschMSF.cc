@@ -367,7 +367,8 @@ void TschMSF::handleMaxCellsReached(cMessage* msg) {
     EV_DETAIL << printCellUsage(neighborMac->str(), usage) << endl;
 
     // Avoid attempts to schedule more cells if the lossy-link imitation has started
-    if (usage >= pLimNumCellsUsedHigh && !isLossyLink())
+//    if (usage >= pLimNumCellsUsedHigh && !isLossyLink()) -- NOT NEEDED anymore, as only UDP packets can be dropped
+    if (usage >= pLimNumCellsUsedHigh)
     {
 
           // To avoid schedule congestion in ISM scenarios with seatbelts

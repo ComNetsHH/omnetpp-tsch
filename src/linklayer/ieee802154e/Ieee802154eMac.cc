@@ -1213,7 +1213,7 @@ void Ieee802154eMac::handleSelfMessage(cMessage *msg) {
         pLinkCollision = par("pLinkCollision").doubleValue();
 
         // notify SF to stop adapting the schedule to the varying traffic, emitted value doesn't matter
-        emit(disableSfAdaptationSignal, (long) 0);
+//        emit(disableSfAdaptationSignal, (long) 0);
 
         delete msg;
         return;
