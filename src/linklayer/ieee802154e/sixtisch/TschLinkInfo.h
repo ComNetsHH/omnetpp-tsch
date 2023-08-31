@@ -322,6 +322,8 @@ public:
      */
     uint8_t getLastLinkOption(uint64_t nodeId);
 
+    std::vector<uint64_t> getNeighbors();
+
 private:
 
     /** Gate to send timeout notifications to 6P */

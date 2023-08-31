@@ -418,10 +418,22 @@ void TschLinkInfo::deleteCells(uint64_t nodeId, const std::vector<cellLocation_t
         if (elem != scheduledCells->end())
             scheduledCells->erase(elem);
         else
-            EV_WARN << "Instructed to delete cell " << *it << " but not found" << endl;
+            EV_WARN << "Instructed to delete cell at " << *it << ", but it doesn't exist" << endl;
     }
 
     EV_DETAIL << "Scheduled cells after erasure:\n" << *scheduledCells << endl;
+}
+
+std::vector<uint64_t> TschLinkInfo::getNeighbors()
+{
+    std::vector<uint64_t> neighborIds = {};
+
+    std::cout << "TschLinkInfo::getNeighbors()" << endl;
+
+    for (auto & e : linkInfo)
+        neighborIds.push_back(e.first);
+
+    return neighborIds;
 }
 
 bool TschLinkInfo::timeOffsetScheduled(offset_t timeOffset) {
