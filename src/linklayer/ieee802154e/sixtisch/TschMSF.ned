@@ -11,6 +11,7 @@ simple TschMSF like TschSF
         @signal[failed6pAdd];
         @signal[uncoverableGap];
         @signal[uplinkSlotOffset](type=int);
+        @signal[deleteCellsSync](type=string);
         
         @statistic[rplParentChanged](title="Number of rpl parents changed"; source="rplParentChanged"; record=count; interpolationmode=none);
         @statistic[queueUtilization](title="Queue utilization"; source=queueUtilization; record=mean?, vector?; interpolationmode=none);
@@ -102,6 +103,13 @@ simple TschMSF like TschSF
 		// apply hash function to the node MAC before taking the modulo by number of channels, 
 		// diversifies auto RX channel offsets of nodes from the same module array 
 		bool useHashChOffsets = default(false);
-		string initCellOverride = default(""); // location of the first dedicated cell to be scheduled with pref. parent
-		bool showNumPktSent = default(false); // show number of UDP packets sent above the node icon 
+		string initCellOverride = default(""); 			// location of the first dedicated cell to be scheduled with pref. parent
+		bool showNumPktSent = default(false); 			// show number of UDP packets sent above the node icon
+		
+		// restores the "original" service rate, given by initialNumCells, 
+		// by deleting cells added during the burst processing
+		bool deleteCellsAfterBurst = default(false);
+		
+		bool spaceBetween = default(false); // spread requested RX cells along the slotframe
+		int initNumRx = default(0); // number of RX cells to maintain with preferred parent
 }

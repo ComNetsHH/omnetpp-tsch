@@ -283,6 +283,7 @@ class TschMSF: public TschSF, public cListener {
     int getTimeout() override;
 
     offset_t getChOf(); // draw channel offset randomly uniformly sampled from the available range;
+    void getHostModule();
 
     virtual void incrementNeighborCellElapsed(uint64_t neighborId) override;
     virtual void decrementNeighborCellElapsed(uint64_t neighborId) override;
@@ -297,6 +298,7 @@ class TschMSF: public TschSF, public cListener {
 
     void receiveSignal(cComponent *src, simsignal_t id, cObject *value, cObject *details) override;
     void receiveSignal(cComponent *src, simsignal_t id, long value, cObject *details) override;
+    void receiveSignal(cComponent *src, simsignal_t id, const char *s, cObject *details) override;
 
     /**
      * Process RPL preferred parent updates
@@ -315,6 +317,13 @@ class TschMSF: public TschSF, public cListener {
      * @param destId MAC address of the destination for which there's a packet enqueued
      */
     virtual void handlePacketEnqueued(uint64_t destId);
+
+    // get list of cells with preferred parent to delete synchronously
+    std::vector<cellLocation_t> getCellsToDeleteSync(uint64_t nodeId, int numCellsReq);
+
+    // delete cells from the schedule and tsch link info directly without transactions
+    void deleteCellsSync(uint64_t nodeId, std::vector<cellLocation_t> cellList);
+    void handleBurstFinishedProcessingSignal();
 
    protected:
     virtual void refreshDisplay() const override;
@@ -438,6 +447,9 @@ class TschMSF: public TschSF, public cListener {
     // cell matching statistics
     simsignal_t uncoverableGapSignal;
 
+    // bursty traffic modeling
+    simsignal_t deleteCellsSyncSignal;
+
     enum msfSelfMsg_t {
         CHECK_STATISTICS,
         REACHED_MAXNUMCELLS,
@@ -467,10 +479,12 @@ class TschMSF: public TschSF, public cListener {
     virtual void deleteCells(uint64_t nodeId, int numCells);
     void scheduleAutoCell(uint64_t neighbor);
     void scheduleAutoRxCell(InterfaceToken euiAddr);
+
     void removeAutoTxCell(uint64_t neighbor);
 
     virtual void handleSelfMessage(cMessage* msg);
     void handleCellBundleReq();
+    void handleDeleteCellsSync(std::vector<int> slofsToDelete, uint64_t nbrId = 0, uint8_t linkOption = MAC_LINKOPTIONS_RX);
 
     // TODO: revise whether it makes sense to have both of these
     void handleScheduleUplink();
@@ -578,6 +592,7 @@ class TschMSF: public TschSF, public cListener {
      */
     std::vector<cellLocation_t> pickRandomly(std::vector<cellLocation_t> inputVec, int numRequested);
     std::vector<cellLocation_t> pickConsecutively(std::vector<cellLocation_t> inputVec, int numRequested, bool randomizeStart);
+    std::vector<cellLocation_t> pickSpaceBetween(std::vector<cellLocation_t> inputVec, int numRequested);
 
     /**
      * Check for free slot offsets (neither scheduled, nor reserved) in the range @param start -> @param end
@@ -587,6 +602,7 @@ class TschMSF: public TschSF, public cListener {
     std::vector<offset_t> getAvailableSlotsInRange(int start, int end);
     std::vector<offset_t> getAvailableSlotsInRange(int slOffsetEnd);
 
+    int pInitNumRx;
 
     /**
      * Spaghetti function to check that information about a neighbor stored in TschSlotframe
