@@ -61,7 +61,9 @@ private:
     virtual void deleteCells(uint64_t nodeId, int numCells) override;
     virtual int createCellList(uint64_t destId, vector<cellLocation_t> &cellList, int numCells) override;
     virtual void handleSuccessRelocate(uint64_t sender, vector<cellLocation_t> cellList) override;
-    virtual void handleSuccessAdd(uint64_t sender, int numCells, vector<cellLocation_t> cellList) override;
+    void handleSuccessAdd(uint64_t sender, int numCells, vector<cellLocation_t> cellList)
+            { handleSuccessAdd(sender, numCells, cellList, {}); };
+    virtual void handleSuccessAdd(uint64_t sender, int numCells, vector<cellLocation_t> cellList, vector<cellLocation_t> reservedSlots = {});
     virtual void relocateCells(uint64_t neighbor, vector<cellLocation_t> relocCells) override;
     virtual void checkDaisyChained();
 
@@ -70,7 +72,7 @@ private:
     void handleDaisyChaining(SlotframeChunk advertisedChunk);
     void setBranchChannelOffset(int chOf);
 
-    virtual void resetStateWith(uint64_t nbrId) override;
+    virtual void resetStateWith(uint64_t nbrId);
     virtual void handleSelfMessage(cMessage* msg) override;
 
 protected:
