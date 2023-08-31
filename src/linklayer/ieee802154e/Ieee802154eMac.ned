@@ -113,6 +113,10 @@ simple Ieee802154eMac extends MacProtocolBase like IMacProtocol
         @signal[interarrivalTime](type=double);
         @signal[pktRetransmitted](type=double);
         @signal[pktRetransmittedDownlink](type=double);
+        @signal[numPktsArrivedDuringLastSlotframe](type=int);
+        @signal[queueSize](type=int);
+        @signal[burstFinishedProcessing](type=int);
+        @signal[burstArrived](type=int);
         
         @statistic[linkBroken](title="link break"; source=linkBroken; record=count; interpolationmode=none);
         @statistic[packetDropNotAddressToUs](title="packet drop: not addressed to us"; source=packetDropReasonIsNotAddressedToUs(packetDropped); record=count,sum(packetBytes),vector(packetBytes); interpolationmode=none);
@@ -124,6 +128,8 @@ simple Ieee802154eMac extends MacProtocolBase like IMacProtocol
         @statistic[pktRetransmitted](title="application packet retransmitted"; source=pktRetransmitted; record=count,vector; interpolationmode=none);
         @statistic[interarrivalTime](title="time elapsed since last application packet arrival"; source=interarrivalTime; record=count,vector; interpolationmode=none);
         @statistic[pktRetransmittedDownlink](title="(smoke alarm) packets retransmitted in the downlink"; source=pktRetransmittedDownlink; record=count,vector; interpolationmode=none);
+        @statistic[numPktsArrivedDuringLastSlotframe](title="Packets received per slotframe"; source=numPktsArrivedDuringLastSlotframe; record=vector; interpolationmode=none);
+        @statistic[queueSize](title="Number of pkts in the queue"; source=queueSize; record=vector, mean; interpolationmode=none);
         
         @signal[nbTxFrames-*](type=long);
         @signal[nbMissedAcks-*](type=long);

@@ -174,6 +174,10 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
     simsignal_t pktRecFromLowerSignal; // emitted when packet is received from lower layer, includes MAC address of the sender
     simsignal_t highPrioQueueOverflowSignal;
     simsignal_t disableSfAdaptationSignal; // required for lossy link scenarios to disable schedule adaptation to traffic by the SF
+    simsignal_t queueSizeSignal;
+    simsignal_t burstArrivedSignal; // to notify SF about burst arrival and reset cellsUsed and cellsElapsed counters
+
+    int queueSizeInLastSlotframe;
 
     // Utility
     [[deprecated]]
@@ -217,9 +221,11 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
     long nbDuplicates;
     long nbBackoffs;
     double backoffValues;
+
     /*@}*/
 
     bool isSink; // root of RPL DODAG
+    bool burstInProcessing;
 
     int udpSentCtn;
     int udpDroppedCtn;
@@ -360,6 +366,8 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
     omnetpp::simtime_t macTsTimeslotLength;
 
     bool useCCA;
+    int numPktsArrived; // stat to manually measure the arrival rate per slotframe
+
 
     /** @brief The amount of time the MAC waits for the ACK of a packet.*/
     //omnetpp::simtime_t macAckWaitDuration;
@@ -423,8 +431,11 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
     cProperty *statisticTemplate;
 
     std::vector<simsignal_t> channelSignals;
+    simsignal_t burstFinishedProcessingSignal;
+
     // emitted when a packet is added to the queue AND also
     // when a link collision occurs and the retransmission threshold is not exceeded
+    simsignal_t numPktsArrivedDuringLastSlotframeSignal;
     simsignal_t pktRetransmittedSignal;
     simsignal_t pktRetransmittedDownlinkSignal; // tracks packets whose transmission is failed on the downlink (via shared cells)
     simsignal_t pktInterarrivalTimeSignal; // much like the pktEnqueuedSignal before, but records the time elapsed between subsequent arrivals

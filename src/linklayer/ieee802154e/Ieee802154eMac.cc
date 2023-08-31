@@ -96,6 +96,10 @@ void Ieee802154eMac::initialize(int stage) {
         currentAsn = 0;
         currentLink = nullptr;
         currentChannel = 0;
+        numPktsArrived = 0;
+        queueSizeInLastSlotframe = -1;
+        burstInProcessing = false;
+        WATCH(burstInProcessing);
 
         w_np = par("wrrWeigthNp").intValue();
         w_be = par("wrrWeigthBe").intValue();
@@ -182,8 +186,14 @@ void Ieee802154eMac::initialize(int stage) {
         pktRecFromLowerSignal = registerSignal("pktReceviedFromLowerLayer");
         currentFreqSignal = registerSignal("currentFrequency");
         disableSfAdaptationSignal = registerSignal("disableTrafficAdaptation");
+        numPktsArrivedDuringLastSlotframeSignal = registerSignal("numPktsArrivedDuringLastSlotframe");
+        queueSizeSignal = registerSignal("queueSize");
+        burstFinishedProcessingSignal = registerSignal("burstFinishedProcessing");
+        burstArrivedSignal = registerSignal("burstArrived");
+
     } else if (stage == INITSTAGE_LAST) {
         WATCH_MAP(packetsIncorrectlyReceived);
+        WATCH(burstInProcessing);
 
         auto timeoutVal = par("lossyLinkTimeout").doubleValue();
         if (timeoutVal > 0)
@@ -386,6 +396,8 @@ void Ieee802154eMac::handleUpperPacket(Packet *packet) {
 
         if (!isAppPacket(packet))
             return;
+        else
+            numPktsArrived++;
 
         if (lastAppPktArrivalTimestamp > 0)
             emit(pktInterarrivalTimeSignal, simTime().dbl() - lastAppPktArrivalTimestamp);
@@ -640,6 +652,29 @@ void Ieee802154eMac::updateStatusIdle(t_mac_event event, cMessage *msg) {
 
         currentChannel = hopping->channel(currentAsn, currentLink->getChannelOffset());
 
+
+        if (currentLink->getSlotOffset() == 0)
+        {
+//            // Track the difference in queue size to detect presence of burst in the queue
+//            if (!burstInProcessing)
+//            {
+//                auto currentQueueSize = neighbor->getTotalQueueSize();
+//                if (currentQueueSize - queueSizeInLastSlotframe > 10)
+//                {
+//                    EV << "Burst detected" << endl;
+//                    emit(burstArrivedSignal, 1);
+//                    burstInProcessing = true;
+//                }
+//
+//                queueSizeInLastSlotframe = currentQueueSize;
+//            }
+
+
+            emit(queueSizeSignal, neighbor->getTotalQueueSize());
+            emit(numPktsArrivedDuringLastSlotframeSignal, numPktsArrived);
+            numPktsArrived = 0;
+        }
+
         /**
          * Disable channel hopping for minimal cells
          * if corresponding flag is set, or, only for WAIC band, the channel offset is set to the highest value (39)
@@ -851,6 +886,23 @@ void Ieee802154eMac::updateStatusWaitAck(t_mac_event event, cMessage *msg) {
             cancelEvent(rxAckTimer);
         cMessage *mac = neighbor->getCurrentNeighborQueueFirstPacket();
         neighbor->removeFirstPacketFromQueue();
+
+        auto numBurstyPackets = neighbor->getNumBurstyPktsInQueue();
+
+        EV << "Bursty packets in the queue: " << numBurstyPackets << "" << endl;
+
+        if (burstInProcessing)
+        {
+            if (numBurstyPackets == 0)
+            {
+                EV << "Burst processing finished" << endl;
+                emit(burstFinishedProcessingSignal, 1);
+            }
+            else
+                EV << "Burst in processing, " << numBurstyPackets << " packets remain" << endl;
+        }
+        burstInProcessing = numBurstyPackets != 0;
+
         neighbor->terminateCurrentTschCSMA();
         neighbor->reset();
         emit(packetSentSignal, mac, nullptr);

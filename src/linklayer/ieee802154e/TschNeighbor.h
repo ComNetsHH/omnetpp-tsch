@@ -155,6 +155,8 @@ class TschNeighbor : public cSimpleModule, protected cListener
          * @return Summed-up size of the normal and priority queue with the input MacAddress or 0 if the queue with that MacAddress is not found
          */
         int getTotalQueueSizeAt(inet::MacAddress macAddress);
+        int getTotalQueueSize();
+        int getNumBurstyPktsInQueue();
 
         /**
          * A public member function to return the size of the currently used neighbor queue

@@ -122,6 +122,20 @@ int TschNeighbor::getTotalQueueSizeAt(MacAddress macAddress) {
     }
 }
 
+int TschNeighbor::getTotalQueueSize() {
+    int queueSize = 0;
+
+    // iterate over all neighbors
+    for (auto macToQueueEntry : this->macToQueueMap)
+    {
+        // iterate over all virtual link IDs, i.e. priority levels
+        for (auto itr = macToQueueEntry.second->begin(); itr != macToQueueEntry.second->end(); ++itr)
+            queueSize += (int)itr->second->size();
+    }
+
+    return queueSize;
+}
+
 int TschNeighbor::getVirtualQueueSizeAt(MacAddress macAddress, int virtualLinkId) {
     auto entry = this->macToQueueMap.find(macAddress);
     if (entry == this->macToQueueMap.end())
@@ -185,6 +199,26 @@ void TschNeighbor::flushQueue(MacAddress neighbor, int vlinkId) {
     virtualQueue->second->clear();
 
     EV_DETAIL << "Flushed the queue with virtual link ID " << vlinkId << " for " << neighbor << endl;
+}
+
+int TschNeighbor::getNumBurstyPktsInQueue() {
+    auto neighborQueueInfo = this->macToQueueMap.find(this->currentNeighborKey);
+    if (neighborQueueInfo == this->macToQueueMap.end())
+        return 0;
+
+    auto virtualQueue = neighborQueueInfo->second->find(LINK_PRIO_NORMAL);
+    if (virtualQueue == neighborQueueInfo->second->end())
+        return 0;
+
+    auto numBurstyPkts = 0;
+    for (auto pkt: *(virtualQueue->second)) {
+        std::string pktName(pkt->getFullName());
+        // FIXME: hardcoded
+        if (pktName.find("Bursty") != std::string::npos)
+            numBurstyPkts++;
+    }
+
+    return numBurstyPkts;
 }
 
 void TschNeighbor::flush6pQueue(MacAddress neighbor) {
