@@ -22,7 +22,7 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 //
 
-package tsch.simulations.wireless.waic;
+package tsch.simulations;
 
 import inet.networklayer.configurator.ipv4.Ipv4NetworkConfigurator;
 import inet.networklayer.configurator.ipv6.Ipv6FlatNetworkConfigurator;

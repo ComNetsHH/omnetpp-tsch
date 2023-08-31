@@ -23,7 +23,7 @@
 //
 
 
-package tsch.simulations.wireless.waic;
+package tsch.simulations;
 
 network TopologyEvaluation extends Generic
 {
