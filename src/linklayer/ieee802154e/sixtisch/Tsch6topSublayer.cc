@@ -107,6 +107,7 @@ void Tsch6topSublayer::initialize(int stage) {
         numExpiredRsp = 0;
         numClearReqReceived = 0;
         numResetsReceived = 0;
+        numOverlappingRequests = 0;
 
         WATCH(numConcurrentTransactionErrors);
         WATCH(numUnexpectedResponses);
@@ -167,6 +168,7 @@ void Tsch6topSublayer::finish() {
     recordScalar("numUnexpectedResponses", numTimeouts);
     recordScalar("numTimeouts", numTimeouts);
     recordScalar("numConcurrentTransactionErrors", numConcurrentTransactionErrors);
+    recordScalar("numOverlappingRequests", numOverlappingRequests);
 }
 
 Packet* Tsch6topSublayer::handleExternalMessage(cMessage* msg) {
@@ -293,6 +295,7 @@ void Tsch6topSublayer::sendDeleteRequest(uint64_t destId, uint8_t cellOptions, i
 
     if (pTschLinkInfo->inTransaction(destId)) {
         EV_ERROR <<"Can't send DELETE request during open transaction" << endl;
+        numOverlappingRequests++;
         return;
     }
 
