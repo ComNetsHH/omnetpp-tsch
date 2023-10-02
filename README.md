@@ -12,6 +12,6 @@ This model is developed and tested with the following library versions
 ## Installation
 1. Add INET to project references by navigating TSCH project Properties -> Project References
 2. Replace files in the INET src using the ones from "inet" folder of this repo, strictly following the folder structure.
-3. Add RPL project source directory to compile options of TSCH project by navigating Properties -> OMNeT++ -> Makemake -> (select "src" folder) -> Build Makemake Options... -> Compile -> add absolute path containing RPL "src" folder, e.g. "/home/yevhenii/omnetpp-5.7/samples/omnetpp-rpl/src". Also make sure _Add include paths exported from referenced projects_ is enabled
+3. Add [RPL project](https://github.com/ComNetsHH/omnetpp-rpl) source directory to compile options of TSCH project by navigating Properties -> OMNeT++ -> Makemake -> (select "src" folder) -> Build Makemake Options... -> Compile -> add absolute path containing RPL "src" folder, e.g. "/home/yevhenii/omnetpp-5.7/samples/omnetpp-rpl/src". Also make sure _Add include paths exported from referenced projects_ is enabled
 4. In RPL project Properties -> OMNeT++ -> Makemake -> (select "src" folder) -> Build Makemake Options...: 
    - Set Target to Shared library and enable "Export this shared library..."
