@@ -180,6 +180,8 @@ public:
 
     /** TSCH schedule */
     TschSlotframe *schedule;
+    /** MAC */
+    Ieee802154eMac* mac;
 
     // RPL router
     cModule *host;
@@ -236,6 +238,7 @@ private:
     int numExpiredRsp;
     int numClearReqReceived;
     int numResetsReceived;
+    int numOverlappingRequests;
 
     /** Data to be piggybacked (if any), indexed by destination. */
     std::map<uint64_t, std::vector<tsch6pPiggybackTimeoutMsg*>> piggybackableData;

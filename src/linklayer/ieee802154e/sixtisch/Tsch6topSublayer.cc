@@ -107,6 +107,7 @@ void Tsch6topSublayer::initialize(int stage) {
         numExpiredRsp = 0;
         numClearReqReceived = 0;
         numResetsReceived = 0;
+        numOverlappingRequests = 0;
 
         WATCH(numConcurrentTransactionErrors);
         WATCH(numUnexpectedResponses);
@@ -123,7 +124,7 @@ void Tsch6topSublayer::initialize(int stage) {
 
     } else if (stage == 4) {
         auto module = getParentModule()->getParentModule();
-        Ieee802154eMac* mac = dynamic_cast<Ieee802154eMac *>(module->getSubmodule("mac", 0));
+        mac = dynamic_cast<Ieee802154eMac *>(module->getSubmodule("mac", 0));
 
         mac->subscribe(inet::packetDroppedSignal, this);
         mac->subscribe(inet::packetSentSignal, this);
@@ -167,6 +168,7 @@ void Tsch6topSublayer::finish() {
     recordScalar("numUnexpectedResponses", numTimeouts);
     recordScalar("numTimeouts", numTimeouts);
     recordScalar("numConcurrentTransactionErrors", numConcurrentTransactionErrors);
+    recordScalar("numOverlappingRequests", numOverlappingRequests);
 }
 
 Packet* Tsch6topSublayer::handleExternalMessage(cMessage* msg) {
@@ -293,6 +295,7 @@ void Tsch6topSublayer::sendDeleteRequest(uint64_t destId, uint8_t cellOptions, i
 
     if (pTschLinkInfo->inTransaction(destId)) {
         EV_ERROR <<"Can't send DELETE request during open transaction" << endl;
+        numOverlappingRequests++;
         return;
     }
 
@@ -354,8 +357,12 @@ void Tsch6topSublayer::sendClearRequest(uint64_t destId, int timeout) {
     if (!pTschLinkInfo->linkInfoExists(destId))
         throw cRuntimeError("Attempt to send a CLEAR when no link info available");
 
+    // Abort any ongoing transaction timers and erase 6P queue
+    pTschLinkInfo->abortTransaction(destId);
+    mac->flush6pQueue(MacAddress(destId));
+
     uint8_t seqNum = pTschLinkInfo->getLastKnownSeqNum(destId);
-    simtime_t absoluteTimeout = getAbsoluteTimeout(timeout);
+    simtime_t absoluteTimeout = getAbsoluteTimeout(timeout); // TODO: unused?
 
     /* CLEAR requests end a transaction, so we can override the current status
        no matter what. However seqnum & cells are only reset after a RC_SUCCESS
@@ -577,7 +584,9 @@ Packet* Tsch6topSublayer::handleRequestMsg(Packet* pkt,
     }
 
     pTschLinkInfo->setLastKnownType(sender, MSG_REQUEST);
-    pTschLinkInfo->setInTransaction(sender, timeout);
+
+    if (!pTschLinkInfo->inTransaction(sender))
+        pTschLinkInfo->setInTransaction(sender, timeout);
 
     // TODO: Refactor this further/split into separate handler functions
     switch (cmd) {
@@ -947,15 +956,16 @@ void Tsch6topSublayer::receiveSignal(cComponent *source, simsignal_t signalID, c
 
     auto machdr = pkt->popAtFront<Ieee802154eMacHeader>();
     uint64_t destId = machdr->getDestAddr().getInt();
+    uint64_t srcId = machdr->getSrcAddr().getInt();
 
     if (machdr->getNetworkProtocol() == -1
             || ProtocolGroup::ethertype.getProtocol(machdr->getNetworkProtocol()) != &Protocol::wiseRoute)
         return;
 
     if (txSuccess)
-        EV_DEBUG << "Received signal about LL ACK for " << pkt->getFullName() << " to " << MacAddress(destId) << endl;
+        EV << "Received signal about LL ACK for " << pkt->getFullName() << " from " << MacAddress(srcId) << " to " << MacAddress(destId) << endl;
     else
-        EV_DEBUG << "Received signal about dropping " << pkt->getFullName() << " intended for " << MacAddress(destId) << endl;
+        EV << "Received signal about dropping " << pkt->getFullName() << " from " << MacAddress(srcId) << " intended for " << MacAddress(destId) << endl;
 
     auto sixphdr = pkt->popAtFront<tsch::sixtisch::SixpHeader>();
 
@@ -965,12 +975,25 @@ void Tsch6topSublayer::receiveSignal(cComponent *source, simsignal_t signalID, c
             handleRequestAck(destId, (tsch6pCmd_t) sixphdr->getCode());
         else {
             // Else abort last intended transaction
-            pTschLinkInfo->revertLink(destId, pTschLinkInfo->getLastKnownType(destId)); // TODO: this basically does nothing
-            pTschSF->freeReservedCellsWith(destId);
+            // TODO: investigate the case when it triggers for a 6P request addressed to us
+            // check carefully if request was actually not FROM us, but TO us
+            pTschLinkInfo->revertLink(destId, pTschLinkInfo->getLastKnownType(destId == pNodeId ? srcId : destId)); // TODO: this basically does nothing
+            pTschSF->freeReservedCellsWith(destId == pNodeId ? srcId : destId);
         }
 
         return;
     }
+
+    if ( sixphdr && ((tsch6pMsg_t) sixphdr->getType()) == MSG_RESPONSE && !txSuccess ) {
+
+        EV << "Seems we've lost our 6P response addressed to " << MacAddress(destId) << endl;
+
+        pTschLinkInfo->revertLink(destId, pTschLinkInfo->getLastKnownType(destId)); // TODO: this basically does nothing
+        pTschSF->freeReservedCellsWith(destId);
+
+        return;
+    }
+
 
     tsch6topCtrlMsg* result = NULL;
 
@@ -1200,7 +1223,7 @@ Packet* Tsch6topSublayer::createClearRequest(uint64_t destId, uint8_t seqNum) {
 
     pkt->addTagIfAbsent<PacketProtocolTag>()->setProtocol(&Protocol::wiseRoute);
     auto virtualTag = pkt->addTagIfAbsent<VirtualLinkTagReq>();
-        virtualTag->setVirtualLinkID(-2);
+    virtualTag->setVirtualLinkID(-2);
     return pkt;
 }
 

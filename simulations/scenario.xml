@@ -1,0 +1,8 @@
+<scenario>
+    <at t="20.0">
+        <shutdown module="sink[0]"/>
+    </at>
+    <at t="500.0">
+        <startup module="sink[0]"/>
+    </at>
+</scenario>

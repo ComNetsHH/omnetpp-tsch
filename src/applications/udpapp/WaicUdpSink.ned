@@ -29,5 +29,9 @@ simple WaicUdpSink extends UdpSink
 {
     parameters:
         @class(WaicUdpSink);
+        
+        @signal[jitterRecorder](type=double);
+        @statistic[jitter](title="Jitter"; source=jitterRecorder; record=vector, mean; interpolationmode=none);
+        
 }
 

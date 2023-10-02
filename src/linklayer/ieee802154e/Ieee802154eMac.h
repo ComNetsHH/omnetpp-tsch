@@ -120,6 +120,7 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
         , SeqNrChild()
         , wrr_be_ctn(0)
         , wrr_np_ctn(0)
+        , lastAppPktArrivalTimestamp(0)
     {
     }
 
@@ -170,10 +171,17 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
     virtual void handleCrashOperation(inet::LifecycleOperation *operation) override {}    //TODO implementation
 
     simsignal_t pktRecFromUpperSignal; // emitted when packet is received from upper layers
+    simsignal_t pktRecFromLowerSignal; // emitted when packet is received from lower layer, includes MAC address of the sender
     simsignal_t highPrioQueueOverflowSignal;
+    simsignal_t disableSfAdaptationSignal; // required for lossy link scenarios to disable schedule adaptation to traffic by the SF
+    simsignal_t queueSizeSignal;
+    simsignal_t burstArrivedSignal; // to notify SF about burst arrival and reset cellsUsed and cellsElapsed counters
+
+    int queueSizeInLastSlotframe;
 
     // Utility
-    list<uint64_t> getNeighborsInRange(); // get list of neighbors based on maximum communication range
+    [[deprecated]]
+    list<uint64_t> getNeighborsInRange(); // get list of neighbors based on maximum communication range (if available)
 
     vector<tuple<int, int>> getQueueSizes(MacAddress neighbor, vector<int> virtualLinkIds = {-1, 0});
     virtual void flushQueue(MacAddress neighborAddr, int vlinkId);
@@ -213,9 +221,11 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
     long nbDuplicates;
     long nbBackoffs;
     double backoffValues;
+
     /*@}*/
 
     bool isSink; // root of RPL DODAG
+    bool burstInProcessing;
 
     int udpSentCtn;
     int udpDroppedCtn;
@@ -356,6 +366,8 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
     omnetpp::simtime_t macTsTimeslotLength;
 
     bool useCCA;
+    int numPktsArrived; // stat to manually measure the arrival rate per slotframe
+
 
     /** @brief The amount of time the MAC waits for the ACK of a packet.*/
     //omnetpp::simtime_t macAckWaitDuration;
@@ -419,7 +431,15 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
     cProperty *statisticTemplate;
 
     std::vector<simsignal_t> channelSignals;
-    simsignal_t pktEnqueuedSignal;
+    simsignal_t burstFinishedProcessingSignal;
+
+    // emitted when a packet is added to the queue AND also
+    // when a link collision occurs and the retransmission threshold is not exceeded
+    simsignal_t numPktsArrivedDuringLastSlotframeSignal;
+    simsignal_t pktRetransmittedSignal;
+    simsignal_t pktRetransmittedDownlinkSignal; // tracks packets whose transmission is failed on the downlink (via shared cells)
+    simsignal_t pktInterarrivalTimeSignal; // much like the pktEnqueuedSignal before, but records the time elapsed between subsequent arrivals
+    double lastAppPktArrivalTimestamp; // helper variable for the "pktInterarrivalTime" stat
     simsignal_t currentFreqSignal; // ping current frequency to RPL
 
     std::vector<std::string> registeredSignals;
@@ -497,7 +517,8 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
 
     void attachSignal(inet::Packet *mac, omnetpp::simtime_t_cref startTime);
     void manageMissingAck(t_mac_event event, omnetpp::cMessage *msg);
-    void manageFailedTX();
+    void manageFailedTX() { manageFailedTX(false); } ;
+    void manageFailedTX(bool recordStats);
     void startTimer(t_mac_timer timer);
 
     omnetpp::simtime_t scheduleSlot();
@@ -531,10 +552,7 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
     //sequence numbers for receiving
     std::map<inet::MacAddress, std::map<int, unsigned long>> SeqNrChild;    //child -> sequence number
 
-    // Util
-    list<MacAddress> neighbors; // list of neighbors MAC addresses
     bool artificiallyDropAppPacket(Packet *packet);
-
     bool drop6pPacket(Packet *packet, std::string cmdType, std::string pktType);
 
 
@@ -544,6 +562,8 @@ class Ieee802154eMac : public inet::MacProtocolBase, public inet::IMacProtocol
      * @param packetName name of the packet to check its affiliation
      */
     bool isControlPacket(std::string packetName);
+    bool isAppPacket(Packet *packet);
+    bool isSmokeAlarmPacket(Packet *packet);
 
     //
     // Hybrid Priority Queueing

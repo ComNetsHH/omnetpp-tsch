@@ -22,6 +22,7 @@
  */
 
 #include "TschHopping.h"
+#include "../../common/TschUtils.h"
 #include "inet/common/InitStages.h"
 #include <omnetpp/cstringtokenizer.h>
 #include "inet/common/Units.h"
@@ -65,23 +66,44 @@ void TschHopping::initialize(int stage)
         // TODO: how to couple these tighter with radio medium parameters?
         centerFrequency = units::values::Hz(par("centerFrequency"));
         numChannels = par("nbRadioChannels").intValue();
+        blacklistedChannels = omnetpp::cStringTokenizer(par("blacklistedChannels").stringValue()).asIntVector();
 
         if (par("useRandomPattern").boolValue()) {
+            EV_DETAIL << "Generating hopping pattern randomly" << endl;
             std::list<int> l(numChannels);
             std::iota(l.begin(), l.end(), getMinChannel());
             std::copy(l.begin(), l.end(), std::back_inserter(pattern));
 
             std::mt19937 e((unsigned int) intrand(100));
-
             std::shuffle(pattern.begin(), pattern.end(), e);
-
-            EV_DETAIL << "Shuffled hopping pattern: " << pattern << endl;
-        } else
+        } else {
+            EV_DETAIL << "Reading hopping pattern from string" << endl;
             pattern = omnetpp::cStringTokenizer(patternstr).asIntVector();
+        }
+
+        if (blacklistedChannels.size()) {
+            remove_intersection(pattern, blacklistedChannels);
+            EV_DETAIL << "Found (and removed) blacklisted channels: " << blacklistedChannels << endl;
+        }
+
+        EV_DETAIL << "Hopping pattern: " << pattern << endl;
 
         // at least one channel in hopping sequence
         assert(pattern.size() >= 1);
     }
+}
+
+TschHopping::PatternVector TschHopping::getHoppingSequence() {
+    return this->pattern;
+}
+
+bool TschHopping::isBlacklisted(int channelOffset) {
+    return std::find(blacklistedChannels.begin(), blacklistedChannels.end(), channelOffset)
+        != blacklistedChannels.end();
+}
+
+int TschHopping::shiftBlacklisted(int channelOffset, int increment) {
+    return pattern[increment % (int) pattern.size()];
 }
 
 int TschHopping::channel(int64_t asn, int channelOffset)
@@ -89,12 +111,14 @@ int TschHopping::channel(int64_t asn, int channelOffset)
     ASSERT(asn >= 0);
     ASSERT(channelOffset >= 0);
 
+//    TODO: ensure existing simulations are not broken by commenting this out
     if ((int) pattern.size() == 1) {
         EV_DETAIL << "Seems channel hopping is disabled" << endl;
-        return channelOffset;
+
+        return getMinChannel() + channelOffset;
     }
 
-    return pattern[((asn + channelOffset) % pattern.size())];
+    return pattern[(asn + channelOffset) % pattern.size()];
 }
 
 int TschHopping::getMinChannel() {
@@ -130,6 +154,8 @@ double TschHopping::channelToCenterFrequencyPlain(int channel)
    ASSERT(channel <= getMaxChannel());
    return getMinCenterFrequency().get() + ((channel - getMinChannel()) * getChannelSpacing().get());
 }
+
+
 
 } // namespace inet
 

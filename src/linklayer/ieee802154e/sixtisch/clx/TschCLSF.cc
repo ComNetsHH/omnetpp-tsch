@@ -324,9 +324,9 @@ void TschCLSF::setBranchChannelOffset(int chOf) {
     EV_DETAIL << "Received branch-specific channel offset: " << chOf << " from RPL" << endl;
 }
 
-void TschCLSF::handleSuccessAdd(uint64_t sender, int numCells,  vector<cellLocation_t> cellList) {
+void TschCLSF::handleSuccessAdd(uint64_t sender, int numCells, vector<cellLocation_t> cellList, vector<cellLocation_t> reservedSlots) {
 
-    TschMSF::handleSuccessAdd(sender, numCells, cellList);
+    TschMSF::handleSuccessAdd(sender, numCells, cellList, {});
     if (isCrossLayerInfoAvailable() && !isDaisyChained && !isDaisyChainFailed)
         checkDaisyChained();
 }
@@ -357,7 +357,7 @@ void TschCLSF::handleDaisyChaining(SlotframeChunk advertisedChunk) {
 }
 
 void TschCLSF::resetStateWith(uint64_t nbrId) {
-    TschMSF::resetStateWith(nbrId);
+//    TschMSF::resetStateWith(nbrId);
     checkDaisyChained();
 }
 

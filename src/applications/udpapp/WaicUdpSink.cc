@@ -16,9 +16,7 @@
 //
 
 #include "WaicUdpSink.h"
-#include "inet/common/ModuleAccess.h"
-#include "inet/common/packet/Packet.h"
-#include "inet/networklayer/common/L3AddressResolver.h"
+#include "ResaUdpUtils.h"
 #include "inet/transportlayer/contract/udp/UdpControlInfo_m.h"
 
 using namespace inet;
@@ -58,12 +56,9 @@ void WaicUdpSink::initialize(int stage)
 void WaicUdpSink::finish()
 {
     UdpSink::finish();
-    EV_INFO << getFullPath() << ": received " << numReceived << " packets\n";
-    simtime_t meanJitter = 0;
     for (auto jt: jitterMap) {
         auto jitter = computeJitter(jt.second);
-        meanJitter += jitter;
-        emit(jitterRecorder, jitter);
+        emit(jitterRecorder, jitter.dbl()); // records jitter per-sender basis (is it really necessary?)
     }
 }
 
@@ -71,8 +66,8 @@ void WaicUdpSink::processPacket(Packet *pk)
 {
     EV_INFO << "Received packet: " << UdpSocket::getReceivedPacketInfo(pk) << endl;
 
-    auto srcAddr = UdpSocket::getPacketSrcAddress(pk);
-    auto pkDelay = UdpSocket::getPacketDelay(pk);
+    auto srcAddr = getPacketSrcAddress(pk);
+    auto pkDelay = getPacketDelay(pk);
 
     auto jitterEntry = jitterMap.find(srcAddr);
 

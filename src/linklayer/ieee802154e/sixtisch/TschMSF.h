@@ -25,6 +25,7 @@
 #include <omnetpp.h>
 
 #include "Tsch6topSublayer.h"
+#include "../TschHopping.h"
 #include "inet/networklayer/common/InterfaceTable.h"
 
 
@@ -243,6 +244,10 @@ class TschMSF: public TschSF, public cListener {
     virtual void handleSuccessAdd(uint64_t sender, int numCells, vector<cellLocation_t> cellList, vector<offset_t> reservedSlots);
 
     void handleRplRankUpdate(long rank, int numHosts, double lambda);
+    double getExpectedWaitingTime(int m) { return 1/((double) m + 1); }
+    double getExpectedWaitingTime(int m, double pc, int rtx);
+    int getRequiredServiceRate(double l) { return ceil(l + 0.001); }
+    int getRequiredServiceRate(double l, double pc, int rtx, int rank, int numHosts);
 
     /**
      * @brief Handle @p data that was piggybacked by @p sender.
@@ -277,6 +282,9 @@ class TschMSF: public TschSF, public cListener {
      */
     int getTimeout() override;
 
+    offset_t getChOf(); // draw channel offset randomly uniformly sampled from the available range;
+    void getHostModule();
+
     virtual void incrementNeighborCellElapsed(uint64_t neighborId) override;
     virtual void decrementNeighborCellElapsed(uint64_t neighborId) override;
 
@@ -290,6 +298,7 @@ class TschMSF: public TschSF, public cListener {
 
     void receiveSignal(cComponent *src, simsignal_t id, cObject *value, cObject *details) override;
     void receiveSignal(cComponent *src, simsignal_t id, long value, cObject *details) override;
+    void receiveSignal(cComponent *src, simsignal_t id, const char *s, cObject *details) override;
 
     /**
      * Process RPL preferred parent updates
@@ -308,6 +317,13 @@ class TschMSF: public TschSF, public cListener {
      * @param destId MAC address of the destination for which there's a packet enqueued
      */
     virtual void handlePacketEnqueued(uint64_t destId);
+
+    // get list of cells with preferred parent to delete synchronously
+    std::vector<cellLocation_t> getCellsToDeleteSync(uint64_t nodeId, int numCellsReq);
+
+    // delete cells from the schedule and tsch link info directly without transactions
+    void deleteCellsSync(uint64_t nodeId, std::vector<cellLocation_t> cellList);
+    void handleBurstFinishedProcessingSignal();
 
    protected:
     virtual void refreshDisplay() const override;
@@ -336,6 +352,9 @@ class TschMSF: public TschSF, public cListener {
     int pCellIncrement; // see .ned parameter "cellBandwidthIncrement"
     bool pSend6pDelayed; // see .ned parameter
     offset_t pNumMinimalCells; // number of minimal cells being scheduled for ICMPv6, RPL broadcast messages
+    bool pBlacklistingEnabled;
+    int pChOfStart;
+    int pChOfEnd;
 
     bool isSink;
 
@@ -359,8 +378,10 @@ class TschMSF: public TschSF, public cListener {
 
     Ieee802154eMac *mac;
     TschSlotframe *schedule;
-    cModule *rpl;
-    cModule *hostNode; // reference to this host node's module
+    cModule *rpl; // TODO: use actual RPL pointer
+    cModule *hostNode;
+    TschHopping* hopping;
+
 
     /**
      * TimeOffsets that have been suggested to a neighbor in an unfinished ADD
@@ -379,6 +400,10 @@ class TschMSF: public TschSF, public cListener {
     std::vector<uint64_t> oneHopRplChildren;
     std::map<cellLocation_t, CellStatistic> cellStatistic;
     std::map<uint64_t, std::vector<offset_t>> blacklistedSlots;
+    std::map<uint64_t, SfControlInfo*> retryInfo; // stores info about outgoing 6P requests to enable retries
+    // stores info about nodes for whom downlink has been requested
+    // to avoid DAO retransmissions spawning more cells than necessary
+    std::map<uint64_t, int> downlinkRequested;
 
     // Stats
     int numInconsistencies;
@@ -387,6 +412,8 @@ class TschMSF: public TschSF, public cListener {
     int num6pAddSent;
     int num6pAddFailed;
     int numUnhandledResponses;
+    int numTranAbandonedMaxRetries;
+    int numTranAbortedUnknownReason;
     double util; // queue utilization with preferred parent
     double uplinkCellUtil; // cell utilization with pref. parent
 
@@ -403,8 +430,12 @@ class TschMSF: public TschSF, public cListener {
     bool showQueueSize;
     bool showTxCellCount;
     bool showLinkResets;
+    bool pCellBundlingEnabled;
+    int pCellBundleSize;
+    int udpPacketsSent;
 
     cellLocation_t autoRxCell;
+    cellLocation_t initCellOverride; // override random init cell scheduled with preferred RPL parent
 
     int rplRank;
 
@@ -412,6 +443,12 @@ class TschMSF: public TschSF, public cListener {
     // Low-latency scheduling (CLXv2)
     offset_t uplinkSlotOffset; // slot offset of the preferred parent to schedule close to
     simsignal_t uplinkScheduledSignal; // used to notify RPL about the slot offset of the scheduled uplink cell
+
+    // cell matching statistics
+    simsignal_t uncoverableGapSignal;
+
+    // bursty traffic modeling
+    simsignal_t deleteCellsSyncSignal;
 
     enum msfSelfMsg_t {
         CHECK_STATISTICS,
@@ -424,6 +461,10 @@ class TschMSF: public TschSF, public cListener {
         CHECK_DAISY_CHAIN, // message type for CLX scheduling
         DEBUG_TEST,
         SCHEDULE_UPLINK,
+        SCHEDULE_DOWNLINK,
+        CELL_BUNDLE_REQ,
+        CHANGE_SLOF,
+        DISABLE_ADAPTATION,
         UNDEFINED
     };
 
@@ -432,18 +473,23 @@ class TschMSF: public TschSF, public cListener {
      *
      * @param delay (optional) additional timeout before sending out the request message
      */
-    void addCells(uint64_t nodeId, int numCells, uint8_t cellOptions, double delay);
-    void addCells(uint64_t nodeId, int numCells, uint8_t cellOptions) { addCells(nodeId, numCells, cellOptions, 0); };
-    void addCells(uint64_t nodeId, int numCells) { addCells(nodeId, numCells, MAC_LINKOPTIONS_TX, 0); }
-    void addCells(SfControlInfo *retryInfo);
+    bool addCells(uint64_t nodeId, int numCells, uint8_t cellOptions);
+    bool addCells(SfControlInfo *retryInfo);
 
     virtual void deleteCells(uint64_t nodeId, int numCells);
     void scheduleAutoCell(uint64_t neighbor);
     void scheduleAutoRxCell(InterfaceToken euiAddr);
+
     void removeAutoTxCell(uint64_t neighbor);
 
     virtual void handleSelfMessage(cMessage* msg);
+    void handleCellBundleReq();
+    void handleDeleteCellsSync(std::vector<int> slofsToDelete, uint64_t nbrId = 0, uint8_t linkOption = MAC_LINKOPTIONS_RX);
+
+    // TODO: revise whether it makes sense to have both of these
     void handleScheduleUplink();
+    void handleScheduleDownlink(uint64_t nodeId);
+    void retryLastTransaction(uint64_t nodeId, std::string reasonStr);
 
     /**
      * Sends out 6P request according to the details of SfControlInfo object.
@@ -516,6 +562,7 @@ class TschMSF: public TschSF, public cListener {
     simsignal_t queueUtilization;
     simsignal_t failed6pAdd; // tracks number of failed 6P ADD requests
     simsignal_t neighborNotFoundError; // tracks unknown error where node's schedule is not cleared properly
+    simsignal_t uplinkSlotOffsetSignal; // emits the slot offset after a dedicated cell is scheduled with preferred parent
 
     enum transactionFailReason_t {
         TIMEOUT,
@@ -544,6 +591,8 @@ class TschMSF: public TschSF, public cListener {
      * @return vector of picked slot offsets
      */
     std::vector<cellLocation_t> pickRandomly(std::vector<cellLocation_t> inputVec, int numRequested);
+    std::vector<cellLocation_t> pickConsecutively(std::vector<cellLocation_t> inputVec, int numRequested, bool randomizeStart);
+    std::vector<cellLocation_t> pickSpaceBetween(std::vector<cellLocation_t> inputVec, int numRequested);
 
     /**
      * Check for free slot offsets (neither scheduled, nor reserved) in the range @param start -> @param end
@@ -553,6 +602,7 @@ class TschMSF: public TschSF, public cListener {
     std::vector<offset_t> getAvailableSlotsInRange(int start, int end);
     std::vector<offset_t> getAvailableSlotsInRange(int slOffsetEnd);
 
+    int pInitNumRx;
 
     /**
      * Spaghetti function to check that information about a neighbor stored in TschSlotframe
@@ -561,6 +611,7 @@ class TschMSF: public TschSF, public cListener {
      * @param nodeId MAC identifier of the neighbor node
      */
     void checkScheduleConsistency(uint64_t nodeId);
+    double getCoverageRate();
 };
 
 #endif /*__WAIC_TSCHMSF_H_*/

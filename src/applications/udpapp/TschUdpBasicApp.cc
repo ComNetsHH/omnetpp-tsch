@@ -52,25 +52,25 @@ TschUdpBasicApp::~TschUdpBasicApp() {
 void TschUdpBasicApp::initialize(int stage){
     ApplicationBase::initialize(stage);
     if (stage == INITSTAGE_LOCAL) {
-            numSent = 0;
-            numReceived = 0;
-            WATCH(numSent);
-            WATCH(numReceived);
+        numSent = 0;
+        numReceived = 0;
+        WATCH(numSent);
+        WATCH(numReceived);
 
-            localPort = par("localPort");
-            destPort = par("destPort");
-            startTime = par("startTime");
-            stopTime = par("stopTime");
-            packetName = par("packetName");
-            dontFragment = par("dontFragment");
-            virtualLinkId = par("virtualLinkId");
-            if (stopTime >= SIMTIME_ZERO && stopTime < startTime)
-                throw cRuntimeError("Invalid startTime/stopTime parameters");
-            selfMsg = new cMessage("sendTimer");
+        localPort = par("localPort");
+        destPort = par("destPort");
+        startTime = par("startTime");
+        stopTime = par("stopTime");
+        packetName = par("packetName");
+        dontFragment = par("dontFragment");
+        virtualLinkId = par("virtualLinkId");
+        if (stopTime >= SIMTIME_ZERO && stopTime < startTime)
+            throw cRuntimeError("Invalid startTime/stopTime parameters");
+        selfMsg = new cMessage("sendTimer");
     }
 }
 
-void TschUdpBasicApp::sendPacket(){
+void TschUdpBasicApp::sendPacket() {
     std::ostringstream str;
     str << packetName << "-" << numSent;
     Packet *packet = new Packet(str.str().c_str());
@@ -88,6 +88,7 @@ void TschUdpBasicApp::sendPacket(){
     socket.sendTo(packet, destAddr, destPort);
     numSent++;
 }
+
 }
 
 

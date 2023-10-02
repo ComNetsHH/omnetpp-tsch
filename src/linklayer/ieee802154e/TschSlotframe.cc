@@ -40,6 +40,7 @@
 #include "inet/networklayer/ipv4/RoutingTableParser.h"
 #include "../../common/TschSimsignals.h"
 #include "inet/common/Simsignals.h"
+#include "sixtisch/Tsch6tischComponents.h"
 
 namespace tsch {
 
@@ -59,6 +60,12 @@ std::ostream& operator<<(std::ostream& os, std::vector<TschLink*> links)
         os << (*l).str() << endl;
     return os;
 };
+
+inline std::ostream& operator<<(std::ostream& os, tuple<offset_t, offset_t>& a)
+{
+    os << "(" << get<0>(a) << ", " << get<1>(a) << ")";
+    return os;
+}
 
 TschSlotframe::~TschSlotframe()
 {
@@ -441,6 +448,77 @@ std::vector<TschLink*> TschSlotframe::allTxLinks(inet::MacAddress macAddress) {
 
     return nbrLinks;
 }
+
+std::vector<TschLink*> TschSlotframe::getAllDedicatedRxLinks() {
+    std::vector<TschLink*> rxLinks;
+
+    for (auto const& link: links)
+        if (link->isRx() && !link->isAuto() && !link->isShared())
+            rxLinks.insert(rxLinks.end(), link);
+
+    return rxLinks;
+}
+
+std::vector<TschLink*> TschSlotframe::getAllDedicatedTxLinks() {
+    std::vector<TschLink*> txLinks;
+
+    for (auto const& link: links)
+        if (link->isTx() && !link->isAuto() && !link->isShared())
+            txLinks.insert(txLinks.end(), link);
+
+    return txLinks;
+}
+
+std::vector<std::tuple<offset_t, offset_t>> TschSlotframe::getUnmatchedRxRanges() {
+    auto txLinks = getAllDedicatedTxLinks();
+    auto rxLinks = getAllDedicatedRxLinks();
+
+    std::vector<std::tuple<offset_t, offset_t>> unmatchedRxRanges = {};
+
+    if (!rxLinks.size())
+        return unmatchedRxRanges;
+
+    int numRx = (int) rxLinks.size();
+
+    for (auto i = 0; i < numRx - 1; i++)
+    {
+        bool found = false;
+        auto startSlof = rxLinks[i]->getSlotOffset();
+        auto endSlof = rxLinks[i+1]->getSlotOffset();
+
+        EV_DETAIL << "start: " << startSlof << ", end: " << endSlof << endl;
+
+        // check there's at least one TX cell in-between
+        for (auto txLink : txLinks)
+            if (txLink->getSlotOffset() > startSlof && txLink->getSlotOffset() < endSlof)
+            {
+                found = true;
+                break;
+            }
+
+        if (!found) {
+            std::tuple<offset_t, offset_t> t { startSlof, endSlof };
+            unmatchedRxRanges.push_back(t);
+        }
+    }
+
+    // check for the last RX till the slotframe bound
+    bool lastRxCellCovered = false;
+    for (auto txLink : txLinks)
+        if ( txLink->getSlotOffset() > rxLinks[rxLinks.size() - 1]->getSlotOffset() )
+        {
+            lastRxCellCovered = true;
+            break;
+        }
+
+    if (!lastRxCellCovered) {
+        std::tuple<offset_t, offset_t> last_range { rxLinks[rxLinks.size() - 1]->getSlotOffset(), macSlotframeSize };
+        unmatchedRxRanges.push_back(last_range);
+    }
+
+    return unmatchedRxRanges;
+}
+
 
 std::vector<TschLink*> TschSlotframe::getDedicatedLinksForNeighbor(inet::MacAddress neigbhorMac) {
     std::vector<TschLink*> nbrLinks;

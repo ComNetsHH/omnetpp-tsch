@@ -96,6 +96,10 @@ void Ieee802154eMac::initialize(int stage) {
         currentAsn = 0;
         currentLink = nullptr;
         currentChannel = 0;
+        numPktsArrived = 0;
+        queueSizeInLastSlotframe = -1;
+        burstInProcessing = false;
+        WATCH(burstInProcessing);
 
         w_np = par("wrrWeigthNp").intValue();
         w_be = par("wrrWeigthBe").intValue();
@@ -165,7 +169,7 @@ void Ieee802154eMac::initialize(int stage) {
         sf = check_and_cast<TschSF*> (getModuleByPath("^.sixtischInterface.sf"));
         if (sf->par("disable").boolValue()) {
             schedule->xmlSchedule();
-            schedule->printSlotframe();
+//            schedule->printSlotframe();
         }
 
         asn.setMacTsTimeslotLength(macTsTimeslotLength);
@@ -175,20 +179,24 @@ void Ieee802154eMac::initialize(int stage) {
         EV_DETAIL << "QueueLength = " << neighbor->getQueueLength() << " bitrate = " << bitrate << endl;
         EV_DETAIL << "Finished tsch init stage 1." << endl;
 
-        pktEnqueuedSignal = registerSignal("pktEnqueued");
+        pktRetransmittedSignal = registerSignal("pktRetransmitted");
+        pktRetransmittedDownlinkSignal = registerSignal("pktRetransmittedDownlink");
+        pktInterarrivalTimeSignal = registerSignal("interarrivalTime");
         pktRecFromUpperSignal = registerSignal("pktReceviedFromUpperLayer");
+        pktRecFromLowerSignal = registerSignal("pktReceviedFromLowerLayer");
         currentFreqSignal = registerSignal("currentFrequency");
+        disableSfAdaptationSignal = registerSignal("disableTrafficAdaptation");
+        numPktsArrivedDuringLastSlotframeSignal = registerSignal("numPktsArrivedDuringLastSlotframe");
+        queueSizeSignal = registerSignal("queueSize");
+        burstFinishedProcessingSignal = registerSignal("burstFinishedProcessing");
+        burstArrivedSignal = registerSignal("burstArrived");
+
     } else if (stage == INITSTAGE_LAST) {
-        auto nbrs = this->getNeighborsInRange();
-        for (auto nbrId : nbrs)
-            neighbors.push_back(MacAddress(nbrId));
-
-
-        WATCH_LIST(neighbors);
         WATCH_MAP(packetsIncorrectlyReceived);
+        WATCH(burstInProcessing);
 
         auto timeoutVal = par("lossyLinkTimeout").doubleValue();
-        if (timeoutVal)
+        if (timeoutVal > 0)
             scheduleAt(simTime() + SimTime(timeoutVal, SIMTIME_S), new cMessage("Start losing packets", MAC_ENABLE_DROPS));
     }
 }
@@ -385,6 +393,16 @@ void Ieee802154eMac::handleUpperPacket(Packet *packet) {
 
     if (neighbor->add2Queue(packet, dest, linkId)) {
         EV_DETAIL << "Added packet to queue with link ID " << linkId << endl;
+
+        if (!isAppPacket(packet))
+            return;
+        else
+            numPktsArrived++;
+
+        if (lastAppPktArrivalTimestamp > 0)
+            emit(pktInterarrivalTimeSignal, simTime().dbl() - lastAppPktArrivalTimestamp);
+
+        lastAppPktArrivalTimestamp = simTime().dbl();
     } else {
         EV_DETAIL << "Packet is dropped due to Queue Overflow" << endl;
         PacketDropDetails details;
@@ -393,6 +411,18 @@ void Ieee802154eMac::handleUpperPacket(Packet *packet) {
         emit(packetDroppedSignal, packet, &details);
         delete packet;
     }
+}
+
+bool Ieee802154eMac::isAppPacket(Packet *packet) {
+    std::string packetName(packet->getFullName());
+
+    return packetName.find("App") != std::string::npos;
+}
+
+bool Ieee802154eMac::isSmokeAlarmPacket(Packet *packet) {
+    std::string packetName(packet->getFullName());
+
+    return packetName.find("HAZARD") != std::string::npos;
 }
 
 int Ieee802154eMac::getVirtualLinkId(TschLink* link) {
@@ -443,8 +473,8 @@ TschLink* Ieee802154eMac::selectActiveLink(std::vector<TschLink*> links) {
             unicastTxLinks.push_back(link);
         }
 
-        if (link->isTx())
-            // Update the elapsed counter also for inactive links!
+        if (link->isTx() && !link->isShared())
+            // Update the elapsed counter also for inactive links! (but not shared)
             // TODO: turns the following code really ugly with multiple decrements, find a leaner solution
             sf->incrementNeighborCellElapsed(link->getAddr().getInt());
     }
@@ -619,19 +649,57 @@ void Ieee802154eMac::updateStatusIdle(t_mac_event event, cMessage *msg) {
         if (!currentLink)
             return;
 
-        // Only for 6TiSCH:
-        // If the minimal cell channel offset is set to the maximum value, i.e. highest frequency,
-        // to ensure reliable connectivity, this cell should NOT channel-hop
-        if ((sf && sf->par("minCellChannelOffset").intValue() == 39) // WAIC
-                || (sf && sf->par("minCellChannelOffset").intValue() == 15)) // ISM
+
+        currentChannel = hopping->channel(currentAsn, currentLink->getChannelOffset());
+
+
+        if (currentLink->getSlotOffset() == 0)
         {
-            if (currentLink->getAddr() == MacAddress::BROADCAST_ADDRESS) // checking if current link is a minimal cell
-                currentChannel = sf->par("minCellChannelOffset").intValue();
-            else
-                currentChannel = hopping->channel(currentAsn, currentLink->getChannelOffset());
+//            // Track the difference in queue size to detect presence of burst in the queue
+//            if (!burstInProcessing)
+//            {
+//                auto currentQueueSize = neighbor->getTotalQueueSize();
+//                if (currentQueueSize - queueSizeInLastSlotframe > 10)
+//                {
+//                    EV << "Burst detected" << endl;
+//                    emit(burstArrivedSignal, 1);
+//                    burstInProcessing = true;
+//                }
+//
+//                queueSizeInLastSlotframe = currentQueueSize;
+//            }
+
+
+            emit(queueSizeSignal, neighbor->getTotalQueueSize());
+            emit(numPktsArrivedDuringLastSlotframeSignal, numPktsArrived);
+            numPktsArrived = 0;
         }
-        else
-            currentChannel = hopping->channel(currentAsn, currentLink->getChannelOffset());
+
+        /**
+         * Disable channel hopping for minimal cells
+         * if corresponding flag is set, or, only for WAIC band, the channel offset is set to the highest value (39)
+         *
+         */
+        if (sf && currentLink->getAddr() == MacAddress::BROADCAST_ADDRESS
+                && (sf->par("minCellChannelOffset").intValue() == 39 || hopping->par("disableMinCellHopping").boolValue()))
+        {
+            currentChannel = hopping->getMinChannel() + sf->par("minCellChannelOffset").intValue();
+        }
+
+
+//        // Only for 6TiSCH:
+//        // If the minimal cell channel offset is set to the maximum value, i.e. highest frequency,
+//        // to ensure reliable connectivity, this cell should NOT channel-hop
+//        // TODO: check radio center frequency and throw an error if channel number 39 is used in ISM!!!
+//        if (sf && sf->par("minCellChannelOffset").intValue() == 39) // max WAIC channel
+//        {
+//            if (currentLink->getAddr() == MacAddress::BROADCAST_ADDRESS) // checking if current link is a minimal cell
+//                currentChannel = sf->par("minCellChannelOffset").intValue();
+//            else
+//                currentChannel = hopping->channel(currentAsn, currentLink->getChannelOffset());
+//        }
+//        else
+//            currentChannel = hopping->channel(currentAsn, currentLink->getChannelOffset());
 
         emit(currentFreqSignal, hopping->channelToCenterFrequencyPlain(currentChannel));
 
@@ -764,7 +832,7 @@ void Ieee802154eMac::updateStatusCCA(t_mac_event event, cMessage *msg) {
             EV_DETAIL << "(7) FSM State CCA_3, EV_TIMER_CCA, [Channel Busy]: " << " skipping slot." << endl;
 
             radio->setRadioMode(IRadio::RADIO_MODE_SLEEP);
-            manageFailedTX();
+            manageFailedTX(false);
             updateMacState(IDLE_1);
         }
         break;
@@ -818,6 +886,23 @@ void Ieee802154eMac::updateStatusWaitAck(t_mac_event event, cMessage *msg) {
             cancelEvent(rxAckTimer);
         cMessage *mac = neighbor->getCurrentNeighborQueueFirstPacket();
         neighbor->removeFirstPacketFromQueue();
+
+        auto numBurstyPackets = neighbor->getNumBurstyPktsInQueue();
+
+        EV << "Bursty packets in the queue: " << numBurstyPackets << "" << endl;
+
+        if (burstInProcessing)
+        {
+            if (numBurstyPackets == 0)
+            {
+                EV << "Burst processing finished" << endl;
+                emit(burstFinishedProcessingSignal, 1);
+            }
+            else
+                EV << "Burst in processing, " << numBurstyPackets << " packets remain" << endl;
+        }
+        burstInProcessing = numBurstyPackets != 0;
+
         neighbor->terminateCurrentTschCSMA();
         neighbor->reset();
         emit(packetSentSignal, mac, nullptr);
@@ -834,7 +919,7 @@ void Ieee802154eMac::updateStatusWaitAck(t_mac_event event, cMessage *msg) {
         if (!neighbor->isDedicated() && !neighbor->getCurrentTschCSMAStatus())
             neighbor->startTschCSMA();
         else
-            manageFailedTX();
+            manageFailedTX(true);
 
         updateMacState(IDLE_1);
         break;
@@ -860,10 +945,8 @@ list<uint64_t> Ieee802154eMac::getNeighborsInRange() {
     auto radio = this->getRadio();
     auto medium = dynamic_cast<const physicallayer::RadioMedium*>(radio->getMedium());
     auto limitcache = dynamic_cast<const physicallayer::MediumLimitCache*>(medium->getMediumLimitCache());
-    auto range = limitcache->getMaxCommunicationRange(radio).get();
+    auto range = limitcache->getMaxCommunicationRange(radio).get(); // meaningless with realistic radio models
     auto myCoords = radio->getAntenna()->getMobility()->getCurrentPosition();
-
-
     // we extract the topology here and filter for nodes that have the property @6tisch set.
     // The property has to be set within the top-level ned-file (contains your network) e.g. like this:
     //
@@ -893,13 +976,15 @@ list<uint64_t> Ieee802154eMac::getNeighborsInRange() {
             }
 
         // we found no mac address to use or we found ourself
-        if (addr.isUnspecified() || addr.getInt() == nodeId)
+        if (addr.isUnspecified() || addr.getInt() == nodeId) {
+            EV << "No MAC address found?" << endl;
             continue;
+        }
 
         // verify distance to ourself
         if (myCoords.distance(coords) <= range) {
             resultingList.push_back(addr.getInt());
-            EV_DEBUG << "node " << addr.str() << " (" << coords.str() << ") is a neighbor of "
+            EV << "node " << addr.str() << " (" << coords.str() << ") is a neighbor of "
                     << MacAddress(nodeId).str() << " (" << myCoords.str() << ")" << endl;
         }
     }
@@ -907,7 +992,7 @@ list<uint64_t> Ieee802154eMac::getNeighborsInRange() {
     return resultingList;
 }
 
-void Ieee802154eMac::manageFailedTX() {
+void Ieee802154eMac::manageFailedTX(bool recordStats) {
     neighbor->failedTX();
 
     auto rtxAttempts = neighbor->getCurrentTschCSMA()->getNB();
@@ -926,7 +1011,24 @@ void Ieee802154eMac::manageFailedTX() {
         emit(packetDroppedSignal, mac, &details);
         emit(linkBrokenSignal, mac);
         delete mac;
+    } else {
+        auto pkt = neighbor->getCurrentNeighborQueueFirstPacket();
+        if (isSmokeAlarmPacket(pkt) && recordStats)
+        {
+            emit(pktRetransmittedSignal, 1);
+
+            // If the cell is shared, it's likely the downlink one.
+            if (!neighbor->isDedicated())
+                emit(pktRetransmittedDownlinkSignal, 1);
+
+            if (lastAppPktArrivalTimestamp > 0)
+                emit(pktInterarrivalTimeSignal, simTime().dbl() - lastAppPktArrivalTimestamp);
+
+            lastAppPktArrivalTimestamp = simTime().dbl();
+        }
+
     }
+
     neighbor->reset();
 }
 
@@ -1161,6 +1263,10 @@ void Ieee802154eMac::handleSelfMessage(cMessage *msg) {
     // TEST message kind for simulating lossy links
     if (msg->getKind() == MAC_ENABLE_DROPS) {
         pLinkCollision = par("pLinkCollision").doubleValue();
+
+        // notify SF to stop adapting the schedule to the varying traffic, emitted value doesn't matter
+//        emit(disableSfAdaptationSignal, (long) 0);
+
         delete msg;
         return;
     }
@@ -1191,12 +1297,12 @@ bool Ieee802154eMac::artificiallyDropAppPacket(Packet *packet) {
         auto r = uniform(0, 1, 2);
         bool drop = r < pLinkCollision;
 
-        EV_DETAIL << "r = " << r;
-
-        if (drop)
-            EV_DETAIL << ", dropping Udp packet #" << udpDroppedCtn++ << endl;
-        else
-            EV_DETAIL << ", forwarding Udp packet #" << udpSentCtn++ << endl;
+//        EV_DETAIL << "r = " << r;
+//
+//        if (drop)
+//            EV_DETAIL << ", dropping Udp packet #" << udpDroppedCtn++ << endl;
+//        else
+//            EV_DETAIL << ", forwarding Udp packet #" << udpSentCtn++ << endl;
 
         return drop;
     }
@@ -1254,7 +1360,8 @@ void Ieee802154eMac::handleLowerPacket(Packet *packet) {
         delete packet;
         return;
     }
-    packet->setBitError(false);
+    if (ignoreBitErrors)
+        packet->setBitError(false);
     const auto& csmaHeader = packet->peekAtFront<Ieee802154eMacHeader>();
     const MacAddress& src = csmaHeader->getSrcAddr();
     const MacAddress& dest = csmaHeader->getDestAddr();
@@ -1264,6 +1371,8 @@ void Ieee802154eMac::handleLowerPacket(Packet *packet) {
                      << ", myState=" << macState << " src=" << src << " dst="
                      << dest << " myAddr=" << address << endl;
     if (dest == address) {
+        emit(pktRecFromLowerSignal, (long) (src.getInt())); // notify SF about to keep track of the neighbor
+
         if (!useMACAcks) {
             EV_DETAIL << "Received a data packet addressed to me." << endl;
             nbRxFrames++;

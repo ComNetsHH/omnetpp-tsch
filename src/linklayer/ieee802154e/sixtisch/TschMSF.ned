@@ -9,10 +9,15 @@ simple TschMSF like TschSF
         @signal[rplParentChanged](type=unsigned long);
         @signal[queueUtilization](type=double);
         @signal[failed6pAdd];
+        @signal[uncoverableGap];
+        @signal[uplinkSlotOffset](type=int);
+        @signal[deleteCellsSync](type=string);
         
         @statistic[rplParentChanged](title="Number of rpl parents changed"; source="rplParentChanged"; record=count; interpolationmode=none);
         @statistic[queueUtilization](title="Queue utilization"; source=queueUtilization; record=mean?, vector?; interpolationmode=none);
         @statistic[failed6pAdd](title="Failed 6P ADD requests"; source=failed6pAdd; record=count, vector?; interpolationmode=none);
+        @statistic[uncoverableGaps](title="Number of unrecovered gaps"; source=uncoverableGap; record=count, vector?; interpolationmode=none);
+        @statistic[uplinkSlotOffsets](title="Slot offsets of dedicated cells"; source=uplinkSlotOffset; record=vector; interpolationmode=none);
         
         // the time after which an active, unfinished transaction expires
         // (needs to be defined by every SF as per the 6P standard)
@@ -28,7 +33,7 @@ simple TschMSF like TschSF
         int maxNumCells = default(intuniform(4, 10)); // sliding window size to esmitate cell utilization
         int maxNumTx = default(254); // maximum number of elapsed cells to consider for PDR calculation
         // determines how much the MAX_NUM_CELLS window size increases with respect to the number of cells scheduled
-        double maxNumCellsScalingFactor = default(10);  
+        double maxNumCellsScalingFactor = default(10);
 //        int slotframeLen = default(101);
 
 		// this value + number of cells required = CELL_LIST size in 6P transactions, 
@@ -42,6 +47,7 @@ simple TschMSF like TschSF
         bool disableHousekeeping = default(false);
              
      	bool handleRankUpdates = default(false); // TEST parameter, only needed for delay-testing scenarios
+     	bool noRtxQueuing = default(false); // only for manual delay-testing scenarios to ensure no queuing through retransmissions is possible
      	
      	// node periodically checks the existence of a dedicated uplink cell until it one is successfully scheduled
      	bool scheduleUplinkManually = default(false);    
@@ -57,7 +63,12 @@ simple TschMSF like TschSF
 		int initialNumCells = default(1); // number of cells to schedule with RPL preferred parent initially
 		
 		int trackFailed6pAddByNum = default(0); // sequence number of specific 6P ADD request to track
-		int minCellChannelOffset = default(0); // channel offset for the minimal cells, esp. important in lossy environment 
+		int minCellChannelOffset = default(0); // channel offset for the minimal cells, esp. important in lossy environment
+		
+		// parameters for blacklisting, the range of white-listed channel offsets
+		bool blacklistingEnabled = default(false);
+		int chOfStart = default(0); // 802.15.4 ch. 11
+		int chOfEnd = default(15); // 802.15.4 ch. 26
 		
 		// UI params
         bool showDedicatedTxCells = default(true); // show scheduled TX cells coordinates above node pictorgram
@@ -79,8 +90,26 @@ simple TschMSF like TschSF
 		
 		// Misc
 		bool lowLatencyMode = default(false);
+		bool cellBundlingEnabled = default(false); // defines the rule for CELL_LIST creation
+		bool handleCellBundlingSignal = default(false); // determines whether to react to cell-bundling signal from RPL
+		int cellBundleSize = default(2);
 		int lowLatencyStartingOffset = default(-1);
+		int minimumUplinkBandwidth = default(1); // for nodes with "scheduleUplinkManually" enabled
 		bool scheduleUplinkOnJoin = default(true);
+		bool cellMatchingEnabled = default(false); // MSF attempts to schedule cells in a checkerboard manner - TX cell directly follows a RX one
 		
 		bool allowAutoCellDeletion = default(false);
+		double stopAdaptationToTrafficAt @unit("s") = default(-1s); // required for scenarios where number of TX cells has to be frozen from a certain point 
+		// apply hash function to the node MAC before taking the modulo by number of channels, 
+		// diversifies auto RX channel offsets of nodes from the same module array 
+		bool useHashChOffsets = default(false);
+		string initCellOverride = default(""); 			// location of the first dedicated cell to be scheduled with pref. parent
+		bool showNumPktSent = default(false); 			// show number of UDP packets sent above the node icon
+		
+		// restores the "original" service rate, given by initialNumCells, 
+		// by deleting cells added during the burst processing
+		bool deleteCellsAfterBurst = default(false);
+		
+		bool spaceBetween = default(false); // spread requested RX cells along the slotframe
+		int initNumRx = default(0); // number of RX cells to maintain with preferred parent
 }
