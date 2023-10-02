@@ -90,7 +90,7 @@ void UdpBurstApp::processSend()
 {
     simtime_t d = simTime() + par("sendInterval");
 
-    auto sendBurstOffset = uniform(0, 0.99) * par("sendInterval").doubleValue();
+    auto sendBurstOffset = uniform(0, 0.99, 2) * par("sendInterval").doubleValue();
     scheduleAt(simTime() + sendBurstOffset, burstTriggerMsg);
 
     EV << "Scheduled burst trigger with offset " << sendBurstOffset << " s at " << simTime() + sendBurstOffset << " s" << endl;
@@ -117,8 +117,6 @@ void UdpBurstApp::processSendBurst()
         for (auto i = 0; i < burstSize; i++)
             sendPacket();
     }
-    else
-        sendPacket();
 }
 
 void UdpBurstApp::handleMessageWhenUp(cMessage *msg)
